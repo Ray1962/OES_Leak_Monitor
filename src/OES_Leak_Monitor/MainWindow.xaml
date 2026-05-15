@@ -1,0 +1,104 @@
+<Window x:Class="OES_Leak_Monitor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:OES_Leak_Monitor"
+        xmlns:wpf="clr-namespace:Aqst.OesApp.Wpf;assembly=Aqst.OesApp.Wpf"
+        Title="OES Leak Monitor" Height="900" Width="1100"
+        WindowStartupLocation="CenterScreen">
+    <Window.DataContext>
+        <local:MainViewModel />
+    </Window.DataContext>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Padding="10,6"
+                Background="#EEF2F7"
+                BorderBrush="#CCC"
+                BorderThickness="0,0,0,1">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="User:" VerticalAlignment="Center" Margin="16,0,4,0" Foreground="#666"/>
+                    <TextBlock Text="{Binding CurrentUserText}" VerticalAlignment="Center"
+                               FontWeight="SemiBold" Margin="0,0,8,0"/>
+                    <Button x:Name="LoginButton"   Content="Sign In"  Click="Login_Click"
+                            Padding="10,2" Margin="0,0,4,0" MinWidth="70"/>
+                    <Button x:Name="LogoutButton"  Content="Sign Out" Click="Logout_Click"
+                            Padding="10,2" Margin="0,0,4,0" MinWidth="70"
+                            Visibility="Collapsed"/>
+                    <Button x:Name="ManageUsersButton" Content="Users" Click="ManageUsers_Click"
+                            Padding="10,2" MinWidth="60"
+                            ToolTip="Manage user accounts (Admin only)."/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="OES Leak Monitor" FontWeight="Bold" FontSize="14"
+                               VerticalAlignment="Center" Margin="0,0,16,0"/>
+                    <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center" Foreground="#444"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <TabControl Grid.Row="1" Margin="0" x:Name="MainTabControl"
+                    SelectionChanged="MainTabControl_SelectionChanged">
+            <TabItem Header="Monitor">
+                <wpf:DevicePanel DataContext="{Binding Devices[0]}"/>
+            </TabItem>
+
+            <TabItem Header="Configuration">
+                <Grid Background="#F4F6FA">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="4"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <wpf:ConfigurationPanel Grid.Row="0" DataContext="{Binding Devices[0]}"/>
+
+                    <GridSplitter Grid.Row="1"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch"
+                                  Background="#DDD"
+                                  ResizeBehavior="PreviousAndNext"
+                                  ResizeDirection="Rows"/>
+
+                    <wpf:LoggerPanel Grid.Row="2" DataContext="{Binding Logger}"/>
+
+                    <Border Grid.Row="3"
+                            Background="#EEF2F7"
+                            BorderBrush="#CCC"
+                            BorderThickness="0,1,0,0"
+                            Padding="10,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply"
+                                    Command="{Binding ApplyAllCommand}"
+                                    Padding="14,6" MinWidth="110" Margin="0,0,8,0"
+                                    ToolTip="Push current parameters to the connected OES device and the logger state machine."/>
+                            <Button Content="Save"
+                                    Command="{Binding SaveAllCommand}"
+                                    Padding="14,6" MinWidth="110" Margin="0,0,8,0"
+                                    ToolTip="Persist device parameters and the logger settings to settings.json."/>
+                            <Button Content="Load Defaults"
+                                    Command="{Binding LoadDefaultsAllCommand}"
+                                    Padding="14,6" MinWidth="120" Margin="0,0,16,0"
+                                    ToolTip="Reset the device and the logger to factory defaults (does not push until Apply, does not persist until Save)."/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Recordings">
+                <local:RecordingsPanel DataContext="{Binding Recordings}"/>
+            </TabItem>
+
+            <TabItem Header="Logs">
+                <wpf:LogViewerPanel DataContext="{Binding LogViewer}"/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>
