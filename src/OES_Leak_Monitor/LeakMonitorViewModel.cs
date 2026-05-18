@@ -171,8 +171,12 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private void OnGoldenRunCaptured(object? sender, GoldenRun run) =>
         _dispatcher.BeginInvoke(() =>
         {
-            RefreshGoldenRunNames();
+            // Suppress for the whole refresh: ObservableCollection.Clear() makes the
+            // bound ComboBox null its SelectedItem, which would otherwise round-trip
+            // through the setter as SelectGoldenRun(null) and wipe the baseline that
+            // was just captured (the "100% appears then vanishes" bug).
             _suppressGoldenRunSelection = true;
+            RefreshGoldenRunNames();
             SelectedGoldenRun = run.Name;
             _suppressGoldenRunSelection = false;
             StatusMessage =
