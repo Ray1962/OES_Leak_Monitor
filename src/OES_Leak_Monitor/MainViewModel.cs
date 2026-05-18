@@ -15,6 +15,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly SettingsService _settingsService;
     private readonly SystemLogger _systemLogger;
     private readonly DualIntensityLogger _intensityLogger;
+    private readonly LeakMonitorEngine _leakMonitorEngine;
     private readonly List<DeviceViewModel> _devices;
 
     // Per-device colors and labels. Single OES for leak monitoring. Add tuples here
@@ -61,6 +62,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ApplySettingsToDevices(settings);
         Logger.LoadFrom(settings.Logger);
 
+        // Actinometry leak monitor: build from persisted config, feed it the same
+        // spectrum stream the intensity logger sees, and bridge its lifecycle into
+        // the system log. Golden Run captures are persisted as they happen.
+        _leakMonitorEngine = new LeakMonitorEngine(settings.LeakMonitor);
+        LeakMonitor = new LeakMonitorViewModel(_leakMonitorEngine, _systemLogger);
+        foreach (var d in _devices)
+            d.SpectrumAvailable += (_, sample) => _leakMonitorEngine.ProcessSample(sample);
+        _leakMonitorEngine.AlarmStateChanged += OnLeakAlarmStateChanged;
+        _leakMonitorEngine.GoldenRunCaptured += OnGoldenRunCaptured;
+
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
             related: $"Path={_settingsService.ConfigFilePath}",
@@ -88,6 +99,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // Initial role is Guest → propagate the action gate so the per-device buttons
         // start out disabled until the user signs in.
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
+        LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
     }
 
     public AccessControlService AccessControl { get; }
@@ -110,6 +122,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsAdmin));
 
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
+        LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
 
         RaiseCanExec();
     }
@@ -147,6 +160,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             Devices       = _devices.Select(d => d.ToSettings()).ToList(),
             Logger        = Logger.ToSettings(),
+            LeakMonitor   = _leakMonitorEngine.Settings, // includes captured Golden Runs
             AccessControl = AccessControl.SnapshotConfig(), // preserve user list across saves
         };
         _settingsService.Save(settings);
@@ -167,9 +181,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     public IReadOnlyList<DeviceViewModel> Devices { get; }
-    public LoggerViewModel     Logger     { get; }
-    public LogViewerViewModel  LogViewer  { get; }
-    public RecordingsViewModel Recordings { get; }
+    public LoggerViewModel      Logger      { get; }
+    public LogViewerViewModel   LogViewer   { get; }
+    public RecordingsViewModel  Recordings  { get; }
+    public LeakMonitorViewModel LeakMonitor { get; }
 
     public RelayCommand ApplyAllCommand { get; }
     public RelayCommand SaveAllCommand { get; }
@@ -191,9 +206,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _intensityLogger.StateChanged   -= OnIntensityStateChanged;
         _intensityLogger.ErrorOccurred  -= OnIntensityError;
         _intensityLogger.FilesChanged   -= OnIntensityFilesChanged;
+        _leakMonitorEngine.AlarmStateChanged -= OnLeakAlarmStateChanged;
+        _leakMonitorEngine.GoldenRunCaptured -= OnGoldenRunCaptured;
         _intensityLogger.Stop();
         foreach (var d in _devices) d.Dispose();
         Recordings.Dispose();
+        LeakMonitor.Dispose();
+        _leakMonitorEngine.Dispose();
         _intensityLogger.Dispose();
         LogViewer.Dispose();
         _systemLogger.Dispose();
@@ -220,6 +239,43 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _systemLogger.LogIntensityLogger("FilesChanged",
             "Intensity logger writers opened or closed",
             value: summary);
+    }
+
+    // --- LeakMonitorEngine → SystemLogger / settings bridges ---
+
+    private void OnLeakAlarmStateChanged(object? sender, LeakAlarmEventArgs e)
+    {
+        var severity = e.NewLevel switch
+        {
+            LeakAlarmLevel.Alarm   => LogSeverity.Error,
+            LeakAlarmLevel.Warning => LogSeverity.Warning,
+            _                      => LogSeverity.Information,
+        };
+        _systemLogger.LogSystemEvent(severity, "LeakMonitorState",
+            $"Leak monitor {e.OldLevel} → {e.NewLevel}",
+            related: $"From={e.OldLevel},To={e.NewLevel}",
+            value: e.Timestamp.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private void OnGoldenRunCaptured(object? sender, GoldenRun run)
+    {
+        // Persist the new baseline immediately — re-read on-disk settings and swap in
+        // only the LeakMonitor section, so an unsaved Configuration-tab edit is not
+        // clobbered (mirrors how AccessControl edits are persisted).
+        try
+        {
+            var onDisk = _settingsService.Load();
+            onDisk.LeakMonitor = _leakMonitorEngine.Settings;
+            _settingsService.Save(onDisk);
+        }
+        catch (Exception ex)
+        {
+            _systemLogger.LogError("GoldenRun_Persist_Failed", ex, $"Run={run.Name}");
+        }
+        _systemLogger.LogSystemEvent(LogSeverity.Information, "GoldenRunCaptured",
+            $"Leak-monitor Golden Run baseline captured: {run.Name}",
+            related: $"Ratios={run.Baselines.Count}",
+            value: $"PlasmaFloor={run.PlasmaPresentFloor:G4}");
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

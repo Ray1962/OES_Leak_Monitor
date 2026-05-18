@@ -49,6 +49,10 @@
                 <wpf:DevicePanel DataContext="{Binding Devices[0]}"/>
             </TabItem>
 
+            <TabItem Header="Leak Monitor">
+                <local:LeakMonitorPanel DataContext="{Binding LeakMonitor}"/>
+            </TabItem>
+
             <TabItem Header="Configuration">
                 <Grid Background="#F4F6FA">
                     <Grid.RowDefinitions>
