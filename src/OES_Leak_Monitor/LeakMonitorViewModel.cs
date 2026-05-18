@@ -49,11 +49,12 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         int idx = 0;
         foreach (var def in _engine.MonitoredRatios)
         {
-            var rvm = new RatioViewModel(def.Key, def.DisplayName,
-                def.Denominator.Label, OnReferenceChanged);
+            var rvm = new RatioViewModel(def.Key, def.DisplayName, def.Denominator.Label,
+                def.Enabled, OnReferenceChanged, OnRatioEnabledChanged);
             _ratioByKey[def.Key] = rvm;
             Ratios.Add(rvm);
             AddSeries(def, idx++);
+            _seriesByKey[def.Key].IsVisible = def.Enabled;
         }
 
         RefreshGoldenRunNames();
@@ -217,6 +218,20 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
     // --- commands ------------------------------------------------------------
 
+    private void OnRatioEnabledChanged(string ratioKey, bool enabled)
+    {
+        _engine.SetRatioEnabled(ratioKey, enabled);
+        if (_seriesByKey.TryGetValue(ratioKey, out var series))
+        {
+            series.IsVisible = enabled;
+            if (!enabled) series.Points.Clear();
+            PlotModel.InvalidatePlot(true);
+        }
+        StatusMessage = $"{ratioKey} {(enabled ? "enabled" : "disabled")}.";
+        _systemLogger?.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatioToggled",
+            $"{ratioKey} {(enabled ? "enabled" : "disabled")}");
+    }
+
     private void OnReferenceChanged(string ratioKey, string referenceName)
     {
         var preset = ReferenceLineCatalog.FindByName(referenceName);
@@ -266,7 +281,10 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         {
             Position = AxisPosition.Left,
             Title = "% of baseline",
-            Minimum = 0,
+            // Auto-scales to the data, but never shows a window narrower than 10
+            // percentage points, and never drops below 0 (% of baseline can't be negative).
+            AbsoluteMinimum = 0,
+            MinimumRange = 10,
             MajorGridlineStyle = LineStyle.Solid,
             MajorGridlineColor = OxyColor.FromRgb(0xE8, 0xE8, 0xE8),
         });

@@ -16,6 +16,8 @@ public enum RatioState
     NoPlasma,
     /// <summary>No Golden Run baseline captured for this ratio yet.</summary>
     NoBaseline,
+    /// <summary>Excluded by the operator — not computed and never alarmed.</summary>
+    Disabled,
 }
 
 /// <summary>Immutable per-frame view of one ratio, handed to the UI.</summary>
@@ -86,6 +88,20 @@ public sealed class RatioMonitor
 
     /// <summary>Clears the latched alarm so a recovered process can return to Normal.</summary>
     public void Acknowledge() => _latchedAlarm = false;
+
+    /// <summary>Marks the ratio excluded — resets the latch and smoothing so a later
+    /// re-enable starts fresh.</summary>
+    public void MarkDisabled()
+    {
+        _state = RatioState.Disabled;
+        _hasEma = false;
+        _aboveWarnSince = _aboveAlarmSince = null;
+        _latchedAlarm = false;
+        _trend.Clear();
+        _slopePerMinute = 0;
+        _rawRatio = _numerator = _denominator = double.NaN;
+        _plasmaPresent = false;
+    }
 
     public double WarnThreshold => _hasBaseline
         ? Math.Max(_def.WarnFactor * _baseMean, _baseMean + _def.SigmaWarn * _baseSigma)

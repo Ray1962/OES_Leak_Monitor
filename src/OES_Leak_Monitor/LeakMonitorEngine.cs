@@ -65,7 +65,9 @@ public sealed class LeakMonitorEngine : IDisposable
     public LeakMonitorEngine(LeakMonitorSettings settings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        foreach (var def in _settings.Ratios.Where(d => d.Enabled))
+        // A monitor exists for every defined ratio; the per-ratio Enabled flag decides
+        // at runtime whether it is computed, so the operator can toggle it live.
+        foreach (var def in _settings.Ratios)
         {
             _defs[def.Key] = def;
             _monitors.Add(new RatioMonitor(def));
@@ -118,6 +120,8 @@ public sealed class LeakMonitorEngine : IDisposable
             foreach (var mon in _monitors)
             {
                 var def = _defs[mon.Key];
+                if (!def.Enabled) { mon.MarkDisabled(); continue; }
+
                 double num = LineIntensityExtractor.Extract(wl, inten, def.Numerator);
                 double den = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
 
@@ -211,6 +215,20 @@ public sealed class LeakMonitorEngine : IDisposable
             _settings.ActiveGoldenRun = name;
             ApplyGoldenRun(_settings.FindGoldenRun(name));
         }
+    }
+
+    /// <summary>
+    /// Includes or excludes a ratio from monitoring. A disabled ratio is not computed
+    /// and never contributes to the composite alarm; it can be toggled back on live.
+    /// </summary>
+    public void SetRatioEnabled(string ratioKey, bool enabled)
+    {
+        lock (_gate)
+        {
+            if (!_defs.TryGetValue(ratioKey, out var def) || def.Enabled == enabled) return;
+            def.Enabled = enabled;
+        }
+        ConfigurationChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

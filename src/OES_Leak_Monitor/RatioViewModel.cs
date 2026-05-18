@@ -10,18 +10,30 @@ namespace OES_Leak_Monitor;
 public sealed class RatioViewModel : INotifyPropertyChanged
 {
     private readonly Action<string, string>? _onReferenceChanged;
+    private readonly Action<string, bool>? _onEnabledChanged;
 
-    public RatioViewModel(string key, string displayName, string currentReference,
-        Action<string, string>? onReferenceChanged = null)
+    public RatioViewModel(string key, string displayName, string currentReference, bool enabled,
+        Action<string, string>? onReferenceChanged = null,
+        Action<string, bool>? onEnabledChanged = null)
     {
         Key = key;
         DisplayName = displayName;
         _selectedReference = currentReference;
+        _isEnabled = enabled;
         _onReferenceChanged = onReferenceChanged;
+        _onEnabledChanged = onEnabledChanged;
     }
 
     public string Key { get; }
     public string DisplayName { get; }
+
+    private bool _isEnabled = true;
+    /// <summary>Whether the operator includes this ratio in monitoring; bound to the row checkbox.</summary>
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set { if (Set(ref _isEnabled, value)) _onEnabledChanged?.Invoke(Key, value); }
+    }
 
     /// <summary>Reference (denominator) line choices for the row's combo box.</summary>
     public IReadOnlyList<string> ReferenceOptions => ReferenceLineCatalog.Names;
@@ -59,6 +71,7 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         RatioState.Alarm      => "ALARM",
         RatioState.NoPlasma   => "No Plasma",
         RatioState.NoBaseline => "No Baseline",
+        RatioState.Disabled   => "Disabled",
         _                     => _state.ToString(),
     };
 
@@ -68,6 +81,7 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         RatioState.Warning => Brushes.DarkOrange,
         RatioState.Alarm   => Brushes.Firebrick,
         RatioState.NoPlasma => Brushes.Gray,
+        RatioState.Disabled => Brushes.Silver,
         _                  => Brushes.SlateGray,
     };
 

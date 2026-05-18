@@ -59,7 +59,7 @@
                                 ToolTip="{Binding DetailText}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="46"/>
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="150"/>
                                     <ColumnDefinition Width="110"/>
@@ -69,8 +69,14 @@
                                     <ColumnDefinition Width="95"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Ellipse Grid.Column="0" Width="13" Height="13"
-                                         Fill="{Binding StateBrush}" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <CheckBox IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"
+                                              Margin="0,0,8,0"
+                                              ToolTip="Include this ratio in leak monitoring."/>
+                                    <Ellipse Width="13" Height="13"
+                                             Fill="{Binding StateBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
 
                                 <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
                                            FontWeight="SemiBold" FontSize="13"
