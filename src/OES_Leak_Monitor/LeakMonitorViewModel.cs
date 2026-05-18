@@ -49,8 +49,10 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         int idx = 0;
         foreach (var def in _engine.MonitoredRatios)
         {
-            _ratioByKey[def.Key] = new RatioViewModel(def.Key, def.DisplayName);
-            Ratios.Add(_ratioByKey[def.Key]);
+            var rvm = new RatioViewModel(def.Key, def.DisplayName,
+                def.Denominator.Label, OnReferenceChanged);
+            _ratioByKey[def.Key] = rvm;
+            Ratios.Add(rvm);
             AddSeries(def, idx++);
         }
 
@@ -210,6 +212,17 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     }
 
     // --- commands ------------------------------------------------------------
+
+    private void OnReferenceChanged(string ratioKey, string referenceName)
+    {
+        var preset = ReferenceLineCatalog.FindByName(referenceName);
+        if (preset is null) return;
+        _engine.SetRatioReference(ratioKey, preset.CreateRegion());
+        StatusMessage =
+            $"{ratioKey} reference set to {referenceName} — capture a new Golden Run for it.";
+        _systemLogger?.LogSystemEvent(LogSeverity.Information, "LeakMonitorReferenceChanged",
+            $"{ratioKey} reference line changed to {referenceName}");
+    }
 
     private void CaptureGoldenRun()
     {

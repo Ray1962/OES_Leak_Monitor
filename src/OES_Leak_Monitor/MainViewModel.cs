@@ -71,6 +71,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             d.SpectrumAvailable += (_, sample) => _leakMonitorEngine.ProcessSample(sample);
         _leakMonitorEngine.AlarmStateChanged += OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured += OnGoldenRunCaptured;
+        _leakMonitorEngine.ConfigurationChanged += OnLeakConfigChanged;
 
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
@@ -208,6 +209,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _intensityLogger.FilesChanged   -= OnIntensityFilesChanged;
         _leakMonitorEngine.AlarmStateChanged -= OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured -= OnGoldenRunCaptured;
+        _leakMonitorEngine.ConfigurationChanged -= OnLeakConfigChanged;
         _intensityLogger.Stop();
         foreach (var d in _devices) d.Dispose();
         Recordings.Dispose();
@@ -259,9 +261,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void OnGoldenRunCaptured(object? sender, GoldenRun run)
     {
-        // Persist the new baseline immediately — re-read on-disk settings and swap in
-        // only the LeakMonitor section, so an unsaved Configuration-tab edit is not
-        // clobbered (mirrors how AccessControl edits are persisted).
+        PersistLeakMonitorSettings($"GoldenRun={run.Name}");
+        _systemLogger.LogSystemEvent(LogSeverity.Information, "GoldenRunCaptured",
+            $"Leak-monitor Golden Run baseline captured: {run.Name}",
+            related: $"Ratios={run.Baselines.Count}",
+            value: $"PlasmaFloor={run.PlasmaPresentFloor:G4}");
+    }
+
+    private void OnLeakConfigChanged(object? sender, EventArgs e)
+    {
+        PersistLeakMonitorSettings("ReferenceLineChanged");
+        _systemLogger.LogSystemEvent(LogSeverity.Information, "LeakMonitorConfigChanged",
+            "Leak-monitor ratio configuration changed");
+    }
+
+    /// <summary>
+    /// Persists the leak-monitor section immediately — re-reads on-disk settings and swaps
+    /// in only that section, so an unsaved Configuration-tab edit is not clobbered (mirrors
+    /// how AccessControl edits are persisted).
+    /// </summary>
+    private void PersistLeakMonitorSettings(string context)
+    {
         try
         {
             var onDisk = _settingsService.Load();
@@ -270,12 +290,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (Exception ex)
         {
-            _systemLogger.LogError("GoldenRun_Persist_Failed", ex, $"Run={run.Name}");
+            _systemLogger.LogError("LeakMonitor_Persist_Failed", ex, context);
         }
-        _systemLogger.LogSystemEvent(LogSeverity.Information, "GoldenRunCaptured",
-            $"Leak-monitor Golden Run baseline captured: {run.Name}",
-            related: $"Ratios={run.Baselines.Count}",
-            value: $"PlasmaFloor={run.PlasmaPresentFloor:G4}");
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

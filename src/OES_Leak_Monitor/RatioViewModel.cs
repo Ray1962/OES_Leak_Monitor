@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
@@ -8,14 +9,34 @@ namespace OES_Leak_Monitor;
 /// <summary>Bindable row for one monitored ratio in the Leak Monitor panel.</summary>
 public sealed class RatioViewModel : INotifyPropertyChanged
 {
-    public RatioViewModel(string key, string displayName)
+    private readonly Action<string, string>? _onReferenceChanged;
+
+    public RatioViewModel(string key, string displayName, string currentReference,
+        Action<string, string>? onReferenceChanged = null)
     {
         Key = key;
         DisplayName = displayName;
+        _selectedReference = currentReference;
+        _onReferenceChanged = onReferenceChanged;
     }
 
     public string Key { get; }
     public string DisplayName { get; }
+
+    /// <summary>Reference (denominator) line choices for the row's combo box.</summary>
+    public IReadOnlyList<string> ReferenceOptions => ReferenceLineCatalog.Names;
+
+    private string _selectedReference;
+    /// <summary>The chosen reference line; setting it (via the combo) swaps the denominator.</summary>
+    public string SelectedReference
+    {
+        get => _selectedReference;
+        set
+        {
+            if (Set(ref _selectedReference, value) && value is not null)
+                _onReferenceChanged?.Invoke(Key, value);
+        }
+    }
 
     private RatioState _state = RatioState.NoBaseline;
     public RatioState State

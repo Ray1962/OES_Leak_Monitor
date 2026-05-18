@@ -82,6 +82,10 @@ public sealed class LeakMonitorEngine : IDisposable
     /// <summary>Raised when a Golden Run capture finishes and becomes the active baseline.</summary>
     public event EventHandler<GoldenRun>? GoldenRunCaptured;
 
+    /// <summary>Raised when the ratio configuration changes (e.g. a reference line swap),
+    /// so the host can persist <see cref="Settings"/>.</summary>
+    public event EventHandler? ConfigurationChanged;
+
     /// <summary>The live settings object — mutated in place as Golden Runs are captured.</summary>
     public LeakMonitorSettings Settings => _settings;
 
@@ -205,6 +209,23 @@ public sealed class LeakMonitorEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// Swaps a ratio's reference (denominator) line. Any Golden Run baseline captured
+    /// against the previous reference stops applying — that ratio reads "No Baseline"
+    /// until a new Golden Run is captured.
+    /// </summary>
+    public void SetRatioReference(string ratioKey, LineRegion reference)
+    {
+        if (reference is null) return;
+        lock (_gate)
+        {
+            if (!_defs.TryGetValue(ratioKey, out var def)) return;
+            def.Denominator = reference.Clone();
+            ApplyGoldenRun(_activeRun);
+        }
+        ConfigurationChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     // --- internals -----------------------------------------------------------
 
     private GoldenRun FinalizeCapture()
@@ -228,6 +249,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 Mean = acc.Mean,
                 Sigma = acc.StdDev,
                 SampleCount = acc.Count,
+                ReferenceLabel = _defs[mon.Key].Denominator.Label,
             });
         }
 
@@ -244,7 +266,11 @@ public sealed class LeakMonitorEngine : IDisposable
         foreach (var mon in _monitors)
         {
             var b = run?.Find(mon.Key);
-            if (b is not null && b.Mean > 0) mon.SetBaseline(b.Mean, b.Sigma);
+            // A baseline applies only if it was captured against the ratio's current
+            // reference line — switching the reference invalidates the old baseline.
+            bool usable = b is not null && b.Mean > 0 &&
+                          b.ReferenceLabel == _defs[mon.Key].Denominator.Label;
+            if (usable) mon.SetBaseline(b!.Mean, b.Sigma);
             else mon.ClearBaseline();
         }
     }
@@ -301,6 +327,7 @@ public sealed class LeakMonitorEngine : IDisposable
         SampleProcessed = null;
         AlarmStateChanged = null;
         GoldenRunCaptured = null;
+        ConfigurationChanged = null;
     }
 
     /// <summary>Running mean / standard deviation accumulator.</summary>

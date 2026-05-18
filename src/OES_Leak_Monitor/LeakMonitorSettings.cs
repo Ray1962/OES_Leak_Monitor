@@ -49,6 +49,10 @@ public sealed class GoldenRunRatioBaseline
     public double Mean { get; set; }
     public double Sigma { get; set; }
     public int SampleCount { get; set; }
+
+    /// <summary>Reference (denominator) line this baseline was captured against. A baseline
+    /// only applies while the ratio's current reference still matches this label.</summary>
+    public string ReferenceLabel { get; set; } = "";
 }
 
 /// <summary>
@@ -141,9 +145,8 @@ public sealed class LeakMonitorSettings
         },
     };
 
-    private static LineRegion DefaultN2Reference() => new()
-    {
-        Label = "N₂ 337.1", CenterNm = 337.1, HalfWidthNm = 1.0,
-        BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.Integral,
-    };
+    // The default reference is N₂ 337.1, sourced from the shared catalog so its Label
+    // matches the names the reference-line picker offers.
+    private static LineRegion DefaultN2Reference() =>
+        ReferenceLineCatalog.FindByName("N₂ 337.1")!.CreateRegion();
 }
