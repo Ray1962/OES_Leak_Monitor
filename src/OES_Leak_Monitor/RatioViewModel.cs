@@ -80,8 +80,9 @@ public sealed class RatioViewModel : INotifyPropertyChanged
     private string _percentText = "—";
     public string PercentText { get => _percentText; private set => Set(ref _percentText, value); }
 
-    private string _thresholdText = "—";
-    public string ThresholdText { get => _thresholdText; private set => Set(ref _thresholdText, value); }
+    private string _detailText = "—";
+    /// <summary>Tooltip detail: the raw signal / reference intensities and the thresholds.</summary>
+    public string DetailText { get => _detailText; private set => Set(ref _detailText, value); }
 
     private string _slopeText = "—";
     public string SlopeText { get => _slopeText; private set => Set(ref _slopeText, value); }
@@ -97,11 +98,15 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         PercentText = double.IsNaN(s.PercentOfBaseline)
             ? "—"
             : $"{s.PercentOfBaseline:F0} %";
-        ThresholdText = s.HasBaseline
-            ? $"warn {s.WarnThreshold:G4}  ·  alarm {s.AlarmThreshold:G4}"
-            : "—";
+        DetailText =
+            $"signal {Fmt(s.NumeratorIntensity)}  ÷  reference {Fmt(s.DenominatorIntensity)}\n" +
+            (s.HasBaseline
+                ? $"warn {s.WarnThreshold:G4}  ·  alarm {s.AlarmThreshold:G4}"
+                : "no baseline — capture a Golden Run");
         SlopeText = FormatSlope(s);
     }
+
+    private static string Fmt(double v) => double.IsNaN(v) ? "(not found)" : v.ToString("G4");
 
     private static string FormatSlope(RatioSnapshot s)
     {

@@ -108,7 +108,12 @@ public sealed class LeakMonitorEngine : IDisposable
 
             var wl = sample.Wavelengths;
             var inten = sample.Intensities;
-            double floor = _activeRun?.PlasmaPresentFloor ?? 0.0;
+
+            // During a Golden Run capture the plasma gate ignores the inherited floor —
+            // that floor came from a previous run and could otherwise block capturing a
+            // fresh baseline (e.g. after a peak shift or a lower-power recipe). The new
+            // floor is derived from the capture itself in FinalizeCapture().
+            double floor = _capturing ? 0.0 : (_activeRun?.PlasmaPresentFloor ?? 0.0);
 
             foreach (var mon in _monitors)
             {
@@ -117,12 +122,11 @@ public sealed class LeakMonitorEngine : IDisposable
                 double den = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
 
                 bool plasma = !double.IsNaN(den) && den > 0 && den > floor;
-                double raw = plasma ? num / den : double.NaN;
-                mon.Update(raw, sample.Timestamp, plasma);
+                mon.Update(num, den, sample.Timestamp, plasma);
 
-                if (_capturing && plasma && !double.IsNaN(raw))
+                if (_capturing && plasma && den != 0 && !double.IsNaN(num))
                 {
-                    GetAccum(mon.Key).Add(raw);
+                    GetAccum(mon.Key).Add(num / den);
                     _captureDenom.Add(den);
                 }
             }

@@ -35,6 +35,15 @@ public sealed class LineRegion
 
     public LineExtractMode Mode { get; set; } = LineExtractMode.PeakHeight;
 
+    /// <summary>
+    /// If &gt; 0, the extractor first locates the strongest point within
+    /// <see cref="CenterNm"/> ± this value and re-centers the signal and baseline
+    /// windows on it — absorbing wavelength-calibration drift and band-head offset so
+    /// a slightly shifted peak is still measured correctly. 0 pins the window to
+    /// <see cref="CenterNm"/>.
+    /// </summary>
+    public double PeakSearchHalfWidthNm { get; set; } = 1.0;
+
     public LineRegion Clone() => (LineRegion)MemberwiseClone();
 }
 
@@ -54,8 +63,15 @@ public static class LineIntensityExtractor
         int n = Math.Min(wavelengths.Length, intensities.Length);
         if (n < 2) return double.NaN;
 
-        double sigLo = region.CenterNm - region.HalfWidthNm;
-        double sigHi = region.CenterNm + region.HalfWidthNm;
+        // Re-center on the actual peak so a shifted line or a mis-calibrated wavelength
+        // axis is still measured correctly (see LineRegion.PeakSearchHalfWidthNm).
+        double center = region.PeakSearchHalfWidthNm > 0
+            ? FindPeakWavelength(wavelengths, intensities, n,
+                                 region.CenterNm, region.PeakSearchHalfWidthNm)
+            : region.CenterNm;
+
+        double sigLo = center - region.HalfWidthNm;
+        double sigHi = center + region.HalfWidthNm;
         int s0 = LowerBound(wavelengths, n, sigLo);
         int s1 = UpperBound(wavelengths, n, sigHi) - 1;
         if (s0 >= n || s1 < s0) return double.NaN;
@@ -109,6 +125,30 @@ public static class LineIntensityExtractor
         double sum = 0.0;
         for (int i = i0; i <= i1; i++) sum += inten[i];
         return (sum / (i1 - i0 + 1), true);
+    }
+
+    /// <summary>
+    /// Wavelength of the strongest (3-point-smoothed) sample within <paramref name="center"/>
+    /// ± <paramref name="half"/>. Returns <paramref name="center"/> if the window is empty.
+    /// The 3-point smoothing keeps a single hot pixel from capturing the search.
+    /// </summary>
+    private static double FindPeakWavelength(float[] wl, float[] inten, int n,
+        double center, double half)
+    {
+        int i0 = LowerBound(wl, n, center - half);
+        int i1 = UpperBound(wl, n, center + half) - 1;
+        if (i0 >= n || i1 < i0) return center;
+
+        int best = i0;
+        double bestVal = double.NegativeInfinity;
+        for (int i = i0; i <= i1; i++)
+        {
+            double v = inten[i]
+                     + (i > 0     ? inten[i - 1] : inten[i])
+                     + (i < n - 1 ? inten[i + 1] : inten[i]);
+            if (v > bestVal) { bestVal = v; best = i; }
+        }
+        return wl[best];
     }
 
     /// <summary>First index whose wavelength is &gt;= <paramref name="v"/>.</summary>

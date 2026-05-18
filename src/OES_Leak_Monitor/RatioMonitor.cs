@@ -32,7 +32,9 @@ public readonly record struct RatioSnapshot(
     double WarnThreshold,
     double AlarmThreshold,
     double SlopePerMinute,
-    bool PlasmaPresent);
+    bool PlasmaPresent,
+    double NumeratorIntensity,
+    double DenominatorIntensity);
 
 /// <summary>
 /// Runtime monitor for one actinometric ratio: EMA smoothing, two-level threshold
@@ -49,6 +51,7 @@ public sealed class RatioMonitor
     private bool _hasEma;
     private DateTime _lastTs;
     private double _rawRatio = double.NaN;
+    private double _numerator = double.NaN, _denominator = double.NaN;
 
     private double _baseMean, _baseSigma;
     private bool _hasBaseline;
@@ -92,10 +95,15 @@ public sealed class RatioMonitor
         ? Math.Max(_def.AlarmFactor * _baseMean, _baseMean + _def.SigmaAlarm * _baseSigma)
         : double.NaN;
 
-    /// <summary>Feeds one frame's raw ratio into the state machine.</summary>
-    public void Update(double rawRatio, DateTime ts, bool plasmaPresent)
+    /// <summary>Feeds one frame's extracted line intensities into the state machine.</summary>
+    public void Update(double numerator, double denominator, DateTime ts, bool plasmaPresent)
     {
         _plasmaPresent = plasmaPresent;
+        _numerator = numerator;
+        _denominator = denominator;
+        double rawRatio = plasmaPresent && denominator != 0 && !double.IsNaN(denominator)
+            ? numerator / denominator
+            : double.NaN;
         _rawRatio = rawRatio;
 
         if (!plasmaPresent || double.IsNaN(rawRatio) || double.IsInfinity(rawRatio))
@@ -186,5 +194,7 @@ public sealed class RatioMonitor
         WarnThreshold,
         AlarmThreshold,
         _slopePerMinute,
-        _plasmaPresent);
+        _plasmaPresent,
+        _numerator,
+        _denominator);
 }
