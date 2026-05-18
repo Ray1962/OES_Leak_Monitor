@@ -16,6 +16,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly SystemLogger _systemLogger;
     private readonly DualIntensityLogger _intensityLogger;
     private readonly LeakMonitorEngine _leakMonitorEngine;
+    private readonly RatioCsvLogger _ratioCsvLogger;
     private readonly List<DeviceViewModel> _devices;
 
     // Per-device colors and labels. Single OES for leak monitoring. Add tuples here
@@ -72,6 +73,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.AlarmStateChanged += OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured += OnGoldenRunCaptured;
         _leakMonitorEngine.ConfigurationChanged += OnLeakConfigChanged;
+
+        // Ratio-trend CSV: a sibling of each intensity-logger save session, written
+        // while the threshold logger is saving (plasma intensity above the threshold).
+        _ratioCsvLogger = new RatioCsvLogger(_intensityLogger, _leakMonitorEngine, _systemLogger);
 
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
@@ -210,6 +215,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.AlarmStateChanged -= OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured -= OnGoldenRunCaptured;
         _leakMonitorEngine.ConfigurationChanged -= OnLeakConfigChanged;
+        _ratioCsvLogger.Dispose();
         _intensityLogger.Stop();
         foreach (var d in _devices) d.Dispose();
         Recordings.Dispose();

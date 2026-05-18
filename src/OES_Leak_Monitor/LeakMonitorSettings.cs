@@ -91,6 +91,9 @@ public sealed class LeakMonitorSettings
     /// <summary>In Test Mode the ratios are still shown but alarms are not raised.</summary>
     public bool SuppressAlarmsInTestMode { get; set; } = true;
 
+    /// <summary>Write the ratio trend to a CSV alongside each intensity-logger save session.</summary>
+    public bool RatioCsvEnabled { get; set; } = true;
+
     public List<RatioDefinition> Ratios { get; set; } = new();
     public List<GoldenRun> GoldenRuns { get; set; } = new();
 
