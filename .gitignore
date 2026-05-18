@@ -363,3 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 # Visual Studio per-project lock cache
 *.lscache
+
+# Keep the standalone-publish profile (publish.cmd and /publish depend on it)
+!src/OES_Leak_Monitor/Properties/PublishProfiles/SelfContained-win-x64.pubxml

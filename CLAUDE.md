@@ -9,6 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Run: `dotnet run --project src/OES_Leak_Monitor/OES_Leak_Monitor.csproj`.
 - No test project exists yet.
 
+### Standalone publish (no .NET install required on the target PC)
+
+`Properties/PublishProfiles/SelfContained-win-x64.pubxml` produces a single self-contained `.exe` (the .NET 8 runtime is bundled in). Three ways to run it: double-click `publish.cmd` in the repo root; `dotnet publish src/OES_Leak_Monitor/OES_Leak_Monitor.csproj -p:PublishProfile=SelfContained-win-x64`; or in Visual Studio right-click the project → Publish → that profile. The `/publish` Claude slash command does the same. Output: `src/OES_Leak_Monitor/bin/Publish/win-x64/`.
+
+The `.exe` bundles all managed code plus the .NET 8 runtime, but native DLLs are not embedded — the output folder also holds the WPF native DLLs (`wpfgfx_cor3.dll`, `PresentationNative_cor3.dll`, `D3DCompiler_47_cor3.dll`, `PenImc_cor3.dll`, `vcruntime140_cor3.dll`) and the OES native DLLs (`UserApplication.dll`, `SiUSBXp.dll`). Ship the whole folder together — those DLLs are loose next to the `.exe` on purpose (the `DllResolver` only searches the app base directory; see the native-DLL note below). Do not enable `IncludeNativeLibrariesForSelfExtract` — it would bundle the OES DLLs into the exe and break hardware connect.
+
 ### NuGet feed prerequisite
 
 `nuget.config` pins a local feed at `C:\Users\infor\source\repos\Ray1962\LocalPackages` and clears default sources before adding nuget.org. Restore will fail if the three `Aqst.*` nupkgs (`Aqst.OesApp.Core`, `Aqst.OesApp.Wpf`, `Aqst.OesSpectrometer`) are not present there. Those packages are produced by the sibling repo `Ray1962/DualOes_PlasmaMonitor`; rebuild and re-pack there if you bump versions.

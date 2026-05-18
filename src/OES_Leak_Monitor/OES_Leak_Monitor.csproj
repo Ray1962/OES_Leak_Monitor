@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Aqst.OesApp.Core" Version="0.1.0" />
-    <PackageReference Include="Aqst.OesApp.Wpf"  Version="0.1.1" />
+    <PackageReference Include="Aqst.OesApp.Wpf"  Version="0.1.2" />
     <PackageReference Include="Aqst.OesSpectrometer" Version="0.3.0" />
     <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
   </ItemGroup>
