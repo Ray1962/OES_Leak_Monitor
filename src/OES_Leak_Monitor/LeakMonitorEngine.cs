@@ -46,6 +46,7 @@ public sealed class LeakMonitorEngine : IDisposable
 {
     private readonly object _gate = new();
     private readonly LeakMonitorSettings _settings;
+    private readonly SystemLogger? _log;
     private readonly List<RatioMonitor> _monitors = new();
     private readonly Dictionary<string, RatioDefinition> _defs = new();
 
@@ -60,11 +61,13 @@ public sealed class LeakMonitorEngine : IDisposable
     private bool _captureHasStart;
     private DateTime _captureStart, _captureLast;
     private readonly Dictionary<string, Accum> _captureAccum = new();
+    private readonly Dictionary<string, CaptureDiag> _captureDiag = new();
     private readonly Accum _captureDenom = new();
 
-    public LeakMonitorEngine(LeakMonitorSettings settings)
+    public LeakMonitorEngine(LeakMonitorSettings settings, SystemLogger? systemLogger = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _log = systemLogger;
         // A monitor exists for every defined ratio; the per-ratio Enabled flag decides
         // at runtime whether it is computed, so the operator can toggle it live.
         foreach (var def in _settings.Ratios)
@@ -120,7 +123,12 @@ public sealed class LeakMonitorEngine : IDisposable
             foreach (var mon in _monitors)
             {
                 var def = _defs[mon.Key];
-                if (!def.Enabled) { mon.MarkDisabled(); continue; }
+                if (!def.Enabled)
+                {
+                    mon.MarkDisabled();
+                    if (_capturing) GetDiag(mon.Key).Disabled = true;
+                    continue;
+                }
 
                 double num = LineIntensityExtractor.Extract(wl, inten, def.Numerator);
                 double den = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
@@ -128,10 +136,20 @@ public sealed class LeakMonitorEngine : IDisposable
                 bool plasma = !double.IsNaN(den) && den > 0 && den > floor;
                 mon.Update(num, den, sample.Timestamp, plasma);
 
-                if (_capturing && plasma && den != 0 && !double.IsNaN(num))
+                if (_capturing)
                 {
-                    GetAccum(mon.Key).Add(num / den);
-                    _captureDenom.Add(den);
+                    // Tally why each frame did or didn't feed the baseline, so a ratio
+                    // that ends the capture with no samples can be explained in the log.
+                    var diag = GetDiag(mon.Key);
+                    diag.Frames++;
+                    if (double.IsNaN(num)) diag.NumeratorMissing++;
+                    if (double.IsNaN(den) || den <= 0) diag.ReferenceMissing++;
+                    if (plasma && den != 0 && !double.IsNaN(num))
+                    {
+                        diag.Accepted++;
+                        GetAccum(mon.Key).Add(num / den);
+                        _captureDenom.Add(den);
+                    }
                 }
             }
 
@@ -180,6 +198,7 @@ public sealed class LeakMonitorEngine : IDisposable
             _captureSeconds = Math.Max(1.0, seconds);
             _captureHasStart = false;
             _captureAccum.Clear();
+            _captureDiag.Clear();
             _captureDenom.Reset();
         }
     }
@@ -264,16 +283,30 @@ public sealed class LeakMonitorEngine : IDisposable
         };
         foreach (var mon in _monitors)
         {
-            if (!_captureAccum.TryGetValue(mon.Key, out var acc) || acc.Count == 0) continue;
-            run.Baselines.Add(new GoldenRunRatioBaseline
+            if (_captureAccum.TryGetValue(mon.Key, out var acc) && acc.Count > 0)
             {
-                Key = mon.Key,
-                Mean = acc.Mean,
-                Sigma = acc.StdDev,
-                SampleCount = acc.Count,
-                ReferenceLabel = _defs[mon.Key].Denominator.Label,
-            });
+                run.Baselines.Add(new GoldenRunRatioBaseline
+                {
+                    Key = mon.Key,
+                    Mean = acc.Mean,
+                    Sigma = acc.StdDev,
+                    SampleCount = acc.Count,
+                    ReferenceLabel = _defs[mon.Key].Denominator.Label,
+                });
+            }
+            else
+            {
+                // The ratio produced no usable samples — record why so the operator
+                // isn't left guessing at a permanent "No Baseline".
+                LogDroppedRatio(mon.Key, run.Name);
+            }
         }
+
+        if (run.Baselines.Count == 0)
+            _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunEmpty",
+                $"Golden Run “{run.Name}” captured no usable ratio baselines — check the " +
+                "spectrometer wavelength range, the plasma state, and which ratios are enabled.",
+                related: $"GoldenRun={run.Name}");
 
         _settings.GoldenRuns.RemoveAll(g => g.Name == run.Name);
         _settings.GoldenRuns.Add(run);
@@ -288,13 +321,60 @@ public sealed class LeakMonitorEngine : IDisposable
         foreach (var mon in _monitors)
         {
             var b = run?.Find(mon.Key);
+            var def = _defs[mon.Key];
             // A baseline applies only if it was captured against the ratio's current
             // reference line — switching the reference invalidates the old baseline.
-            bool usable = b is not null && b.Mean > 0 &&
-                          b.ReferenceLabel == _defs[mon.Key].Denominator.Label;
-            if (usable) mon.SetBaseline(b!.Mean, b.Sigma);
-            else mon.ClearBaseline();
+            bool labelMatches = b is not null && b.ReferenceLabel == def.Denominator.Label;
+            bool usable = b is not null && b.Mean > 0 && labelMatches;
+            if (usable)
+            {
+                mon.SetBaseline(b!.Mean, b.Sigma);
+            }
+            else
+            {
+                mon.ClearBaseline();
+                // A baseline exists but is being rejected purely on a reference-line
+                // mismatch — surface it so it doesn't look like the capture failed.
+                if (b is not null && b.Mean > 0 && !labelMatches)
+                    _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorBaselineMismatch",
+                        $"Golden Run “{run!.Name}” has a baseline for {def.DisplayName}, " +
+                        $"but it was captured against reference {b.ReferenceLabel}, not the current " +
+                        $"{def.Denominator.Label} — capture a new Golden Run for this reference.",
+                        related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+            }
         }
+    }
+
+    /// <summary>Logs why a ratio ended a Golden Run capture with no usable baseline.</summary>
+    private void LogDroppedRatio(string key, string runName)
+    {
+        var def = _defs[key];
+        _captureDiag.TryGetValue(key, out var d);
+        string reason;
+        if (d is { Disabled: false, Frames: > 0 })
+        {
+            if (d.NumeratorMissing == d.Frames)
+                reason = $"the numerator line {def.Numerator.Label} ({def.Numerator.CenterNm:0.#} nm) " +
+                         "fell outside the spectrometer wavelength range in every frame";
+            else if (d.ReferenceMissing == d.Frames)
+                reason = $"the reference line {def.Denominator.Label} ({def.Denominator.CenterNm:0.#} nm) " +
+                         "never registered — the plasma was off, or the line is outside the spectrum";
+            else
+                reason = $"no frame had both lines valid ({d.NumeratorMissing}/{d.Frames} frames " +
+                         $"missing the numerator, {d.ReferenceMissing}/{d.Frames} missing the reference)";
+        }
+        else if (d is { Disabled: true } || !def.Enabled)
+        {
+            reason = "the ratio was disabled for the whole capture";
+        }
+        else
+        {
+            reason = "no spectrum frames were processed during the capture window (plasma off?)";
+        }
+
+        _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunRatioDropped",
+            $"Ratio {def.DisplayName} got no baseline from Golden Run “{runName}”: {reason}.",
+            related: $"GoldenRun={runName},Ratio={key}");
     }
 
     private LeakAlarmLevel ComputeOverall()
@@ -343,6 +423,13 @@ public sealed class LeakMonitorEngine : IDisposable
         return acc;
     }
 
+    private CaptureDiag GetDiag(string key)
+    {
+        if (!_captureDiag.TryGetValue(key, out var d))
+            _captureDiag[key] = d = new CaptureDiag();
+        return d;
+    }
+
     public void Dispose()
     {
         _disposed = true;
@@ -350,6 +437,21 @@ public sealed class LeakMonitorEngine : IDisposable
         AlarmStateChanged = null;
         GoldenRunCaptured = null;
         ConfigurationChanged = null;
+    }
+
+    /// <summary>Per-ratio tally of why frames were or weren't usable during a Golden Run capture.</summary>
+    private sealed class CaptureDiag
+    {
+        /// <summary>Frames seen while this ratio was enabled.</summary>
+        public int Frames;
+        /// <summary>Frames whose numerator line was outside the spectrum (NaN).</summary>
+        public int NumeratorMissing;
+        /// <summary>Frames whose reference line was NaN or ≤ 0 (no plasma at that line).</summary>
+        public int ReferenceMissing;
+        /// <summary>Frames that contributed a sample to the baseline.</summary>
+        public int Accepted;
+        /// <summary>The ratio was excluded by the operator for the whole capture.</summary>
+        public bool Disabled;
     }
 
     /// <summary>Running mean / standard deviation accumulator.</summary>

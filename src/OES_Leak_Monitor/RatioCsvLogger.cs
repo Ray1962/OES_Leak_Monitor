@@ -30,6 +30,8 @@ public sealed class RatioCsvLogger : IDisposable
     private StreamWriter? _writer;
     private string _currentPath = "";
     private bool _disposed;
+    private bool _disabledLogged;
+    private bool _writeErrorLogged;
 
     public RatioCsvLogger(DualIntensityLogger intensityLogger, LeakMonitorEngine engine,
         SystemLogger? systemLogger = null)
@@ -78,18 +80,44 @@ public sealed class RatioCsvLogger : IDisposable
         }
         catch (Exception ex)
         {
-            _systemLogger?.LogError("RatioCsv_WriteRow_Failed", ex, _currentPath);
+            // Log only the first failure of a session — a persistent fault (disk full,
+            // file locked) would otherwise write one log row per spectrum frame.
+            if (!_writeErrorLogged)
+            {
+                _writeErrorLogged = true;
+                _systemLogger?.LogError("RatioCsv_WriteRow_Failed", ex, _currentPath);
+            }
         }
     }
 
     private void OpenSession(string intensityFilePath)
     {
-        if (!_engine.Settings.Enabled || !_engine.Settings.RatioCsvEnabled) return;
-        if (string.IsNullOrWhiteSpace(intensityFilePath)) return;
+        if (!_engine.Settings.Enabled || !_engine.Settings.RatioCsvEnabled)
+        {
+            // Log once: an operator expecting ratio CSVs and finding none can see why.
+            if (!_disabledLogged)
+            {
+                _disabledLogged = true;
+                _systemLogger?.LogSystemEvent(LogSeverity.Information, "RatioCsvSkipped",
+                    "Ratio-trend CSV not written — leak monitoring or ratio CSV logging is " +
+                    "disabled in settings.",
+                    value: $"Enabled={_engine.Settings.Enabled}," +
+                           $"RatioCsvEnabled={_engine.Settings.RatioCsvEnabled}");
+            }
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(intensityFilePath))
+        {
+            _systemLogger?.LogSystemEvent(LogSeverity.Warning, "RatioCsvSkipped",
+                "Ratio-trend CSV not written — the intensity logger opened a save session " +
+                "but reported no file path to derive the ratio file name from.");
+            return;
+        }
         try
         {
             _currentPath = DeriveRatioPath(intensityFilePath);
             _writer = new StreamWriter(_currentPath, append: false, Utf8Bom) { AutoFlush = true };
+            _writeErrorLogged = false;
 
             var header = new StringBuilder("Timestamp");
             foreach (var key in _ratioKeys)

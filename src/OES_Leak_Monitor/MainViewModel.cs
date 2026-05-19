@@ -66,7 +66,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // Actinometry leak monitor: build from persisted config, feed it the same
         // spectrum stream the intensity logger sees, and bridge its lifecycle into
         // the system log. Golden Run captures are persisted as they happen.
-        _leakMonitorEngine = new LeakMonitorEngine(settings.LeakMonitor);
+        _leakMonitorEngine = new LeakMonitorEngine(settings.LeakMonitor, _systemLogger);
         LeakMonitor = new LeakMonitorViewModel(_leakMonitorEngine, _systemLogger);
         foreach (var d in _devices)
             d.SpectrumAvailable += (_, sample) => _leakMonitorEngine.ProcessSample(sample);
