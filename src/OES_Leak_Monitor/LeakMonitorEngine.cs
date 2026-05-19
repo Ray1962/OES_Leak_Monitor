@@ -91,6 +91,9 @@ public sealed class LeakMonitorEngine : IDisposable
     /// so the host can persist <see cref="Settings"/>.</summary>
     public event EventHandler? ConfigurationChanged;
 
+    /// <summary>Raised after <see cref="ReloadRatios"/> rebuilds the monitored-ratio set.</summary>
+    public event EventHandler? RatiosReloaded;
+
     /// <summary>The live settings object — mutated in place as Golden Runs are captured.</summary>
     public LeakMonitorSettings Settings => _settings;
 
@@ -267,6 +270,29 @@ public sealed class LeakMonitorEngine : IDisposable
         ConfigurationChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Rebuilds the monitored-ratio set from <see cref="Settings"/> — applies a configuration
+    /// edited in the Ratio Setup tab. Meant to be called when OES acquisition (re)starts, so
+    /// a mid-run edit never disturbs a live evaluation. Resets per-ratio smoothing/state and
+    /// re-applies the active Golden Run.
+    /// </summary>
+    public void ReloadRatios()
+    {
+        lock (_gate)
+        {
+            _monitors.Clear();
+            _defs.Clear();
+            foreach (var def in _settings.Ratios)
+            {
+                _defs[def.Key] = def;
+                _monitors.Add(new RatioMonitor(def));
+            }
+            ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun));
+            _overall = LeakAlarmLevel.Idle;
+        }
+        RatiosReloaded?.Invoke(this, EventArgs.Empty);
+    }
+
     // --- internals -----------------------------------------------------------
 
     private GoldenRun FinalizeCapture()
@@ -437,6 +463,7 @@ public sealed class LeakMonitorEngine : IDisposable
         AlarmStateChanged = null;
         GoldenRunCaptured = null;
         ConfigurationChanged = null;
+        RatiosReloaded = null;
     }
 
     /// <summary>Per-ratio tally of why frames were or weren't usable during a Golden Run capture.</summary>

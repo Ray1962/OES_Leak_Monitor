@@ -19,6 +19,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly RatioCsvLogger _ratioCsvLogger;
     private readonly List<DeviceViewModel> _devices;
 
+    // Tracks the OES acquisition state so a Stop→Start transition applies a staged
+    // Ratio Setup configuration. Single-device app, so one flag suffices.
+    private bool _wasAcquiring;
+
     // Per-device colors and labels. Single OES for leak monitoring. Add tuples here
     // if you grow to multi-device — the rest of the wiring loops over this array.
     // Tag "OES1" is kept (rather than just "OES") so the recordings infrastructure
@@ -36,9 +40,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var deviceTags = DeviceProfiles.Select(p => p.Tag).ToArray();
         _intensityLogger = new DualIntensityLogger(deviceTags, _paths.DataDirectory);
 
-        Logger     = new LoggerViewModel(_intensityLogger, _paths.DataDirectory);
-        LogViewer  = new LogViewerViewModel(_systemLogger);
-        Recordings = new RecordingsViewModel(Logger, _intensityLogger, _paths.DataDirectory);
+        Logger      = new LoggerViewModel(_intensityLogger, _paths.DataDirectory);
+        LogViewer   = new LogViewerViewModel(_systemLogger);
+        Recordings  = new RecordingsViewModel(Logger, _intensityLogger, _paths.DataDirectory);
+        RatioReview = new RatioReviewViewModel(Logger, _intensityLogger, _paths.DataDirectory);
 
         _devices = new List<DeviceViewModel>(DeviceProfiles.Length);
         for (int i = 0; i < DeviceProfiles.Length; i++)
@@ -47,6 +52,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var vm = new DeviceViewModel(name, color, _systemLogger);
             int slot = i;
             vm.SpectrumAvailable += (s, sample) => _intensityLogger.ProcessSample(slot, sample);
+            vm.PropertyChanged += OnDevicePropertyChanged;
             _devices.Add(vm);
         }
         Devices = _devices.AsReadOnly();
@@ -73,6 +79,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.AlarmStateChanged += OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured += OnGoldenRunCaptured;
         _leakMonitorEngine.ConfigurationChanged += OnLeakConfigChanged;
+
+        // Ratio Setup tab: a staged editor for the species-ratio configuration. Saving
+        // persists it to settings.json; it is applied to the engine when acquisition
+        // (re)starts — see OnDevicePropertyChanged.
+        RatioSetup = new RatioSetupViewModel(_leakMonitorEngine,
+            () => PersistLeakMonitorSettings("RatioSetupSaved"), _systemLogger);
 
         // Ratio-trend CSV: a sibling of each intensity-logger save session, written
         // while the threshold logger is saving (plasma intensity above the threshold).
@@ -106,6 +118,28 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // start out disabled until the user signs in.
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
         LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
+        RatioSetup.SetRole(IsEngineerOrHigher);
+    }
+
+    /// <summary>
+    /// Applies a staged Ratio Setup configuration when OES acquisition starts: on the
+    /// transition into <see cref="DeviceViewModel.IsAcquiring"/>, the engine rebuilds its
+    /// ratio set from the saved settings. Editing mid-run therefore never disturbs a live
+    /// evaluation — Stop then Start to apply.
+    /// </summary>
+    private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(DeviceViewModel.IsAcquiring)) return;
+        if (sender is not DeviceViewModel d) return;
+
+        bool now = d.IsAcquiring;
+        if (now && !_wasAcquiring)
+        {
+            _leakMonitorEngine.ReloadRatios();
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatiosApplied",
+                "Species-ratio configuration (re)applied on OES acquisition start");
+        }
+        _wasAcquiring = now;
     }
 
     public AccessControlService AccessControl { get; }
@@ -129,6 +163,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
         LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
+        RatioSetup.SetRole(IsEngineerOrHigher);
 
         RaiseCanExec();
     }
@@ -190,7 +225,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public LoggerViewModel      Logger      { get; }
     public LogViewerViewModel   LogViewer   { get; }
     public RecordingsViewModel  Recordings  { get; }
+    public RatioReviewViewModel RatioReview { get; }
     public LeakMonitorViewModel LeakMonitor { get; }
+    public RatioSetupViewModel  RatioSetup  { get; }
 
     public RelayCommand ApplyAllCommand { get; }
     public RelayCommand SaveAllCommand { get; }
@@ -217,8 +254,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.ConfigurationChanged -= OnLeakConfigChanged;
         _ratioCsvLogger.Dispose();
         _intensityLogger.Stop();
-        foreach (var d in _devices) d.Dispose();
+        foreach (var d in _devices)
+        {
+            d.PropertyChanged -= OnDevicePropertyChanged;
+            d.Dispose();
+        }
         Recordings.Dispose();
+        RatioReview.Dispose();
         LeakMonitor.Dispose();
         _leakMonitorEngine.Dispose();
         _intensityLogger.Dispose();

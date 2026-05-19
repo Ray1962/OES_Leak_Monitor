@@ -26,6 +26,9 @@ public sealed class Recording
     /// compatibility with the dual-OES file layout.</summary>
     public string GroupKey => $"{Prefix}|{SessionStart:o}|{RotationIndex}";
 
+    public string DateText => SessionStart.ToString("yyyy-MM-dd");
+    public string TimeText => SessionStart.ToString("HH:mm:ss");
+
     public string FileSizeText => FormatSize(FileSizeBytes);
 
     private static string FormatSize(long bytes)

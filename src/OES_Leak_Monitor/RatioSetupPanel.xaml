@@ -1,0 +1,315 @@
+<UserControl x:Class="OES_Leak_Monitor.RatioSetupPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1100"
+             Background="#F4F6FA">
+
+    <UserControl.Resources>
+        <!-- One emission-line entry inside a line picker -->
+        <DataTemplate x:Key="LineItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Species}" FontWeight="SemiBold" MinWidth="46"/>
+                <TextBlock Text="{Binding WavelengthNm, StringFormat={}{0:0.#} nm}" Foreground="#555"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+        <Style x:Key="ThreshLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#444"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,3,8,3"/>
+        </Style>
+        <Style x:Key="ThreshBox" TargetType="TextBox">
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Margin" Value="0,3,0,3"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Species Ratio Setup"
+                   FontSize="16" FontWeight="Bold" Foreground="#1F3A66"
+                   Margin="6,4,6,8"/>
+
+        <!-- Apply-on-restart notice -->
+        <Border Grid.Row="1" Background="#FFF6E0" BorderBrush="#E8C870" BorderThickness="1"
+                CornerRadius="4" Padding="10,7" Margin="0,0,0,8">
+            <TextBlock TextWrapping="Wrap" Foreground="#7A5A10">
+                Edits here are staged. After <Run FontWeight="Bold">Save</Run>, they are written to
+                <Run FontWeight="Bold">settings.json</Run> but take effect only after you
+                <Run FontWeight="Bold">Stop</Run> OES acquisition and press
+                <Run FontWeight="Bold">Start OES</Run> again.
+            </TextBlock>
+        </Border>
+
+        <!-- Ratio list | detail editor -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260" MinWidth="200"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*" MinWidth="360"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: ratio list -->
+            <Border Grid.Column="0" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+                <DockPanel>
+                    <Border DockPanel.Dock="Bottom" Background="#FAFAFA"
+                            BorderBrush="#EEE" BorderThickness="0,1,0,0" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Add"    Command="{Binding AddRatioCommand}"
+                                        Padding="10,4" MinWidth="64" Margin="0,0,4,0"
+                                        ToolTip="Add a new species ratio (up to 5)."/>
+                                <Button Content="Remove" Command="{Binding RemoveRatioCommand}"
+                                        Padding="10,4" MinWidth="64"
+                                        ToolTip="Remove the selected ratio."/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding RatioCountText}" Foreground="#888"
+                                       FontSize="11" Margin="2,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <ListBox ItemsSource="{Binding Ratios}"
+                             SelectedItem="{Binding SelectedRatio}"
+                             BorderThickness="0"
+                             HorizontalContentAlignment="Stretch">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}"
+                                              VerticalAlignment="Center" Margin="0,0,6,0"
+                                              ToolTip="Include this ratio in leak monitoring."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          Background="#DDD"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns"/>
+
+            <!-- Right: detail editor for the selected ratio -->
+            <Border Grid.Column="2" Background="White" BorderBrush="#DDD" BorderThickness="1"
+                    CornerRadius="4" DataContext="{Binding SelectedRatio}">
+                <Grid>
+                    <TextBlock Text="Select or add a ratio to edit it."
+                               Foreground="#999" HorizontalAlignment="Center"
+                               VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12">
+                        <ScrollViewer.Style>
+                            <Style TargetType="ScrollViewer">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ScrollViewer.Style>
+
+                        <StackPanel>
+                            <!-- Name + enabled -->
+                            <TextBlock Text="Display name" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="4,3"/>
+                            <CheckBox Content="Enabled — included in leak monitoring"
+                                      IsChecked="{Binding Enabled}" Margin="0,8,0,0"/>
+
+                            <!-- Signal line -->
+                            <Border Background="#F7F9FC" BorderBrush="#E3E8F0" BorderThickness="1"
+                                    CornerRadius="4" Padding="10" Margin="0,14,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Signal line (numerator)" FontWeight="SemiBold"
+                                               Foreground="#1F3A66" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="170"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Emission line" Style="{StaticResource FieldLabel}"/>
+                                            <ComboBox SelectedItem="{Binding SignalLine}"
+                                                      IsSynchronizedWithCurrentItem="False"
+                                                      MaxDropDownHeight="360"
+                                                      ItemTemplate="{StaticResource LineItemTemplate}"
+                                                      ItemsSource="{Binding DataContext.LineCatalog,
+                                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                      ToolTip="The species / wavelength being observed.">
+                                                <ComboBox.GroupStyle>
+                                                    <GroupStyle>
+                                                        <GroupStyle.HeaderTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                                                           Foreground="#1F3A66" Margin="2,4,0,2"/>
+                                                            </DataTemplate>
+                                                        </GroupStyle.HeaderTemplate>
+                                                    </GroupStyle>
+                                                </ComboBox.GroupStyle>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Extraction" Style="{StaticResource FieldLabel}"/>
+                                            <ComboBox ItemsSource="{Binding ModeOptions}"
+                                                      SelectedItem="{Binding SignalMode}"
+                                                      ToolTip="Peak height for narrow atomic lines; Integral for molecular band heads."/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Reference line -->
+                            <Border Background="#F7F9FC" BorderBrush="#E3E8F0" BorderThickness="1"
+                                    CornerRadius="4" Padding="10" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Reference line (denominator / baseline species)"
+                                               FontWeight="SemiBold" Foreground="#1F3A66" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="170"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Emission line" Style="{StaticResource FieldLabel}"/>
+                                            <ComboBox SelectedItem="{Binding ReferenceLine}"
+                                                      IsSynchronizedWithCurrentItem="False"
+                                                      MaxDropDownHeight="360"
+                                                      ItemTemplate="{StaticResource LineItemTemplate}"
+                                                      ItemsSource="{Binding DataContext.LineCatalog,
+                                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                      ToolTip="The line the signal is divided by — a Golden Run captured against a different reference no longer applies.">
+                                                <ComboBox.GroupStyle>
+                                                    <GroupStyle>
+                                                        <GroupStyle.HeaderTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                                                           Foreground="#1F3A66" Margin="2,4,0,2"/>
+                                                            </DataTemplate>
+                                                        </GroupStyle.HeaderTemplate>
+                                                    </GroupStyle>
+                                                </ComboBox.GroupStyle>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Extraction" Style="{StaticResource FieldLabel}"/>
+                                            <ComboBox ItemsSource="{Binding ModeOptions}"
+                                                      SelectedItem="{Binding ReferenceMode}"
+                                                      ToolTip="Peak height for narrow atomic lines; Integral for molecular band heads."/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Thresholds -->
+                            <Border Background="#F7F9FC" BorderBrush="#E3E8F0" BorderThickness="1"
+                                    CornerRadius="4" Padding="10" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Alarm thresholds" FontWeight="SemiBold"
+                                               Foreground="#1F3A66" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="24"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="90"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Warn factor (×mean)"
+                                                   Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding WarnFactor}"
+                                                 ToolTip="Warning trips at this multiple of the baseline mean (1.2 = +20%)."/>
+                                        <TextBlock Grid.Row="0" Grid.Column="3" Text="Alarm factor (×mean)"
+                                                   Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Row="0" Grid.Column="4" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding AlarmFactor}"
+                                                 ToolTip="Alarm trips at this multiple of the baseline mean (1.5 = +50%)."/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Warn σ (×sigma)"
+                                                   Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding SigmaWarn}"
+                                                 ToolTip="Also warns at baseline mean + this many σ — whichever threshold is higher wins."/>
+                                        <TextBlock Grid.Row="1" Grid.Column="3" Text="Alarm σ (×sigma)"
+                                                   Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Row="1" Grid.Column="4" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding SigmaAlarm}"
+                                                 ToolTip="Also alarms at baseline mean + this many σ."/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="EMA τ (s)"
+                                                   Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding EmaTauSeconds}"
+                                                 ToolTip="Exponential-moving-average smoothing time constant, seconds."/>
+                                        <TextBlock Grid.Row="2" Grid.Column="3" Text="Confirm (s)"
+                                                   Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Row="2" Grid.Column="4" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding ConfirmSeconds}"
+                                                 ToolTip="The ratio must stay above a threshold this long before the level escalates."/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Bottom bar -->
+        <Border Grid.Row="3" Background="#EEF2F7" BorderBrush="#CCC" BorderThickness="1"
+                CornerRadius="4" Padding="10,8" Margin="0,8,0,0">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Left" Content="Save"
+                        Command="{Binding SaveCommand}"
+                        Padding="16,6" MinWidth="110" Margin="0,0,8,0"
+                        ToolTip="Persist the ratio configuration to settings.json (Engineer+)."/>
+                <Button DockPanel.Dock="Left" Content="Revert"
+                        Command="{Binding RevertCommand}"
+                        Padding="16,6" MinWidth="90" Margin="0,0,16,0"
+                        ToolTip="Discard unsaved edits and reload the current configuration."/>
+                <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                           Foreground="#444" TextWrapping="Wrap"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

@@ -72,6 +72,9 @@ public static class SpectralLineCatalog
                   419, 420.1, 427, 427.8, 434.4, 559.3, 563.3, 575.5, 580.4, 585.4, 590.6,
                   595.9, 601.4, 607, 612.7, 618.5, 632.3, 639.5, 646.9, 654.5, 662.4, 670.5,
                   678.9, 687.5, 700, 716.5, 727.3, 738.7, 750.4, 760, 762.6, 775.3, 789.6, 820);
+        // N2+ first-negative band heads — rise sharply with air ingress, so they are
+        // among the most sensitive single indicators of a vacuum leak.
+        Add("N2+", 388.4, 391.4, 427.8, 470.9);
         Add("NH", 336);
         Add("Ni", 232, 301.2, 341.5, 346.2);
         Add("NO", 237, 247.9, 255.9, 259.6, 268, 272.2, 286, 288.5, 289.3, 303.5, 304.3,

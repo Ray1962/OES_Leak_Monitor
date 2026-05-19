@@ -6,7 +6,9 @@ namespace OES_Leak_Monitor;
 public partial class MainWindow : Window
 {
     private const int MonitorTabIndex       = 0;
-    private const int ConfigurationTabIndex = 1;
+    // Tab order: Monitor(0), Leak Monitor(1), Ratio Setup(2), Configuration(3),
+    // Recordings(4), Ratio Review(5), Logs(6). Keep this in sync with MainWindow.xaml.
+    private const int ConfigurationTabIndex = 3;
 
     private int  _previousTabIndex;
     private bool _suppressTabChange;

@@ -53,6 +53,10 @@
                 <local:LeakMonitorPanel DataContext="{Binding LeakMonitor}"/>
             </TabItem>
 
+            <TabItem Header="Ratio Setup">
+                <local:RatioSetupPanel DataContext="{Binding RatioSetup}"/>
+            </TabItem>
+
             <TabItem Header="Configuration">
                 <Grid Background="#F4F6FA">
                     <Grid.RowDefinitions>
@@ -98,6 +102,10 @@
 
             <TabItem Header="Recordings">
                 <local:RecordingsPanel DataContext="{Binding Recordings}"/>
+            </TabItem>
+
+            <TabItem Header="Ratio Review">
+                <local:RatioReviewPanel DataContext="{Binding RatioReview}"/>
             </TabItem>
 
             <TabItem Header="Logs">

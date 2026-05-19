@@ -25,7 +25,10 @@ public sealed class RatioCsvLogger : IDisposable
     private readonly DualIntensityLogger _intensityLogger;
     private readonly LeakMonitorEngine _engine;
     private readonly SystemLogger? _systemLogger;
-    private readonly string[] _ratioKeys;
+
+    // Re-derived at the start of every session so a Ratio Setup edit applied between
+    // sessions is reflected in the next file's columns.
+    private string[] _ratioKeys = Array.Empty<string>();
 
     private StreamWriter? _writer;
     private string _currentPath = "";
@@ -39,7 +42,6 @@ public sealed class RatioCsvLogger : IDisposable
         _intensityLogger = intensityLogger ?? throw new ArgumentNullException(nameof(intensityLogger));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _systemLogger = systemLogger;
-        _ratioKeys = engine.MonitoredRatios.Select(r => r.Key).ToArray();
 
         _intensityLogger.FilesChanged += OnIntensityFilesChanged;
         _engine.SampleProcessed += OnSampleProcessed;
@@ -116,6 +118,7 @@ public sealed class RatioCsvLogger : IDisposable
         try
         {
             _currentPath = DeriveRatioPath(intensityFilePath);
+            _ratioKeys = _engine.MonitoredRatios.Select(r => r.Key).ToArray();
             _writer = new StreamWriter(_currentPath, append: false, Utf8Bom) { AutoFlush = true };
             _writeErrorLogged = false;
 

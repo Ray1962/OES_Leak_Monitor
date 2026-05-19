@@ -1,54 +1,25 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 
 namespace OES_Leak_Monitor;
 
-/// <summary>Bindable row for one monitored ratio in the Leak Monitor panel.</summary>
+/// <summary>
+/// Bindable, read-only row for one monitored ratio in the Leak Monitor panel. The ratio
+/// definition (lines, reference, enable flag, thresholds) is edited on the Ratio Setup
+/// tab; this row only displays the live state the engine reports.
+/// </summary>
 public sealed class RatioViewModel : INotifyPropertyChanged
 {
-    private readonly Action<string, string>? _onReferenceChanged;
-    private readonly Action<string, bool>? _onEnabledChanged;
-
-    public RatioViewModel(string key, string displayName, string currentReference, bool enabled,
-        Action<string, string>? onReferenceChanged = null,
-        Action<string, bool>? onEnabledChanged = null)
+    public RatioViewModel(string key, string displayName)
     {
         Key = key;
         DisplayName = displayName;
-        _selectedReference = currentReference;
-        _isEnabled = enabled;
-        _onReferenceChanged = onReferenceChanged;
-        _onEnabledChanged = onEnabledChanged;
     }
 
     public string Key { get; }
     public string DisplayName { get; }
-
-    private bool _isEnabled = true;
-    /// <summary>Whether the operator includes this ratio in monitoring; bound to the row checkbox.</summary>
-    public bool IsEnabled
-    {
-        get => _isEnabled;
-        set { if (Set(ref _isEnabled, value)) _onEnabledChanged?.Invoke(Key, value); }
-    }
-
-    /// <summary>Reference (denominator) line choices for the row's combo box.</summary>
-    public IReadOnlyList<string> ReferenceOptions => ReferenceLineCatalog.Names;
-
-    private string _selectedReference;
-    /// <summary>The chosen reference line; setting it (via the combo) swaps the denominator.</summary>
-    public string SelectedReference
-    {
-        get => _selectedReference;
-        set
-        {
-            if (Set(ref _selectedReference, value) && value is not null)
-                _onReferenceChanged?.Invoke(Key, value);
-        }
-    }
 
     private RatioState _state = RatioState.NoBaseline;
     public RatioState State

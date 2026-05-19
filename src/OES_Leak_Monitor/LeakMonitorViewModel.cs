@@ -48,16 +48,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
         BuildPlot();
 
-        int idx = 0;
-        foreach (var def in _engine.MonitoredRatios)
-        {
-            var rvm = new RatioViewModel(def.Key, def.DisplayName, def.Denominator.Label,
-                def.Enabled, OnReferenceChanged, OnRatioEnabledChanged);
-            _ratioByKey[def.Key] = rvm;
-            Ratios.Add(rvm);
-            AddSeries(def, idx++);
-            _seriesByKey[def.Key].IsVisible = def.Enabled;
-        }
+        BuildRatioRows();
 
         RefreshGoldenRunNames();
         _selectedGoldenRun = _engine.Settings.ActiveGoldenRun;
@@ -73,6 +64,34 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _engine.SampleProcessed   += OnSampleProcessed;
         _engine.AlarmStateChanged += OnAlarmStateChanged;
         _engine.GoldenRunCaptured += OnGoldenRunCaptured;
+        _engine.RatiosReloaded    += OnRatiosReloaded;
+    }
+
+    /// <summary>Builds one bindable row and one trend series per monitored ratio.</summary>
+    private void BuildRatioRows()
+    {
+        int idx = 0;
+        foreach (var def in _engine.MonitoredRatios)
+        {
+            var rvm = new RatioViewModel(def.Key, def.DisplayName);
+            _ratioByKey[def.Key] = rvm;
+            Ratios.Add(rvm);
+            AddSeries(def, idx++);
+            _seriesByKey[def.Key].IsVisible = def.Enabled;
+        }
+    }
+
+    /// <summary>Rebuilds the rows and trend series after the engine reloads its ratio set
+    /// (a Ratio Setup edit applied on acquisition restart).</summary>
+    private void RebuildRatios()
+    {
+        Ratios.Clear();
+        _ratioByKey.Clear();
+        foreach (var s in _seriesByKey.Values) PlotModel.Series.Remove(s);
+        _seriesByKey.Clear();
+        BuildRatioRows();
+        PlotModel.InvalidatePlot(true);
+        StatusMessage = "Ratio configuration applied.";
     }
 
     public ObservableCollection<RatioViewModel> Ratios { get; }
@@ -244,30 +263,8 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
     // --- commands ------------------------------------------------------------
 
-    private void OnRatioEnabledChanged(string ratioKey, bool enabled)
-    {
-        _engine.SetRatioEnabled(ratioKey, enabled);
-        if (_seriesByKey.TryGetValue(ratioKey, out var series))
-        {
-            series.IsVisible = enabled;
-            if (!enabled) series.Points.Clear();
-            PlotModel.InvalidatePlot(true);
-        }
-        StatusMessage = $"{ratioKey} {(enabled ? "enabled" : "disabled")}.";
-        _systemLogger?.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatioToggled",
-            $"{ratioKey} {(enabled ? "enabled" : "disabled")}");
-    }
-
-    private void OnReferenceChanged(string ratioKey, string referenceName)
-    {
-        var preset = ReferenceLineCatalog.FindByName(referenceName);
-        if (preset is null) return;
-        _engine.SetRatioReference(ratioKey, preset.CreateRegion());
-        StatusMessage =
-            $"{ratioKey} reference set to {referenceName} — capture a new Golden Run for it.";
-        _systemLogger?.LogSystemEvent(LogSeverity.Information, "LeakMonitorReferenceChanged",
-            $"{ratioKey} reference line changed to {referenceName}");
-    }
+    private void OnRatiosReloaded(object? sender, EventArgs e) =>
+        _dispatcher.BeginInvoke(RebuildRatios);
 
     private void CaptureGoldenRun()
     {
@@ -374,6 +371,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _engine.SampleProcessed   -= OnSampleProcessed;
         _engine.AlarmStateChanged -= OnAlarmStateChanged;
         _engine.GoldenRunCaptured -= OnGoldenRunCaptured;
+        _engine.RatiosReloaded    -= OnRatiosReloaded;
 #pragma warning disable CS0618 // AxisChanged: still the supported zoom/pan hook in OxyPlot 2.2.
         _timeAxis.AxisChanged     -= OnTimeAxisChanged;
 #pragma warning restore CS0618

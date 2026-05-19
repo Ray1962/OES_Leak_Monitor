@@ -63,56 +63,44 @@
                                 ToolTip="{Binding DetailText}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="150"/>
-                                    <ColumnDefinition Width="110"/>
-                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="28"/>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="90"/>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="115"/>
-                                    <ColumnDefinition Width="95"/>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="100"/>
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Grid.Column="0" Orientation="Horizontal"
-                                            VerticalAlignment="Center">
-                                    <CheckBox IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"
-                                              Margin="0,0,8,0"
-                                              ToolTip="Include this ratio in leak monitoring."/>
-                                    <Ellipse Width="13" Height="13"
-                                             Fill="{Binding StateBrush}" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                <Ellipse Grid.Column="0" Width="13" Height="13"
+                                         Fill="{Binding StateBrush}" VerticalAlignment="Center"
+                                         HorizontalAlignment="Left"/>
 
                                 <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
                                            FontWeight="SemiBold" FontSize="13"
+                                           TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"/>
 
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,8,0">
-                                    <TextBlock Text="reference (÷)" FontSize="10" Foreground="#999"/>
-                                    <ComboBox ItemsSource="{Binding ReferenceOptions}"
-                                              SelectedItem="{Binding SelectedReference}"
-                                              ToolTip="Reference line the signal is divided by. Changing it needs a new Golden Run."/>
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                     <TextBlock Text="smoothed ratio" FontSize="10" Foreground="#999"/>
                                     <TextBlock Text="{Binding ValueText}" FontSize="13"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Column="4" Text="{Binding PercentText}"
+                                <TextBlock Grid.Column="3" Text="{Binding PercentText}"
                                            FontSize="17" FontWeight="Bold"
                                            Foreground="{Binding StateBrush}"
                                            VerticalAlignment="Center"/>
 
-                                <StackPanel Grid.Column="5" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="4" VerticalAlignment="Center">
                                     <TextBlock Text="baseline (mean ± σ)" FontSize="10" Foreground="#999"/>
                                     <TextBlock Text="{Binding BaselineText}" FontSize="12"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Column="6" Text="{Binding SlopeText}"
+                                <TextBlock Grid.Column="5" Text="{Binding SlopeText}"
                                            FontSize="12" Foreground="#555"
                                            VerticalAlignment="Center"/>
 
-                                <TextBlock Grid.Column="7" Text="{Binding StateText}"
+                                <TextBlock Grid.Column="6" Text="{Binding StateText}"
                                            FontWeight="Bold"
                                            Foreground="{Binding StateBrush}"
                                            VerticalAlignment="Center"/>
