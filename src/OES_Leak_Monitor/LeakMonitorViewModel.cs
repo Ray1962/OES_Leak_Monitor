@@ -32,6 +32,8 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private readonly SystemLogger? _systemLogger;
     private readonly Dictionary<string, RatioViewModel> _ratioByKey = new();
     private readonly Dictionary<string, LineSeries> _seriesByKey = new();
+    private DateTimeAxis _timeAxis = null!;
+    private bool _timeAxisZoomed;
 
     private bool _operatorPlus, _engineerPlus;
     private bool _suppressGoldenRunSelection;
@@ -66,6 +68,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
             () => _captureActive);
         AcknowledgeCommand = new RelayCommand(() => _engine.Acknowledge(),
             () => _operatorPlus && _overallState == LeakAlarmLevel.Alarm);
+        ZoomAllCommand = new RelayCommand(ZoomAll);
 
         _engine.SampleProcessed   += OnSampleProcessed;
         _engine.AlarmStateChanged += OnAlarmStateChanged;
@@ -79,6 +82,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand CaptureGoldenRunCommand { get; }
     public RelayCommand CancelCaptureCommand { get; }
     public RelayCommand AcknowledgeCommand { get; }
+    public RelayCommand ZoomAllCommand { get; }
 
     // --- composite status ----------------------------------------------------
 
@@ -213,6 +217,28 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
                 if (drop > 0) pts.RemoveRange(0, drop);
             }
         }
+
+        // Once the user zooms or pans the time axis, OxyPlot stops auto-scaling it.
+        // Keep the zoomed window sliding forward with live data so the newest samples
+        // stay visible; the Zoom All button clears the zoom to fit all retained data.
+        if (_timeAxisZoomed)
+        {
+            double width = _timeAxis.ActualMaximum - _timeAxis.ActualMinimum;
+            if (width > 0) _timeAxis.Zoom(x - width, x);
+        }
+        PlotModel.InvalidatePlot(true);
+    }
+
+    /// <summary>Tracks whether the operator has zoomed / panned the time axis, so live
+    /// updates can keep a zoomed window following the latest data.</summary>
+    private void OnTimeAxisChanged(object? sender, AxisChangedEventArgs e) =>
+        _timeAxisZoomed = e.ChangeType != AxisChangeTypes.Reset;
+
+    /// <summary>Resets the trend chart axes to fit all retained data.</summary>
+    private void ZoomAll()
+    {
+        PlotModel.ResetAllAxes();
+        _timeAxisZoomed = false;
         PlotModel.InvalidatePlot(true);
     }
 
@@ -270,13 +296,17 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
             Background = OxyColors.White,
             PlotAreaBorderColor = OxyColor.FromRgb(0xCC, 0xCC, 0xCC),
         };
-        PlotModel.Axes.Add(new DateTimeAxis
+        _timeAxis = new DateTimeAxis
         {
             Position = AxisPosition.Bottom,
             StringFormat = "HH:mm:ss",
             MajorGridlineStyle = LineStyle.Solid,
             MajorGridlineColor = OxyColor.FromRgb(0xE8, 0xE8, 0xE8),
-        });
+        };
+        PlotModel.Axes.Add(_timeAxis);
+#pragma warning disable CS0618 // AxisChanged: still the supported zoom/pan hook in OxyPlot 2.2.
+        _timeAxis.AxisChanged += OnTimeAxisChanged;
+#pragma warning restore CS0618
         PlotModel.Axes.Add(new LinearAxis
         {
             Position = AxisPosition.Left,
@@ -344,6 +374,9 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _engine.SampleProcessed   -= OnSampleProcessed;
         _engine.AlarmStateChanged -= OnAlarmStateChanged;
         _engine.GoldenRunCaptured -= OnGoldenRunCaptured;
+#pragma warning disable CS0618 // AxisChanged: still the supported zoom/pan hook in OxyPlot 2.2.
+        _timeAxis.AxisChanged     -= OnTimeAxisChanged;
+#pragma warning restore CS0618
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

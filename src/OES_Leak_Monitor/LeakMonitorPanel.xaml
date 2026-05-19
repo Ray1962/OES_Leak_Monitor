@@ -44,6 +44,10 @@
                         Command="{Binding AcknowledgeCommand}"
                         Padding="12,4" Margin="12,0,12,0"
                         ToolTip="Clear a latched alarm once the leak is resolved (Operator+)."/>
+                <Button Content="Zoom All"
+                        Command="{Binding ZoomAllCommand}"
+                        Padding="12,4" Margin="0,0,12,0"
+                        ToolTip="Reset the trend chart to fit all retained data. While zoomed in, the time axis keeps following live data."/>
                 <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
                            Foreground="#444"/>
             </StackPanel>
