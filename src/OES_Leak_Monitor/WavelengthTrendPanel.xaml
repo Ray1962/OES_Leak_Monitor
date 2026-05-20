@@ -1,0 +1,32 @@
+<UserControl x:Class="OES_Leak_Monitor.WavelengthTrendPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:oxy="http://oxyplot.org/wpf">
+
+    <DockPanel Background="#F4F6FA">
+
+        <!-- Header: monitored wavelength + latest reading + zoom -->
+        <Border DockPanel.Dock="Top" Background="#FAFAFA"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Selected wavelength:" FontWeight="Bold"
+                           VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding WavelengthText}" VerticalAlignment="Center"
+                           Margin="6,0,16,0"
+                           ToolTip="The trigger (threshold) wavelength set on the Configuration tab."/>
+                <TextBlock Text="Latest:" FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding LatestText}" VerticalAlignment="Center"
+                           Margin="6,0,16,0" Foreground="#444"/>
+                <CheckBox Content="Normalize" VerticalAlignment="Center" Margin="0,0,16,0"
+                          IsChecked="{Binding Normalize}"
+                          ToolTip="Divide every line by its value at the moment you tick this, so all trends snap to 1.0 and then show divergence from that state."/>
+                <Button Content="Zoom All" Command="{Binding ZoomAllCommand}"
+                        Padding="12,4"
+                        ToolTip="Reset the chart to fit all retained data. While zoomed in, the time axis keeps following live data."/>
+            </StackPanel>
+        </Border>
+
+        <!-- Intensity time-trend chart -->
+        <oxy:PlotView Model="{Binding PlotModel}" Background="White"/>
+    </DockPanel>
+</UserControl>
