@@ -122,10 +122,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Applies a staged Ratio Setup configuration when OES acquisition starts: on the
-    /// transition into <see cref="DeviceViewModel.IsAcquiring"/>, the engine rebuilds its
-    /// ratio set from the saved settings. Editing mid-run therefore never disturbs a live
-    /// evaluation — Stop then Start to apply.
+    /// Reacts to OES acquisition start/stop transitions:
+    /// <list type="bullet">
+    /// <item>On Stop→Start, the leak engine rebuilds its ratio set from the saved
+    /// settings, so a staged Ratio Setup edit takes effect (editing mid-run never
+    /// disturbs a live evaluation — Stop then Start to apply).</item>
+    /// <item>On Start→Stop, the intensity logger's save session is force-closed via
+    /// <see cref="DualIntensityLogger.Stop"/>. The threshold state machine is purely
+    /// sample-driven and would otherwise stay parked in <c>Saving</c> with its CSV
+    /// open while acquisition is stopped — the next Start, with plasma still above
+    /// the threshold, would then keep appending to that stale file. Force-closing
+    /// resets the machine to <c>Idle</c> (the logger stays armed, <c>Enabled</c>
+    /// untouched) so the next Start opens a fresh Intensity CSV once the threshold
+    /// is re-crossed; the Ratio CSV follows via the logger's <c>FilesChanged</c>
+    /// event.</item>
+    /// </list>
     /// </summary>
     private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -138,6 +149,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _leakMonitorEngine.ReloadRatios();
             _systemLogger.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatiosApplied",
                 "Species-ratio configuration (re)applied on OES acquisition start");
+        }
+        else if (!now && _wasAcquiring)
+        {
+            // Close the current Intensity (and, via FilesChanged, Ratio) save session
+            // so a Stop genuinely ends the recording — the next Start gets new files.
+            _intensityLogger.Stop();
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "IntensityLoggerSessionEnded",
+                "Intensity/Ratio save session closed because OES acquisition stopped");
         }
         _wasAcquiring = now;
     }
