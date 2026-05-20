@@ -10,7 +10,9 @@ public sealed class AppSettings : IJsonOnDeserialized
 
     public List<DeviceSettings> Devices { get; set; } = new() { new(), new() };
 
-    public LoggerSettings Logger  { get; set; } = new();
+    // TriggerWavelength defaults to 337 nm (the N2 337.1 band) for a fresh settings.json;
+    // overrides the Aqst.OesApp.Core LoggerSettings default of 387 nm.
+    public LoggerSettings Logger  { get; set; } = new() { TriggerWavelength = 337f };
     public AccessControlConfig AccessControl { get; set; } = new();
 
     /// <summary>Actinometry leak-monitoring model configuration and Golden Run baselines.</summary>

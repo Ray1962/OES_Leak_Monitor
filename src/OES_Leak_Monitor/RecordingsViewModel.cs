@@ -69,7 +69,7 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
             throw new ArgumentException("Default data directory is required.", nameof(defaultDataDirectory));
         _defaultDataDirectory = defaultDataDirectory;
 
-        _wavelengthNm = _logger.TriggerWavelength > 0 ? _logger.TriggerWavelength : 387f;
+        _wavelengthNm = _logger.TriggerWavelength > 0 ? _logger.TriggerWavelength : 337f;
 
         // --- line plot ---
         _linePlotModel = NewBaseModel(
