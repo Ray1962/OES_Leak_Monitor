@@ -14,8 +14,25 @@ namespace OES_Leak_Monitor;
 /// <c>{baseDir}\YYYYMM\DD</c> folder, the <c>OES1</c> tag swapped for <c>Ratio</c>, so
 /// the two files share a recording-group key and the Recordings tab ignores the ratio one.
 ///
-/// <para>All callbacks arrive on the acquisition thread (intensity logger then leak engine,
-/// in order), so the single <see cref="StreamWriter"/> is never touched concurrently.</para>
+/// <para>Session lifecycle is bound to the intensity logger's two events:
+/// <list type="bullet">
+/// <item><b>Open</b> follows <see cref="DualIntensityLogger.FilesChanged"/> — it is raised
+/// only after the intensity writer has actually opened its file, so the ratio file name
+/// can be derived from a valid path.</item>
+/// <item><b>Close</b> follows <see cref="DualIntensityLogger.StateChanged"/> reaching
+/// <see cref="LoggerState.Idle"/>. The intensity logger raises <c>FilesChanged</c> while
+/// still in <c>Saving</c>/<c>WaitingToStop</c> (it closes its writers, then transitions),
+/// so the only reliable end-of-session signal is the Idle transition — covering both a
+/// natural below-threshold stop and a forced stop (OES acquisition stopped / logger
+/// disabled). This guarantees each Start→threshold cycle gets its own ratio file.</item>
+/// </list></para>
+///
+/// <para>Open and close are also written to the system log (<c>RatioCsvOpened</c> /
+/// <c>RatioCsvClosed</c>).</para>
+///
+/// <para>Sample callbacks arrive on the acquisition thread; a forced close can arrive on
+/// the UI thread (MainViewModel stopping the logger). A lock guards the writer so the two
+/// never collide.</para>
 /// </summary>
 public sealed class RatioCsvLogger : IDisposable
 {
@@ -25,6 +42,10 @@ public sealed class RatioCsvLogger : IDisposable
     private readonly DualIntensityLogger _intensityLogger;
     private readonly LeakMonitorEngine _engine;
     private readonly SystemLogger? _systemLogger;
+
+    // Guards _writer / _currentPath / _ratioKeys against the acquisition thread (row
+    // writes) racing a UI-thread forced close.
+    private readonly object _sync = new();
 
     // Re-derived at the start of every session so a Ratio Setup edit applied between
     // sessions is reflected in the next file's columns.
@@ -44,55 +65,78 @@ public sealed class RatioCsvLogger : IDisposable
         _systemLogger = systemLogger;
 
         _intensityLogger.FilesChanged += OnIntensityFilesChanged;
+        _intensityLogger.StateChanged += OnIntensityStateChanged;
         _engine.SampleProcessed += OnSampleProcessed;
     }
 
-    /// <summary>Opens / closes the ratio CSV in step with the intensity logger's save state.</summary>
+    /// <summary>
+    /// Opens the ratio CSV once the intensity writer has opened its file. Raised on every
+    /// writer open/close, so a duplicate event with a session already open is ignored.
+    /// </summary>
     private void OnIntensityFilesChanged(object? sender, EventArgs e)
     {
         if (_disposed) return;
-        bool saving = _intensityLogger.State is LoggerState.Saving or LoggerState.WaitingToStop;
-        if (saving && _writer is null)
+        lock (_sync)
         {
+            if (_writer is not null) return;   // session already open (or this is a close)
+            // Only open while the intensity logger is actively saving.
+            if (_intensityLogger.State is not (LoggerState.Saving or LoggerState.WaitingToStop))
+                return;
             var files = _intensityLogger.CurrentFiles;
-            OpenSession(files.Count > 0 ? files[0] : "");
+            OpenSessionLocked(files.Count > 0 ? files[0] : "");
         }
-        else if (!saving && _writer is not null)
+    }
+
+    /// <summary>
+    /// Closes the ratio CSV when the intensity logger's session truly ends. The logger
+    /// reaches <see cref="LoggerState.Idle"/> only after it has closed its own writers,
+    /// so this is the synchronized end-of-session signal — for a below-threshold stop and
+    /// for a forced stop alike.
+    /// </summary>
+    private void OnIntensityStateChanged(object? sender, LoggerStateChangedEventArgs e)
+    {
+        if (_disposed) return;
+        if (e.NewState != LoggerState.Idle) return;
+        lock (_sync)
         {
-            CloseSession();
+            if (_writer is not null) CloseSessionLocked();
         }
     }
 
     /// <summary>Appends one ratio row per frame while a session is open.</summary>
     private void OnSampleProcessed(object? sender, LeakMonitorSnapshot snap)
     {
-        var writer = _writer;
-        if (writer is null) return;
-        try
+        lock (_sync)
         {
-            var row = new StringBuilder(snap.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff", Inv));
-            foreach (var key in _ratioKeys)
+            var writer = _writer;
+            if (writer is null) return;
+            try
             {
-                var rs = FindRatio(snap, key);
-                row.Append(',').Append(Num(rs?.RawRatio));
-                row.Append(',').Append(Num(rs?.PercentOfBaseline));
+                var row = new StringBuilder(snap.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff", Inv));
+                foreach (var key in _ratioKeys)
+                {
+                    var rs = FindRatio(snap, key);
+                    row.Append(',').Append(Num(rs?.RawRatio));
+                    row.Append(',').Append(Num(rs?.PercentOfBaseline));
+                }
+                row.Append(',').Append(snap.Overall);
+                writer.WriteLine(row.ToString());
             }
-            row.Append(',').Append(snap.Overall);
-            writer.WriteLine(row.ToString());
-        }
-        catch (Exception ex)
-        {
-            // Log only the first failure of a session — a persistent fault (disk full,
-            // file locked) would otherwise write one log row per spectrum frame.
-            if (!_writeErrorLogged)
+            catch (Exception ex)
             {
-                _writeErrorLogged = true;
-                _systemLogger?.LogError("RatioCsv_WriteRow_Failed", ex, _currentPath);
+                // Log only the first failure of a session — a persistent fault (disk full,
+                // file locked) would otherwise write one log row per spectrum frame.
+                if (!_writeErrorLogged)
+                {
+                    _writeErrorLogged = true;
+                    _systemLogger?.LogError("RatioCsv_WriteRow_Failed", ex, _currentPath);
+                }
             }
         }
     }
 
-    private void OpenSession(string intensityFilePath)
+    /// <summary>Opens a new ratio CSV. Caller holds <see cref="_sync"/>.</summary>
+    private void OpenSessionLocked(string intensityFilePath)
     {
         if (!_engine.Settings.Enabled || !_engine.Settings.RatioCsvEnabled)
         {
@@ -129,7 +173,9 @@ public sealed class RatioCsvLogger : IDisposable
             _writer.WriteLine(header.ToString());
 
             _systemLogger?.LogSystemEvent(LogSeverity.Information, "RatioCsvOpened",
-                "Ratio-trend CSV opened", value: _currentPath);
+                "Ratio-trend CSV opened (new save session)",
+                related: $"IntensityFile={Path.GetFileName(intensityFilePath)}",
+                value: _currentPath);
         }
         catch (Exception ex)
         {
@@ -138,14 +184,15 @@ public sealed class RatioCsvLogger : IDisposable
         }
     }
 
-    private void CloseSession()
+    /// <summary>Closes the open ratio CSV. Caller holds <see cref="_sync"/>.</summary>
+    private void CloseSessionLocked()
     {
         if (_writer is null) return;
         try { _writer.Flush(); _writer.Dispose(); }
         catch { /* swallowed: shutdown */ }
         _writer = null;
         _systemLogger?.LogSystemEvent(LogSeverity.Information, "RatioCsvClosed",
-            "Ratio-trend CSV closed", value: _currentPath);
+            "Ratio-trend CSV closed (save session ended)", value: _currentPath);
     }
 
     /// <summary>Sibling of the intensity file: same folder, the "OES1" tag swapped for "Ratio".</summary>
@@ -173,7 +220,8 @@ public sealed class RatioCsvLogger : IDisposable
     {
         _disposed = true;
         _intensityLogger.FilesChanged -= OnIntensityFilesChanged;
+        _intensityLogger.StateChanged -= OnIntensityStateChanged;
         _engine.SampleProcessed -= OnSampleProcessed;
-        CloseSession();
+        lock (_sync) CloseSessionLocked();
     }
 }
