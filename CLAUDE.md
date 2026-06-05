@@ -8,6 +8,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Build: `dotnet build src/OES_Leak_Monitor/OES_Leak_Monitor.csproj -c Debug` (or open `OES_Leak_Monitor.sln` in Visual Studio 2022).
 - Run: `dotnet run --project src/OES_Leak_Monitor/OES_Leak_Monitor.csproj`.
 - No test project exists yet.
+- **From the WSL shell there is no native `dotnet`** — this is a Windows/WPF build. Invoke the Windows SDK explicitly, e.g. `"/mnt/c/Program Files/dotnet/dotnet.exe" build src/OES_Leak_Monitor/OES_Leak_Monitor.csproj -c Debug` (same for `publish`). The bare `dotnet …` commands above assume a Windows terminal / Visual Studio.
+
+### Manual verification (no hardware required)
+
+There is no automated test suite, so changes are validated by running the app. With no spectrometer attached, Connect falls back to **test mode** (`ConnectStandaloneAsync`), which streams synthetic spectra — enough to exercise the full UI without hardware. A connect that silently lands in test mode when hardware *should* be present usually means the native DLLs didn't reach the output root (see the native-DLL note above). To smoke-test a change:
+
+- Launch, then **Connect** → **Start** in the Monitor tab's `DevicePanel`; confirm spectra stream and the Leak Monitor / Wavelength-Trend charts update.
+- The Leak Monitor tab shows a **"test mode"** note while synthetic; alarms are suppressed there by default (`LeakMonitorSettings.SuppressAlarmsInTestMode`), so to exercise alarm transitions either flip that flag or feed real/abnormal data.
+- The intensity logger only writes CSVs while the selected wavelength's intensity is **above the trigger threshold** — lower the threshold in the `LoggerPanel` if you need test-mode spectra to cross it and open a save session (the Ratio CSV opens/closes in lockstep).
+- Recordings / Ratio Review tabs read back the CSVs written above; use them to confirm a logging change round-trips to disk and re-parses.
 
 ### Standalone publish (no .NET install required on the target PC)
 
