@@ -93,6 +93,20 @@
                                 Command="{Binding ShowRawCommand}"
                                 ToolTip="Plot the raw (un-normalised) ratio values."/>
                     </Border>
+                    <Border>
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource ActiveModeBorder}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsLeakRateMode}" Value="True">
+                                        <Setter Property="BorderBrush" Value="#1F7A3A"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Button Content="Leak rate" Style="{StaticResource ModeButton}"
+                                Command="{Binding ShowLeakRateCommand}"
+                                ToolTip="Plot the calibrated leak-rate estimate Q̂ (mbar·L/s) with its ±1σ band."/>
+                    </Border>
 
                     <Rectangle Width="1" Margin="6,2" Fill="#CCC"/>
                     <Button Content="Zoom All" Style="{StaticResource ToolbarButton}"

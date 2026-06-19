@@ -23,6 +23,16 @@ public sealed class RatioTrendData
     /// <summary>Composite leak state per row ("Idle" / "Normal" / "Warning" / "Alarm").</summary>
     public IReadOnlyList<string> States { get; init; } = Array.Empty<string>();
 
+    /// <summary>Estimated leak rate (mbar·L/s) per row; NaN where uncalibrated/unavailable.
+    /// Present only for files written after the calibration feature (<see cref="HasLeakRate"/>).</summary>
+    public IReadOnlyList<double> LeakRate { get; init; } = Array.Empty<double>();
+
+    /// <summary>1σ uncertainty of <see cref="LeakRate"/> per row, aligned with it.</summary>
+    public IReadOnlyList<double> LeakRateSigma { get; init; } = Array.Empty<double>();
+
+    /// <summary>True when the file carried the LeakRate columns (and at least one finite value).</summary>
+    public bool HasLeakRate { get; init; }
+
     public int RowCount => Timestamps.Count;
 }
 
@@ -43,19 +53,27 @@ public static class RatioCsvReader
         if (header is null) return new RatioTrendData();
 
         var cols = header.Split(',');
-        // Layout: Timestamp, (key, key_pctBaseline) × N, OverallState.
+        // Layout: Timestamp, (key, key_pctBaseline) × N, OverallState[, LeakRate, LeakRateSigma].
+        // Columns are located by header name so older files (without the leak columns) and
+        // newer files both parse: ratioCount derives from the OverallState position.
         if (cols.Length < 4) return new RatioTrendData();
-        int ratioCount = (cols.Length - 2) / 2;
-        int stateIdx = 1 + 2 * ratioCount;
+        int stateIdx = Array.FindIndex(cols, c => c.Trim().Equals("OverallState", StringComparison.OrdinalIgnoreCase));
+        if (stateIdx < 1) stateIdx = 1 + 2 * ((cols.Length - 2) / 2);   // legacy fallback
+        int ratioCount = (stateIdx - 1) / 2;
+        int rateIdx  = Array.FindIndex(cols, c => c.Trim().Equals("LeakRate", StringComparison.OrdinalIgnoreCase));
+        int sigmaIdx = Array.FindIndex(cols, c => c.Trim().Equals("LeakRateSigma", StringComparison.OrdinalIgnoreCase));
 
         var keys = new string[ratioCount];
         for (int i = 0; i < ratioCount; i++) keys[i] = cols[1 + 2 * i].Trim();
 
         var timestamps = new List<DateTime>();
         var states = new List<string>();
+        var rate = new List<double>();
+        var sigma = new List<double>();
         var raw = new List<double>[ratioCount];
         var pct = new List<double>[ratioCount];
         for (int i = 0; i < ratioCount; i++) { raw[i] = new List<double>(); pct[i] = new List<double>(); }
+        bool anyRate = false;
 
         string? line;
         int seen = 0;
@@ -75,6 +93,10 @@ public static class RatioCsvReader
                 pct[i].Add(ParseNum(Field(f, 2 + 2 * i)));
             }
             states.Add(Field(f, stateIdx) ?? "");
+            double r = rateIdx >= 0 ? ParseNum(Field(f, rateIdx)) : double.NaN;
+            rate.Add(r);
+            sigma.Add(sigmaIdx >= 0 ? ParseNum(Field(f, sigmaIdx)) : double.NaN);
+            if (!double.IsNaN(r)) anyRate = true;
         }
 
         var rawDict = new Dictionary<string, double[]>(ratioCount);
@@ -92,6 +114,9 @@ public static class RatioCsvReader
             Raw = rawDict,
             Pct = pctDict,
             States = states,
+            LeakRate = rate.ToArray(),
+            LeakRateSigma = sigma.ToArray(),
+            HasLeakRate = rateIdx >= 0 && anyRate,
         };
     }
 

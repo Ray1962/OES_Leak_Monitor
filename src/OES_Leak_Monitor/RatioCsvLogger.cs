@@ -120,6 +120,10 @@ public sealed class RatioCsvLogger : IDisposable
                     row.Append(',').Append(Num(rs?.PercentOfBaseline));
                 }
                 row.Append(',').Append(snap.Overall);
+                // Quantitative leak rate (blank when no calibration / no usable estimate).
+                bool hasRate = snap.LeakRate is { HasEstimate: true };
+                row.Append(',').Append(Num(hasRate ? snap.LeakRate!.LeakRate : (double?)null));
+                row.Append(',').Append(Num(hasRate ? snap.LeakRate!.Sigma : (double?)null));
                 writer.WriteLine(row.ToString());
             }
             catch (Exception ex)
@@ -169,7 +173,7 @@ public sealed class RatioCsvLogger : IDisposable
             var header = new StringBuilder("Timestamp");
             foreach (var key in _ratioKeys)
                 header.Append(',').Append(key).Append(',').Append(key).Append("_pctBaseline");
-            header.Append(",OverallState");
+            header.Append(",OverallState,LeakRate,LeakRateSigma");
             _writer.WriteLine(header.ToString());
 
             _systemLogger?.LogSystemEvent(LogSeverity.Information, "RatioCsvOpened",

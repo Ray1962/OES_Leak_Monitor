@@ -1,0 +1,31 @@
+<Window x:Class="OES_Leak_Monitor.CalibrationPointDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Capture calibration point"
+        SizeToContent="Height" Width="440"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False">
+    <StackPanel Margin="16">
+        <TextBlock TextWrapping="Wrap" Foreground="#444" Margin="0,0,0,12"
+                   Text="Apply a calibrated leak of a known rate, let the plasma settle, then capture. The ratios' rise relative to the active baseline is averaged into one calibration point."/>
+
+        <TextBlock Text="Known leak rate (mbar·L/s)" FontWeight="SemiBold"/>
+        <TextBox x:Name="LeakRateBox" Margin="0,4,0,4" Padding="4,3"/>
+        <TextBlock x:Name="ParseHint" Foreground="#A00" FontSize="11" Margin="0,0,0,10"
+                   Visibility="Collapsed"
+                   Text="Enter a positive number, e.g. 1.2e-4 or 0.00012."/>
+
+        <TextBlock Text="Leak element / label (optional)" FontWeight="SemiBold"/>
+        <TextBox x:Name="LabelBox" Margin="0,4,0,12" Padding="4,3"/>
+
+        <CheckBox x:Name="ConfirmCheck" Click="Confirm_Click" Margin="0,0,0,16"
+                  Content="I confirm the calibrated leak is applied and the process is steady."/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="OkButton" Content="Start Capture" Click="Ok_Click"
+                    Padding="14,6" MinWidth="120" Margin="0,0,8,0" IsEnabled="False"/>
+            <Button Content="Cancel" Click="Cancel_Click" IsCancel="True"
+                    Padding="14,6" MinWidth="90"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -137,6 +137,50 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private string _statusMessage = "Leak monitor ready.";
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
 
+    // --- quantitative leak rate (from the active calibration) ----------------
+
+    private string _leakRateText = "Leak rate: not calibrated";
+    public string LeakRateText { get => _leakRateText; private set => Set(ref _leakRateText, value); }
+
+    private Brush _leakRateBrush = Brushes.SlateGray;
+    public Brush LeakRateBrush { get => _leakRateBrush; private set => Set(ref _leakRateBrush, value); }
+
+    /// <summary>Formats the per-frame leak-rate estimate (and its validity) for the readout
+    /// above the trend.</summary>
+    private void ApplyLeakRate(LeakMonitorSnapshot snap)
+    {
+        switch (snap.CalibrationStatus)
+        {
+            case CalibrationStatus.NotCalibrated:
+                LeakRateText = "Leak rate: not calibrated";
+                LeakRateBrush = Brushes.SlateGray;
+                return;
+
+            case CalibrationStatus.BaselineMismatch:
+                // A calibration is selected but the active baseline isn't the one it was
+                // captured against — estimation is suspended rather than silently wrong.
+                LeakRateText = $"Leak rate: calibration “{snap.ActiveCalibration}” needs its " +
+                               "baseline — select that Golden Run to enable estimation";
+                LeakRateBrush = Brushes.DarkOrange;
+                return;
+
+            case CalibrationStatus.Active:
+                var est = snap.LeakRate;
+                if (est is not { HasEstimate: true })
+                {
+                    LeakRateText = "Leak rate: — (waiting for plasma / baseline)";
+                    LeakRateBrush = Brushes.SlateGray;
+                    return;
+                }
+                string s = $"Leak rate ≈ {est.LeakRate:G3} ± {est.Sigma:G2} mbar·L/s" +
+                           $"   ·   {est.Confidence * 100:0}% confidence";
+                if (est.OutOfCalibratedRange) s += "   ·   extrapolated";
+                LeakRateText = s;
+                LeakRateBrush = est.OutOfCalibratedRange ? Brushes.DarkOrange : Brushes.MidnightBlue;
+                return;
+        }
+    }
+
     // --- Golden Run ----------------------------------------------------------
 
     private string? _selectedGoldenRun;
@@ -212,6 +256,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         TestMode = snap.TestMode;
         CaptureActive = snap.CaptureActive;
         CaptureProgressPercent = snap.CaptureProgress01 * 100.0;
+        ApplyLeakRate(snap);
 
         if (_overallState != snap.Overall)
         {

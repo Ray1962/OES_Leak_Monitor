@@ -1,0 +1,114 @@
+<UserControl x:Class="OES_Leak_Monitor.LeakCalibrationPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1100"
+             Background="#F4F6FA">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Intro + baseline selector -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+            <TextBlock Text="Leak-Rate Calibration" FontWeight="Bold" FontSize="15" Margin="0,0,0,4"/>
+            <TextBlock TextWrapping="Wrap" Foreground="#555"
+                       Text="Build a “ratio rise ↔ known leak rate” curve. Set a leak-free baseline, then capture one point per calibrated-leak element. Save fits a per-ratio sensitivity and stores it in settings.json. Engineer+ only. ⚠ The calibrated leak must be AIR (or matching the leak you detect) — an inert (e.g. He) leak won't raise the O/OH/NO ratios."/>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Baseline (Golden Run):" VerticalAlignment="Center"
+                           Foreground="#444" Margin="0,0,6,0"/>
+                <ComboBox Width="200" VerticalAlignment="Center"
+                          ItemsSource="{Binding GoldenRunNames}"
+                          SelectedItem="{Binding SelectedGoldenRun, Mode=TwoWay}"/>
+                <TextBlock Text="Calibration name:" VerticalAlignment="Center"
+                           Foreground="#444" Margin="20,0,6,0"/>
+                <TextBox Width="180" Padding="4,3" VerticalAlignment="Center"
+                         Text="{Binding CalibrationName, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+            <TextBlock Text="{Binding BaselineNote}" Foreground="#A00" Margin="0,4,0,0"
+                       FontSize="11" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Capture controls -->
+        <Border Grid.Row="1" Background="#EEF2F7" BorderBrush="#CCC" BorderThickness="1"
+                Padding="10,8" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="Capture Point…" Command="{Binding CapturePointCommand}"
+                        Padding="14,6" MinWidth="130" Margin="0,0,8,0"
+                        ToolTip="Apply a calibrated leak of a known rate, then average the ratios' rise."/>
+                <Button Content="Cancel" Command="{Binding CancelCaptureCommand}"
+                        Padding="14,6" MinWidth="80" Margin="0,0,16,0"/>
+                <ProgressBar Width="180" Height="16" Minimum="0" Maximum="100"
+                             Value="{Binding CaptureProgressPercent, Mode=OneWay}" VerticalAlignment="Center"/>
+                <TextBlock VerticalAlignment="Center" Foreground="#444" Margin="8,0,0,0"
+                           Text="{Binding CaptureLeakRateText, StringFormat=capturing {0} mbar·L/s}"
+                           Visibility="{Binding CaptureActive, Converter={StaticResource BoolToVis}}"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="2" Text="{Binding PointCountText}" FontWeight="SemiBold"
+                   Foreground="#444" Margin="2,0,0,4"/>
+
+        <!-- Captured points -->
+        <DataGrid Grid.Row="3" ItemsSource="{Binding Points}"
+                  SelectedItem="{Binding SelectedPoint, Mode=TwoWay}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  Background="White" RowBackground="White" AlternatingRowBackground="#F7F9FC">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Leak rate (mbar·L/s)" Width="140"
+                                    Binding="{Binding LeakRateText}"/>
+                <DataGridTextColumn Header="Label" Width="120" Binding="{Binding Label}"/>
+                <DataGridTextColumn Header="Ratios" Width="60" Binding="{Binding RatioCount}"/>
+                <DataGridTextColumn Header="Per-ratio rise (x ± σ)" Width="*"
+                                    Binding="{Binding Summary}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Fit summary -->
+        <Border Grid.Row="4" Background="White" BorderBrush="#DDD" BorderThickness="1"
+                Padding="10,8" Margin="0,8,0,8">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Visible"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding FitSummary}" Value="">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel>
+                <TextBlock Text="Fitted sensitivities" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock Text="{Binding FitSummary}" FontFamily="Consolas" FontSize="12"
+                           Foreground="#333" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Actions + status -->
+        <DockPanel Grid.Row="5" LastChildFill="True">
+            <Button DockPanel.Dock="Left" Content="Save Calibration"
+                    Command="{Binding SaveCommand}" Padding="14,6" MinWidth="140" Margin="0,0,8,0"
+                    ToolTip="Fit the sensitivities and persist this calibration to settings.json."/>
+            <Button DockPanel.Dock="Left" Content="Clear Points"
+                    Command="{Binding ClearPointsCommand}" Padding="14,6" MinWidth="110" Margin="0,0,8,0"/>
+            <Button DockPanel.Dock="Left" Content="Remove Selected"
+                    Command="{Binding RemovePointCommand}" Padding="14,6" MinWidth="120" Margin="0,0,16,0"/>
+            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                       Foreground="#444" TextWrapping="Wrap"/>
+        </DockPanel>
+    </Grid>
+</UserControl>

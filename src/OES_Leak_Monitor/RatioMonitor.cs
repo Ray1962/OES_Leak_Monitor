@@ -36,7 +36,8 @@ public readonly record struct RatioSnapshot(
     double SlopePerMinute,
     bool PlasmaPresent,
     double NumeratorIntensity,
-    double DenominatorIntensity);
+    double DenominatorIntensity,
+    double RatioNoiseSigma);
 
 /// <summary>
 /// Runtime monitor for one actinometric ratio: EMA smoothing, two-level threshold
@@ -51,6 +52,8 @@ public sealed class RatioMonitor
 
     private double _ema;
     private bool _hasEma;
+    // EWMA variance of the raw ratio — feeds the leak-rate estimator's per-ratio σ_x.
+    private double _emaVar;
     private DateTime _lastTs;
     private double _rawRatio = double.NaN;
     private double _numerator = double.NaN, _denominator = double.NaN;
@@ -70,6 +73,12 @@ public sealed class RatioMonitor
 
     public string Key => _def.Key;
     public RatioState State => _state;
+
+    /// <summary>Mean of the active Golden Run baseline for this ratio (0 if none).</summary>
+    public double BaselineMean => _baseMean;
+
+    /// <summary>True when a usable Golden Run baseline is set for this ratio.</summary>
+    public bool HasBaseline => _hasBaseline;
 
     public void SetBaseline(double mean, double sigma)
     {
@@ -137,6 +146,7 @@ public sealed class RatioMonitor
         if (!_hasEma)
         {
             _ema = rawRatio;
+            _emaVar = 0;
             _hasEma = true;
         }
         else
@@ -145,7 +155,10 @@ public sealed class RatioMonitor
             if (dt <= 0) dt = 0.001;
             double tau = Math.Max(0.1, _def.EmaTauSeconds);
             double alpha = 1.0 - Math.Exp(-dt / tau);
-            _ema += alpha * (rawRatio - _ema);
+            double delta = rawRatio - _ema;
+            _ema += alpha * delta;
+            // EWMA variance (West, 1979): tracks the raw ratio's scatter about its mean.
+            _emaVar = (1.0 - alpha) * (_emaVar + alpha * delta * delta);
         }
         _lastTs = ts;
         UpdateTrend(ts, _ema);
@@ -212,5 +225,6 @@ public sealed class RatioMonitor
         _slopePerMinute,
         _plasmaPresent,
         _numerator,
-        _denominator);
+        _denominator,
+        _hasEma && _emaVar > 0 ? Math.Sqrt(_emaVar) : double.NaN);
 }

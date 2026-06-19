@@ -18,6 +18,14 @@
             </StackPanel>
         </Border>
 
+        <!-- Quantitative leak-rate readout (from the active calibration) -->
+        <Border DockPanel.Dock="Top" Background="White"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="14,6">
+            <TextBlock Text="{Binding LeakRateText}" Foreground="{Binding LeakRateBrush}"
+                       FontSize="14" FontWeight="SemiBold"
+                       ToolTip="Estimated air-leak rate from the active calibration (Leak Calibration tab). Fuses all calibrated ratios by inverse variance."/>
+        </Border>
+
         <!-- Toolbar: Golden Run + actions -->
         <Border DockPanel.Dock="Top" Background="#FAFAFA"
                 BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8">

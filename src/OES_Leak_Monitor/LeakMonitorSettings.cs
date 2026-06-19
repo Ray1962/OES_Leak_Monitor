@@ -74,6 +74,99 @@ public sealed class GoldenRun
         Baselines.FirstOrDefault(b => b.Key == key);
 }
 
+/// <summary>
+/// One ratio's measured response at a single known leak rate, captured during a leak-rate
+/// calibration. <see cref="X"/> is the fractional rise relative to the Golden Run baseline
+/// (<c>smoothedRatio / baselineMean − 1</c>), the same quantity the runtime estimator inverts.
+/// </summary>
+public sealed class RatioCalMeasurement
+{
+    public string Key { get; set; } = "";
+
+    /// <summary>Mean fractional rise over the capture window (0 at the leak-free baseline).</summary>
+    public double X { get; set; }
+
+    /// <summary>Standard deviation of <see cref="X"/> over the capture window.</summary>
+    public double Sigma { get; set; }
+
+    public int SampleCount { get; set; }
+}
+
+/// <summary>
+/// One calibration point: the per-ratio response measured while a known leak of
+/// <see cref="LeakRate"/> (mbar·L/s) was applied. The leak-free state is the implicit
+/// origin (Q = 0, x = 0) and is not stored as a point.
+/// </summary>
+public sealed class LeakCalPoint
+{
+    /// <summary>Known leak rate for this point, temperature-corrected, mbar·L/s.</summary>
+    public double LeakRate { get; set; }
+
+    /// <summary>Free-text label, e.g. the calibrated-leak element's id.</summary>
+    public string Label { get; set; } = "";
+
+    public DateTime CapturedUtc { get; set; }
+
+    public List<RatioCalMeasurement> Measurements { get; set; } = new();
+
+    public RatioCalMeasurement? Find(string key) =>
+        Measurements.FirstOrDefault(m => m.Key == key);
+}
+
+/// <summary>
+/// Fitted through-origin sensitivity for one ratio: <c>x ≈ Slope · Q</c>, i.e. the fractional
+/// rise produced per mbar·L/s of leak. The runtime estimator inverts this (<c>Q = x / Slope</c>)
+/// and weights each ratio by the inverse variance derived from <see cref="SlopeError"/>.
+/// </summary>
+public sealed class RatioSensitivity
+{
+    public string Key { get; set; } = "";
+
+    /// <summary>Sensitivity sᵢ — fractional rise per mbar·L/s.</summary>
+    public double Slope { get; set; }
+
+    /// <summary>Standard error of <see cref="Slope"/> (δsᵢ).</summary>
+    public double SlopeError { get; set; }
+
+    /// <summary>Through-origin coefficient of determination (uncentered), 0..1.</summary>
+    public double RSquared { get; set; }
+
+    /// <summary>Largest leak rate used in the fit — readings above this are extrapolated.</summary>
+    public double MaxCalibratedLeakRate { get; set; }
+
+    public int PointCount { get; set; }
+
+    /// <summary>Reference (denominator) line this sensitivity was fit against. The fit only
+    /// applies while the ratio's current reference still matches this label — same rule as
+    /// <see cref="GoldenRunRatioBaseline.ReferenceLabel"/>.</summary>
+    public string ReferenceLabel { get; set; } = "";
+}
+
+/// <summary>
+/// A leak-rate calibration for one recipe / operating point: the captured calibration points
+/// plus the per-ratio sensitivities fit from them. Bound to a <see cref="GoldenRun"/> baseline;
+/// it only applies while that baseline is active and the ratio reference lines still match.
+/// Persisted inside <see cref="LeakMonitorSettings"/> (same <c>settings.json</c> as everything else).
+/// </summary>
+public sealed class LeakCalibration
+{
+    public string Name { get; set; } = "";
+
+    /// <summary>The Golden Run this calibration's fractional rises were measured against.</summary>
+    public string GoldenRunName { get; set; } = "";
+
+    public string LeakRateUnit { get; set; } = "mbar·L/s";
+
+    public DateTime CapturedUtc { get; set; }
+
+    public List<LeakCalPoint> Points { get; set; } = new();
+
+    public List<RatioSensitivity> Fits { get; set; } = new();
+
+    public RatioSensitivity? FindFit(string key) =>
+        Fits.FirstOrDefault(f => f.Key == key);
+}
+
 /// <summary>Persisted configuration for the actinometry leak-monitoring model.</summary>
 public sealed class LeakMonitorSettings
 {
@@ -94,11 +187,22 @@ public sealed class LeakMonitorSettings
     /// <summary>Write the ratio trend to a CSV alongside each intensity-logger save session.</summary>
     public bool RatioCsvEnabled { get; set; } = true;
 
+    /// <summary>Name of the <see cref="LeakCalibration"/> currently used for leak-rate estimation,
+    /// or null when no calibration is active (estimation off, alarms still run).</summary>
+    public string? ActiveCalibration { get; set; }
+
+    /// <summary>How long each leak-rate calibration point averages the ratios, seconds.</summary>
+    public double CalibrationPointCaptureSeconds { get; set; } = 30;
+
     public List<RatioDefinition> Ratios { get; set; } = new();
     public List<GoldenRun> GoldenRuns { get; set; } = new();
+    public List<LeakCalibration> Calibrations { get; set; } = new();
 
     public GoldenRun? FindGoldenRun(string? name) =>
         name is null ? null : GoldenRuns.FirstOrDefault(g => g.Name == name);
+
+    public LeakCalibration? FindCalibration(string? name) =>
+        name is null ? null : Calibrations.FirstOrDefault(c => c.Name == name);
 
     /// <summary>Factory defaults: the four v1 ratios, all referenced to N2 337.1 nm.</summary>
     public static LeakMonitorSettings CreateDefault() => new()

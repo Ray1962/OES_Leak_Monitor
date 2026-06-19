@@ -74,6 +74,10 @@
                 <local:RatioSetupPanel DataContext="{Binding RatioSetup}"/>
             </TabItem>
 
+            <TabItem Header="Leak Calibration">
+                <local:LeakCalibrationPanel DataContext="{Binding LeakCalibration}"/>
+            </TabItem>
+
             <TabItem Header="Configuration">
                 <Grid Background="#F4F6FA">
                     <Grid.RowDefinitions>
