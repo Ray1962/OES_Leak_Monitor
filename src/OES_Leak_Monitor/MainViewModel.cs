@@ -69,6 +69,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ApplySettingsToDevices(settings);
         Logger.LoadFrom(settings.Logger);
 
+        // Monitor tab: a live intensity time-trend at the "selected" wavelength — i.e. the
+        // trigger (threshold) wavelength configured in the LoggerPanel — plus the first few
+        // monitored wavelengths logged into the intensity CSV. The chart follows that config:
+        // seeded here and re-pointed by ApplyAll whenever it is applied.
+        var loggerSettings = Logger.ToSettings();
+        WavelengthTrend = new WavelengthTrendViewModel(_devices[0],
+            loggerSettings.TriggerWavelength, loggerSettings.SaveStartThresholdIntensity,
+            loggerSettings.MonitoredWavelengths?.Select(w => (double)w));
+
         // Actinometry leak monitor: build from persisted config, feed it the same
         // spectrum stream the intensity logger sees, and bridge its lifecycle into
         // the system log. Golden Run captures are persisted as they happen.
@@ -194,6 +203,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         foreach (var d in _devices)
             if (d.ApplyParamsCommand.CanExecute(null)) d.ApplyParamsCommand.Execute(null);
         Logger.ApplyCommand.Execute(null);
+        // Re-point the Monitor-tab trend at the (possibly edited) trigger + monitored wavelengths.
+        var ls = Logger.ToSettings();
+        WavelengthTrend.Configure(ls.TriggerWavelength, ls.SaveStartThresholdIntensity,
+            ls.MonitoredWavelengths?.Select(w => (double)w));
         StatusMessage = "Apply: parameters pushed to connected devices and logger.";
         _systemLogger.LogSystemEvent(LogSeverity.Information, "ApplyAll",
             "User pushed configuration to devices and logger",
@@ -247,6 +260,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RatioReviewViewModel RatioReview { get; }
     public LeakMonitorViewModel LeakMonitor { get; }
     public RatioSetupViewModel  RatioSetup  { get; }
+    public WavelengthTrendViewModel WavelengthTrend { get; }
 
     public RelayCommand ApplyAllCommand { get; }
     public RelayCommand SaveAllCommand { get; }
@@ -272,6 +286,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.GoldenRunCaptured -= OnGoldenRunCaptured;
         _leakMonitorEngine.ConfigurationChanged -= OnLeakConfigChanged;
         _ratioCsvLogger.Dispose();
+        WavelengthTrend.Dispose();
         _intensityLogger.Stop();
         foreach (var d in _devices)
         {

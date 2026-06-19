@@ -46,7 +46,24 @@
         <TabControl Grid.Row="1" Margin="0" x:Name="MainTabControl"
                     SelectionChanged="MainTabControl_SelectionChanged">
             <TabItem Header="Monitor">
-                <wpf:DevicePanel DataContext="{Binding Devices[0]}"/>
+                <!-- Spectrum panel at its natural size, the selected-wavelength trend
+                     chart stacked below it at a fixed readable height; the whole tab
+                     scrolls if the window is too short to show both. -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <wpf:DevicePanel Grid.Row="0" MinHeight="460"
+                                         DataContext="{Binding Devices[0]}"/>
+
+                        <local:WavelengthTrendPanel Grid.Row="1" Height="320"
+                                                    DataContext="{Binding WavelengthTrend}"/>
+                    </Grid>
+                </ScrollViewer>
             </TabItem>
 
             <TabItem Header="Leak Monitor">
