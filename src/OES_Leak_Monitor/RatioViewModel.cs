@@ -41,6 +41,7 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         RatioState.Warning    => "WARNING",
         RatioState.Alarm      => "ALARM",
         RatioState.NoPlasma   => "No Plasma",
+        RatioState.LowSignal  => "Low Signal",
         RatioState.NoBaseline => "No Baseline",
         RatioState.Disabled   => "Disabled",
         _                     => _state.ToString(),
@@ -52,6 +53,7 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         RatioState.Warning => Brushes.DarkOrange,
         RatioState.Alarm   => Brushes.Firebrick,
         RatioState.NoPlasma => Brushes.Gray,
+        RatioState.LowSignal => Brushes.SlateBlue,
         RatioState.Disabled => Brushes.Silver,
         _                  => Brushes.SlateGray,
     };
@@ -72,6 +74,11 @@ public sealed class RatioViewModel : INotifyPropertyChanged
     private string _slopeText = "—";
     public string SlopeText { get => _slopeText; private set => Set(ref _slopeText, value); }
 
+    private string _snrText = "—";
+    /// <summary>Worst-of signal/reference SNR, shown so a low-emission ratio is visibly weak
+    /// rather than silently green.</summary>
+    public string SnrText { get => _snrText; private set => Set(ref _snrText, value); }
+
     /// <summary>Applies one engine snapshot to the bindable fields.</summary>
     public void Apply(RatioSnapshot s)
     {
@@ -83,15 +90,32 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         PercentText = double.IsNaN(s.PercentOfBaseline)
             ? "—"
             : $"{s.PercentOfBaseline:F0} %";
+        SnrText = FormatSnr(s);
         DetailText =
-            $"signal {Fmt(s.NumeratorIntensity)}  ÷  reference {Fmt(s.DenominatorIntensity)}\n" +
+            $"signal {Fmt(s.NumeratorIntensity)} (SNR {FmtSnr(s.NumeratorSnr)})  ÷  " +
+            $"reference {Fmt(s.DenominatorIntensity)} (SNR {FmtSnr(s.DenominatorSnr)})\n" +
             (s.HasBaseline
                 ? $"warn {s.WarnThreshold:G4}  ·  alarm {s.AlarmThreshold:G4}"
-                : "no baseline — capture a Golden Run");
+                : "no baseline — capture a Golden Run") +
+            (s.State == RatioState.LowSignal
+                ? "\nLow signal — emission near the noise floor; ratio not trusted."
+                : "");
         SlopeText = FormatSlope(s);
     }
 
     private static string Fmt(double v) => double.IsNaN(v) ? "(not found)" : v.ToString("G4");
+
+    private static string FmtSnr(double snr) => double.IsNaN(snr) ? "—" : snr.ToString("F1");
+
+    /// <summary>The worse of the two line SNRs — that's what limits the ratio.</summary>
+    private static string FormatSnr(RatioSnapshot s)
+    {
+        double worst = double.NaN;
+        if (!double.IsNaN(s.NumeratorSnr)) worst = s.NumeratorSnr;
+        if (!double.IsNaN(s.DenominatorSnr))
+            worst = double.IsNaN(worst) ? s.DenominatorSnr : Math.Min(worst, s.DenominatorSnr);
+        return double.IsNaN(worst) ? "—" : $"SNR {worst:F1}";
+    }
 
     private static string FormatSlope(RatioSnapshot s)
     {

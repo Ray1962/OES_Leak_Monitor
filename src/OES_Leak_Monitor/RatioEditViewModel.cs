@@ -35,6 +35,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _sigmaAlarm     = def.SigmaAlarm;
         _emaTauSeconds  = def.EmaTauSeconds;
         _confirmSeconds = def.ConfirmSeconds;
+        _minSnr         = def.MinSnr;
         _enabled        = def.Enabled;
 
         _autoName       = AutoName();
@@ -98,6 +99,11 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     private double _confirmSeconds;
     public double ConfirmSeconds { get => _confirmSeconds; set => Set(ref _confirmSeconds, value); }
 
+    private double _minSnr;
+    /// <summary>Minimum line SNR before the ratio is trusted; below it the ratio reads
+    /// "Low Signal" and is held out of the alarm. 0 disables the gate.</summary>
+    public double MinSnr { get => _minSnr; set => Set(ref _minSnr, value); }
+
     // --- auto display name ---------------------------------------------------
 
     private string _autoName;
@@ -126,6 +132,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         SigmaAlarm = SigmaAlarm,
         EmaTauSeconds = EmaTauSeconds,
         ConfirmSeconds = ConfirmSeconds,
+        MinSnr = MinSnr,
     };
 
     /// <summary>True if the signal and reference are the same line (a meaningless ratio).</summary>

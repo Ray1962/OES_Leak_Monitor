@@ -32,6 +32,15 @@ public sealed class RatioDefinition
     /// <summary>The ratio must stay above a threshold this long before the level escalates.</summary>
     public double ConfirmSeconds { get; set; } = 15.0;
 
+    /// <summary>
+    /// Minimum signal-to-noise ratio each line must clear for the ratio to be trusted. When the
+    /// signal or reference line falls below this (the emission is near the noise floor), the ratio
+    /// is reported as <see cref="RatioState.LowSignal"/> and excluded from the alarm rather than
+    /// allowed to swing wildly. The ratio of two near-noise lines is meaningless however well it
+    /// is smoothed, so this guards against false alarms at low plasma intensity.
+    /// </summary>
+    public double MinSnr { get; set; } = 5.0;
+
     public RatioDefinition Clone() => new()
     {
         Key = Key, DisplayName = DisplayName, Enabled = Enabled,
@@ -39,6 +48,7 @@ public sealed class RatioDefinition
         WarnFactor = WarnFactor, AlarmFactor = AlarmFactor,
         SigmaWarn = SigmaWarn, SigmaAlarm = SigmaAlarm,
         EmaTauSeconds = EmaTauSeconds, ConfirmSeconds = ConfirmSeconds,
+        MinSnr = MinSnr,
     };
 }
 

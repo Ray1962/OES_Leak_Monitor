@@ -134,6 +134,17 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         ? "TEST MODE — synthetic spectra; alarms are suppressed."
         : "";
 
+    private string _signalWarningNote = "";
+    /// <summary>Banner shown when one or more enabled ratios are below their SNR floor — the
+    /// detection wavelength's plasma emission is too weak for the ratio to be reliable.</summary>
+    public string SignalWarningNote
+    {
+        get => _signalWarningNote;
+        private set { if (Set(ref _signalWarningNote, value)) OnPropertyChanged(nameof(HasSignalWarning)); }
+    }
+
+    public bool HasSignalWarning => _signalWarningNote.Length > 0;
+
     private string _statusMessage = "Leak monitor ready.";
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
 
@@ -268,9 +279,11 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
         double x = DateTimeAxis.ToDouble(snap.Timestamp);
         double cutoff = DateTimeAxis.ToDouble(snap.Timestamp - TrendRetention);
+        var lowSignal = new List<string>();
         foreach (var rs in snap.Ratios)
         {
             if (_ratioByKey.TryGetValue(rs.Key, out var rvm)) rvm.Apply(rs);
+            if (rs.State == RatioState.LowSignal) lowSignal.Add(rvm?.DisplayName ?? rs.Key);
             if (_seriesByKey.TryGetValue(rs.Key, out var series) &&
                 !double.IsNaN(rs.PercentOfBaseline))
             {
@@ -281,6 +294,11 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
                 if (drop > 0) pts.RemoveRange(0, drop);
             }
         }
+
+        SignalWarningNote = lowSignal.Count == 0
+            ? ""
+            : $"LOW SIGNAL — {string.Join(", ", lowSignal)} near the noise floor; " +
+              "leak detection unreliable. Raise plasma intensity / exposure or recapture the baseline.";
 
         // Once the user zooms or pans the time axis, OxyPlot stops auto-scaling it.
         // Keep the zoomed window sliding forward with live data so the newest samples

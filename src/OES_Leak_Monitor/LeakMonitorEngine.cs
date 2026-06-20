@@ -181,11 +181,12 @@ public sealed class LeakMonitorEngine : IDisposable
                     continue;
                 }
 
-                double num = LineIntensityExtractor.Extract(wl, inten, def.Numerator);
-                double den = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
+                var numM = LineIntensityExtractor.Extract(wl, inten, def.Numerator);
+                var denM = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
+                double num = numM.Value, den = denM.Value;
 
                 bool plasma = !double.IsNaN(den) && den > 0 && den > floor;
-                mon.Update(num, den, sample.Timestamp, plasma);
+                mon.Update(numM, denM, sample.Timestamp, plasma);
 
                 if (_capturing)
                 {
