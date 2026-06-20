@@ -75,6 +75,11 @@ public sealed class LeakAlarmEventArgs : EventArgs
 /// </summary>
 public sealed class LeakMonitorEngine : IDisposable
 {
+    // A Golden Run ratio baseline is rejected unless at least this fraction of its
+    // SNR-evaluable frames cleared the per-ratio SNR floor — guards against a baseline built
+    // from a biased sliver of upward noise excursions when the line hovers around noise.
+    private const double MinBaselineAcceptFraction = 0.5;
+
     private readonly object _gate = new();
     private readonly LeakMonitorSettings _settings;
     private readonly SystemLogger? _log;
@@ -203,9 +208,23 @@ public sealed class LeakMonitorEngine : IDisposable
                     if (double.IsNaN(den) || den <= 0) diag.ReferenceMissing++;
                     if (plasma && den != 0 && !double.IsNaN(value))
                     {
-                        diag.Accepted++;
-                        GetAccum(mon.Key).Add(value);
-                        _captureDenom.Add(den);
+                        // Mirror the runtime LowSignal gate: only frames whose lines clear the
+                        // SNR floor feed the baseline, so a near-noise capture doesn't produce
+                        // an unreliable mean/σ. MinSnr 0 disables the gate (legacy behaviour).
+                        double minSnr = def.MinSnr;
+                        bool lowSnr = minSnr > 0 &&
+                            ((!double.IsNaN(numM.Snr) && numM.Snr < minSnr) ||
+                             (!double.IsNaN(denM.Snr) && denM.Snr < minSnr));
+                        if (lowSnr)
+                        {
+                            diag.LowSnr++;
+                        }
+                        else
+                        {
+                            diag.Accepted++;
+                            GetAccum(mon.Key).Add(value);
+                            _captureDenom.Add(den);
+                        }
                     }
                 }
 
@@ -516,23 +535,41 @@ public sealed class LeakMonitorEngine : IDisposable
         };
         foreach (var mon in _monitors)
         {
-            if (_captureAccum.TryGetValue(mon.Key, out var acc) && acc.Count > 0)
-            {
-                run.Baselines.Add(new GoldenRunRatioBaseline
-                {
-                    Key = mon.Key,
-                    Mean = acc.Mean,
-                    Sigma = acc.StdDev,
-                    SampleCount = acc.Count,
-                    ReferenceLabel = _defs[mon.Key].Denominator.Label,
-                });
-            }
-            else
+            _captureAccum.TryGetValue(mon.Key, out var acc);
+            int accepted = acc?.Count ?? 0;
+            if (accepted == 0)
             {
                 // The ratio produced no usable samples — record why so the operator
                 // isn't left guessing at a permanent "No Baseline".
                 LogDroppedRatio(mon.Key, run.Name);
+                continue;
             }
+
+            // Even with some samples, if too few of the SNR-evaluable frames cleared the floor
+            // the line hovered around noise and the survivors are a biased upward sliver — reject
+            // rather than set a misleading baseline.
+            _captureDiag.TryGetValue(mon.Key, out var d);
+            int lowSnr = d?.LowSnr ?? 0;
+            int evaluable = accepted + lowSnr;
+            if (evaluable > 0 && accepted < MinBaselineAcceptFraction * evaluable)
+            {
+                var dropDef = _defs[mon.Key];
+                _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunRatioLowSnr",
+                    $"Ratio {dropDef.DisplayName} baseline rejected — only {accepted} of {evaluable} " +
+                    $"frames cleared the SNR floor ({dropDef.MinSnr:0.#}); the line sat near the noise " +
+                    "floor. Raise plasma intensity / exposure, lower Min SNR, or use a stronger line.",
+                    related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+                continue;
+            }
+
+            run.Baselines.Add(new GoldenRunRatioBaseline
+            {
+                Key = mon.Key,
+                Mean = acc!.Mean,
+                Sigma = acc.StdDev,
+                SampleCount = acc.Count,
+                ReferenceLabel = _defs[mon.Key].Denominator.Label,
+            });
         }
 
         if (run.Baselines.Count == 0)
@@ -621,6 +658,10 @@ public sealed class LeakMonitorEngine : IDisposable
             else if (d.ReferenceMissing == d.Frames)
                 reason = $"the reference line {def.Denominator.Label} ({def.Denominator.CenterNm:0.#} nm) " +
                          "never registered — the plasma was off, or the line is outside the spectrum";
+            else if (d.LowSnr > 0)
+                reason = $"the line(s) stayed below the SNR floor ({def.MinSnr:0.#}) — near the noise " +
+                         $"floor — in every usable frame ({d.LowSnr}/{d.Frames}). Raise plasma " +
+                         "intensity / exposure, lower Min SNR, or use a stronger line";
             else
                 reason = $"no frame had both lines valid ({d.NumeratorMissing}/{d.Frames} frames " +
                          $"missing the numerator, {d.ReferenceMissing}/{d.Frames} missing the reference)";
@@ -758,6 +799,8 @@ public sealed class LeakMonitorEngine : IDisposable
         public int NumeratorMissing;
         /// <summary>Frames whose reference line was NaN or ≤ 0 (no plasma at that line).</summary>
         public int ReferenceMissing;
+        /// <summary>Frames with plasma + both lines present but below the SNR floor (near noise).</summary>
+        public int LowSnr;
         /// <summary>Frames that contributed a sample to the baseline.</summary>
         public int Accepted;
         /// <summary>The ratio was excluded by the operator for the whole capture.</summary>
