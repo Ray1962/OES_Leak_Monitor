@@ -15,6 +15,19 @@ public enum LeakAlarmLevel
     Alarm,
 }
 
+/// <summary>Validity of the selected leak-rate calibration for the current conditions.</summary>
+public enum CalibrationStatus
+{
+    /// <summary>No calibration is selected — leak-rate estimation is off.</summary>
+    NotCalibrated,
+    /// <summary>The selected calibration applies and is producing estimates.</summary>
+    Active,
+    /// <summary>A calibration is selected but the active Golden Run baseline is not the one it
+    /// was captured against — estimation is suspended (the rises are measured against a
+    /// different baseline). Select the matching baseline, or re-calibrate.</summary>
+    BaselineMismatch,
+}
+
 /// <summary>Immutable per-frame view of the whole monitor, handed to the UI.</summary>
 public sealed class LeakMonitorSnapshot
 {
@@ -25,6 +38,24 @@ public sealed class LeakMonitorSnapshot
     public bool CaptureActive { get; init; }
     public double CaptureProgress01 { get; init; }
     public string? ActiveGoldenRun { get; init; }
+
+    /// <summary>A leak-rate calibration point is being averaged.</summary>
+    public bool CalibrationCaptureActive { get; init; }
+    public double CalibrationCaptureProgress01 { get; init; }
+    /// <summary>Known leak rate of the calibration point currently being captured, mbar·L/s.</summary>
+    public double CalibrationLeakRate { get; init; }
+
+    /// <summary>Quantitative leak-rate estimate from the active calibration, or null when no
+    /// calibration is active. <see cref="LeakRateEstimate.HasEstimate"/> is false when a
+    /// calibration exists but no ratio currently yields a usable reading.</summary>
+    public LeakRateEstimate? LeakRate { get; init; }
+
+    /// <summary>Name of the selected leak-rate calibration, or null. Set even when the
+    /// calibration is currently invalid — see <see cref="CalibrationStatus"/>.</summary>
+    public string? ActiveCalibration { get; init; }
+
+    /// <summary>Whether the selected calibration is valid for the current baseline.</summary>
+    public CalibrationStatus CalibrationStatus { get; init; }
 }
 
 public sealed class LeakAlarmEventArgs : EventArgs
@@ -51,6 +82,8 @@ public sealed class LeakMonitorEngine : IDisposable
     private readonly Dictionary<string, RatioDefinition> _defs = new();
 
     private GoldenRun? _activeRun;
+    private LeakRateEstimator? _estimator;   // built from the active calibration, or null
+    private CalibrationStatus _calStatus = CalibrationStatus.NotCalibrated;
     private LeakAlarmLevel _overall = LeakAlarmLevel.Idle;
     private bool _disposed;
 
@@ -64,6 +97,16 @@ public sealed class LeakMonitorEngine : IDisposable
     private readonly Dictionary<string, CaptureDiag> _captureDiag = new();
     private readonly Accum _captureDenom = new();
 
+    // Leak-rate calibration-point capture state. Mirrors the Golden Run capture above but
+    // averages each ratio's fractional rise (rawRatio / baselineMean − 1) at a known leak.
+    private bool _calCapturing;
+    private double _calLeakRate;
+    private string _calLabel = "";
+    private double _calSeconds;
+    private bool _calHasStart;
+    private DateTime _calStart, _calLast;
+    private readonly Dictionary<string, Accum> _calAccum = new();
+
     public LeakMonitorEngine(LeakMonitorSettings settings, SystemLogger? systemLogger = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -75,7 +118,7 @@ public sealed class LeakMonitorEngine : IDisposable
             _defs[def.Key] = def;
             _monitors.Add(new RatioMonitor(def));
         }
-        ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun));
+        ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // also builds the estimator
     }
 
     /// <summary>Raised for every processed frame. Fires on the acquisition thread.</summary>
@@ -86,6 +129,10 @@ public sealed class LeakMonitorEngine : IDisposable
 
     /// <summary>Raised when a Golden Run capture finishes and becomes the active baseline.</summary>
     public event EventHandler<GoldenRun>? GoldenRunCaptured;
+
+    /// <summary>Raised when a leak-rate calibration point finishes averaging. The host collects
+    /// these across leak elements and fits them into a <see cref="LeakCalibration"/>.</summary>
+    public event EventHandler<LeakCalPoint>? CalibrationPointCaptured;
 
     /// <summary>Raised when the ratio configuration changes (e.g. a reference line swap),
     /// so the host can persist <see cref="Settings"/>.</summary>
@@ -109,6 +156,7 @@ public sealed class LeakMonitorEngine : IDisposable
         LeakMonitorSnapshot snap;
         LeakAlarmLevel oldOverall, newOverall;
         GoldenRun? capturedRun = null;
+        LeakCalPoint? capturedPoint = null;
 
         lock (_gate)
         {
@@ -133,11 +181,12 @@ public sealed class LeakMonitorEngine : IDisposable
                     continue;
                 }
 
-                double num = LineIntensityExtractor.Extract(wl, inten, def.Numerator);
-                double den = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
+                var numM = LineIntensityExtractor.Extract(wl, inten, def.Numerator);
+                var denM = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
+                double num = numM.Value, den = denM.Value;
 
                 bool plasma = !double.IsNaN(den) && den > 0 && den > floor;
-                mon.Update(num, den, sample.Timestamp, plasma);
+                mon.Update(numM, denM, sample.Timestamp, plasma);
 
                 if (_capturing)
                 {
@@ -154,6 +203,15 @@ public sealed class LeakMonitorEngine : IDisposable
                         _captureDenom.Add(den);
                     }
                 }
+
+                // Calibration point: average the fractional rise relative to the active
+                // baseline. Needs a baseline (x is defined against it) and live plasma.
+                if (_calCapturing && mon.HasBaseline && plasma &&
+                    mon.BaselineMean > 0 && den != 0 && !double.IsNaN(num))
+                {
+                    double x = (num / den) / mon.BaselineMean - 1.0;
+                    GetCalAccum(mon.Key).Add(x);
+                }
             }
 
             if (_capturing)
@@ -166,6 +224,18 @@ public sealed class LeakMonitorEngine : IDisposable
                 _captureLast = sample.Timestamp;
                 if ((_captureLast - _captureStart).TotalSeconds >= _captureSeconds)
                     capturedRun = FinalizeCapture();
+            }
+
+            if (_calCapturing)
+            {
+                if (!_calHasStart)
+                {
+                    _calHasStart = true;
+                    _calStart = sample.Timestamp;
+                }
+                _calLast = sample.Timestamp;
+                if ((_calLast - _calStart).TotalSeconds >= _calSeconds)
+                    capturedPoint = FinalizeCalibrationPoint();
             }
 
             oldOverall = _overall;
@@ -189,6 +259,9 @@ public sealed class LeakMonitorEngine : IDisposable
 
         if (capturedRun is not null)
             GoldenRunCaptured?.Invoke(this, capturedRun);
+
+        if (capturedPoint is not null)
+            CalibrationPointCaptured?.Invoke(this, capturedPoint);
     }
 
     /// <summary>Starts averaging the ratios into a new Golden Run baseline.</summary>
@@ -209,6 +282,37 @@ public sealed class LeakMonitorEngine : IDisposable
     public void CancelGoldenRunCapture()
     {
         lock (_gate) _capturing = false;
+    }
+
+    /// <summary>
+    /// Starts averaging each ratio's fractional rise at a known leak rate into one calibration
+    /// point. Requires an active Golden Run baseline (the rise is measured against it) and live
+    /// plasma; ratios with no usable frames are simply omitted from the resulting point.
+    /// </summary>
+    public void BeginCalibrationPointCapture(double leakRate, string label, double seconds)
+    {
+        lock (_gate)
+        {
+            _calCapturing = true;
+            _calLeakRate = leakRate;
+            _calLabel = label?.Trim() ?? "";
+            _calSeconds = Math.Max(1.0, seconds);
+            _calHasStart = false;
+            _calAccum.Clear();
+        }
+    }
+
+    public void CancelCalibrationCapture()
+    {
+        lock (_gate) _calCapturing = false;
+    }
+
+    /// <summary>Current reference (denominator) line label per monitored ratio — used to stamp
+    /// a fitted calibration so a later reference swap invalidates it.</summary>
+    public IReadOnlyDictionary<string, string> CurrentReferenceLabels()
+    {
+        lock (_gate)
+            return _defs.ToDictionary(kv => kv.Key, kv => kv.Value.Denominator.Label);
     }
 
     /// <summary>Clears every latched alarm.</summary>
@@ -236,6 +340,74 @@ public sealed class LeakMonitorEngine : IDisposable
         {
             _settings.ActiveGoldenRun = name;
             ApplyGoldenRun(_settings.FindGoldenRun(name));
+        }
+    }
+
+    /// <summary>Rebuilds the runtime leak-rate estimator from <see cref="Settings"/>'s active
+    /// calibration. Call after a calibration is saved or the active one is switched.</summary>
+    public void ReloadCalibration()
+    {
+        lock (_gate) BuildEstimator();
+    }
+
+    /// <summary>
+    /// (Re)builds the runtime estimator and re-evaluates calibration validity. A calibration
+    /// only applies while the active Golden Run baseline matches the one it was captured against
+    /// — the per-ratio rise is defined relative to that baseline, so a different baseline would
+    /// silently corrupt the estimate. Logs each status transition.
+    /// </summary>
+    private void BuildEstimator()
+    {
+        var prev = _calStatus;
+        string? prevCal = _activeCalForLog;
+        var cal = _settings.FindCalibration(_settings.ActiveCalibration);
+        if (cal is null)
+        {
+            _estimator = null;
+            _calStatus = CalibrationStatus.NotCalibrated;
+        }
+        else if (_settings.ActiveGoldenRun is null ||
+                 !string.Equals(cal.GoldenRunName, _settings.ActiveGoldenRun, StringComparison.Ordinal))
+        {
+            _estimator = null;
+            _calStatus = CalibrationStatus.BaselineMismatch;
+        }
+        else
+        {
+            _estimator = new LeakRateEstimator(cal);
+            _calStatus = CalibrationStatus.Active;
+        }
+        _activeCalForLog = cal?.Name;
+
+        if (_calStatus != prev || !string.Equals(_activeCalForLog, prevCal, StringComparison.Ordinal))
+            LogCalibrationStatus(cal);
+    }
+
+    private string? _activeCalForLog;
+
+    private void LogCalibrationStatus(LeakCalibration? cal)
+    {
+        switch (_calStatus)
+        {
+            case CalibrationStatus.Active:
+                _log?.LogSystemEvent(LogSeverity.Information, "LeakCalibrationActive",
+                    $"Leak-rate calibration “{cal!.Name}” active against baseline " +
+                    $"“{_settings.ActiveGoldenRun}”.",
+                    related: $"Calibration={cal.Name},Baseline={_settings.ActiveGoldenRun}");
+                break;
+            case CalibrationStatus.BaselineMismatch:
+                _log?.LogSystemEvent(LogSeverity.Warning, "LeakCalibrationSuspended",
+                    $"Leak-rate calibration “{cal!.Name}” suspended — it was captured against " +
+                    $"baseline “{cal.GoldenRunName}”, but the active baseline is " +
+                    $"“{_settings.ActiveGoldenRun ?? "(none)"}”. Select that baseline or re-calibrate.",
+                    related: $"Calibration={cal.Name},NeedBaseline={cal.GoldenRunName}," +
+                             $"ActiveBaseline={_settings.ActiveGoldenRun ?? "(none)"}");
+                break;
+            case CalibrationStatus.NotCalibrated:
+                // Only meaningful as a transition away from a previously selected calibration.
+                _log?.LogSystemEvent(LogSeverity.Information, "LeakCalibrationCleared",
+                    "Leak-rate estimation off — no calibration selected.");
+                break;
         }
     }
 
@@ -287,7 +459,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 _defs[def.Key] = def;
                 _monitors.Add(new RatioMonitor(def));
             }
-            ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun));
+            ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // rebuilds the estimator
             _overall = LeakAlarmLevel.Idle;
         }
         RatiosReloaded?.Invoke(this, EventArgs.Empty);
@@ -341,6 +513,29 @@ public sealed class LeakMonitorEngine : IDisposable
         return run;
     }
 
+    private LeakCalPoint FinalizeCalibrationPoint()
+    {
+        _calCapturing = false;
+        var pt = new LeakCalPoint
+        {
+            LeakRate = _calLeakRate,
+            Label = _calLabel,
+            CapturedUtc = DateTime.UtcNow,
+        };
+        foreach (var mon in _monitors)
+        {
+            if (_calAccum.TryGetValue(mon.Key, out var acc) && acc.Count > 0)
+                pt.Measurements.Add(new RatioCalMeasurement
+                {
+                    Key = mon.Key,
+                    X = acc.Mean,
+                    Sigma = acc.StdDev,
+                    SampleCount = acc.Count,
+                });
+        }
+        return pt;
+    }
+
     private void ApplyGoldenRun(GoldenRun? run)
     {
         _activeRun = run;
@@ -369,6 +564,8 @@ public sealed class LeakMonitorEngine : IDisposable
                         related: $"GoldenRun={run.Name},Ratio={mon.Key}");
             }
         }
+        // The active baseline just changed — re-evaluate calibration validity against it.
+        BuildEstimator();
     }
 
     /// <summary>Logs why a ratio ended a Golden Run capture with no usable baseline.</summary>
@@ -430,16 +627,55 @@ public sealed class LeakMonitorEngine : IDisposable
             progress = Math.Clamp(
                 (_captureLast - _captureStart).TotalSeconds / _captureSeconds, 0.0, 1.0);
 
+        double calProgress = 0.0;
+        if (_calCapturing && _calHasStart && _calSeconds > 0)
+            calProgress = Math.Clamp(
+                (_calLast - _calStart).TotalSeconds / _calSeconds, 0.0, 1.0);
+
+        var ratios = _monitors.Select(m => m.Snapshot()).ToList();
+        LeakRateEstimate? estimate = ComputeLeakRate(ratios);
+
         return new LeakMonitorSnapshot
         {
             Timestamp = ts,
             Overall = _overall,
-            Ratios = _monitors.Select(m => m.Snapshot()).ToList(),
+            Ratios = ratios,
             TestMode = testMode,
             CaptureActive = _capturing,
             CaptureProgress01 = progress,
             ActiveGoldenRun = _settings.ActiveGoldenRun,
+            CalibrationCaptureActive = _calCapturing,
+            CalibrationCaptureProgress01 = calProgress,
+            CalibrationLeakRate = _calLeakRate,
+            LeakRate = estimate,
+            ActiveCalibration = _settings.ActiveCalibration,
+            CalibrationStatus = _calStatus,
         };
+    }
+
+    /// <summary>
+    /// Inverts the current per-ratio rises into a fused leak-rate estimate via the active
+    /// calibration. Returns null when no calibration is active. The fractional rise feeds
+    /// from each ratio's % -of-baseline; its noise from the ratio's EWMA scatter, scaled to x.
+    /// </summary>
+    private LeakRateEstimate? ComputeLeakRate(IReadOnlyList<RatioSnapshot> ratios)
+    {
+        if (_estimator is null) return null;
+
+        var readings = new List<LeakRateEstimator.RatioReading>(ratios.Count);
+        foreach (var r in ratios)
+        {
+            double x = r.HasBaseline && !double.IsNaN(r.PercentOfBaseline)
+                ? r.PercentOfBaseline / 100.0 - 1.0
+                : double.NaN;
+            double sigX = r.BaselineMean > 0 && !double.IsNaN(r.RatioNoiseSigma)
+                ? r.RatioNoiseSigma / r.BaselineMean
+                : 0.0;
+            readings.Add(new LeakRateEstimator.RatioReading(r.Key, x, sigX));
+        }
+
+        var refLabels = _defs.ToDictionary(kv => kv.Key, kv => kv.Value.Denominator.Label);
+        return _estimator.Estimate(readings, refLabels);
     }
 
     private Accum GetAccum(string key)
@@ -456,12 +692,20 @@ public sealed class LeakMonitorEngine : IDisposable
         return d;
     }
 
+    private Accum GetCalAccum(string key)
+    {
+        if (!_calAccum.TryGetValue(key, out var acc))
+            _calAccum[key] = acc = new Accum();
+        return acc;
+    }
+
     public void Dispose()
     {
         _disposed = true;
         SampleProcessed = null;
         AlarmStateChanged = null;
         GoldenRunCaptured = null;
+        CalibrationPointCaptured = null;
         ConfigurationChanged = null;
         RatiosReloaded = null;
     }

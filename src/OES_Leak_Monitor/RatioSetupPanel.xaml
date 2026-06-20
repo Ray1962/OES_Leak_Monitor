@@ -252,6 +252,7 @@
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
                                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Warn factor (×mean)"
@@ -286,6 +287,12 @@
                                         <TextBox Grid.Row="2" Grid.Column="4" Style="{StaticResource ThreshBox}"
                                                  Text="{Binding ConfirmSeconds}"
                                                  ToolTip="The ratio must stay above a threshold this long before the level escalates."/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Min SNR"
+                                                   Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding MinSnr}"
+                                                 ToolTip="Both lines must clear this signal-to-noise ratio for the ratio to be trusted. Below it the ratio reads &quot;Low Signal&quot; and is held out of the alarm — guards against false alarms when the detection wavelength's plasma emission is near the noise floor. 0 disables the gate."/>
                                     </Grid>
                                 </StackPanel>
                             </Border>

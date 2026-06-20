@@ -22,7 +22,7 @@ using OxyPlot.Wpf;
 namespace OES_Leak_Monitor;
 
 /// <summary>Which value the Ratio Review chart plots.</summary>
-public enum RatioReviewMode { PercentOfBaseline, RawRatio }
+public enum RatioReviewMode { PercentOfBaseline, RawRatio, LeakRate }
 
 /// <summary>
 /// Backs the Ratio Review tab. Scans the logger's base directory for the
@@ -66,6 +66,7 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         RefreshCommand        = new RelayCommand(Refresh);
         ShowPercentCommand    = new RelayCommand(() => Mode = RatioReviewMode.PercentOfBaseline);
         ShowRawCommand        = new RelayCommand(() => Mode = RatioReviewMode.RawRatio);
+        ShowLeakRateCommand   = new RelayCommand(() => Mode = RatioReviewMode.LeakRate);
         ZoomAllCommand        = new RelayCommand(() => { PlotModel.ResetAllAxes(); PlotModel.InvalidatePlot(false); });
         SavePngCommand        = new RelayCommand(SavePng,  () => _data is { RowCount: > 0 });
         CopyImageCommand      = new RelayCommand(CopyImage, () => _data is { RowCount: > 0 });
@@ -108,11 +109,13 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
             if (!Set(ref _mode, value)) return;
             OnPropertyChanged(nameof(IsPercentMode));
             OnPropertyChanged(nameof(IsRawMode));
+            OnPropertyChanged(nameof(IsLeakRateMode));
             RebuildPlot();
         }
     }
-    public bool IsPercentMode => _mode == RatioReviewMode.PercentOfBaseline;
-    public bool IsRawMode     => _mode == RatioReviewMode.RawRatio;
+    public bool IsPercentMode  => _mode == RatioReviewMode.PercentOfBaseline;
+    public bool IsRawMode      => _mode == RatioReviewMode.RawRatio;
+    public bool IsLeakRateMode => _mode == RatioReviewMode.LeakRate;
 
     private string _searchText = "";
     /// <summary>Substring filter applied to the file date / time / name.</summary>
@@ -134,6 +137,7 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand RefreshCommand        { get; }
     public RelayCommand ShowPercentCommand    { get; }
     public RelayCommand ShowRawCommand        { get; }
+    public RelayCommand ShowLeakRateCommand   { get; }
     public RelayCommand ZoomAllCommand        { get; }
     public RelayCommand SavePngCommand        { get; }
     public RelayCommand CopyImageCommand      { get; }
@@ -261,6 +265,7 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
     private void RebuildPlot()
     {
         bool pct = _mode == RatioReviewMode.PercentOfBaseline;
+        bool leak = _mode == RatioReviewMode.LeakRate;
 
         var model = new PlotModel
         {
@@ -282,7 +287,7 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         var yAxis = new LinearAxis
         {
             Position = AxisPosition.Left,
-            Title = pct ? "% of baseline" : "raw ratio",
+            Title = leak ? "leak rate (mbar·L/s)" : pct ? "% of baseline" : "raw ratio",
             MajorGridlineStyle = LineStyle.Solid,
             MajorGridlineColor = OxyColor.FromRgb(0xE8, 0xE8, 0xE8),
         };
@@ -290,6 +295,10 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         {
             yAxis.AbsoluteMinimum = 0;
             yAxis.MinimumRange = 10;
+        }
+        else if (leak)
+        {
+            yAxis.AbsoluteMinimum = 0;   // a leak rate can't be negative
         }
         model.Axes.Add(yAxis);
 
@@ -312,25 +321,32 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         {
             AddStateBands(model, d);
 
-            int idx = 0;
-            foreach (var key in d.RatioKeys)
+            if (leak)
             {
-                var series = new LineSeries
+                AddLeakRateSeries(model, d);
+            }
+            else
+            {
+                int idx = 0;
+                foreach (var key in d.RatioKeys)
                 {
-                    Title = FriendlyName(key),
-                    Color = Palette[idx % Palette.Length],
-                    StrokeThickness = 1.5,
-                    CanTrackerInterpolatePoints = false,
-                };
-                var values = pct ? d.Pct[key] : d.Raw[key];
-                for (int i = 0; i < d.RowCount; i++)
-                {
-                    double v = values[i];
-                    if (double.IsNaN(v)) continue;
-                    series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(d.Timestamps[i]), v));
+                    var series = new LineSeries
+                    {
+                        Title = FriendlyName(key),
+                        Color = Palette[idx % Palette.Length],
+                        StrokeThickness = 1.5,
+                        CanTrackerInterpolatePoints = false,
+                    };
+                    var values = pct ? d.Pct[key] : d.Raw[key];
+                    for (int i = 0; i < d.RowCount; i++)
+                    {
+                        double v = values[i];
+                        if (double.IsNaN(v)) continue;
+                        series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(d.Timestamps[i]), v));
+                    }
+                    model.Series.Add(series);
+                    idx++;
                 }
-                model.Series.Add(series);
-                idx++;
             }
             BuildMetaText(d);
         }
@@ -379,6 +395,40 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>Plots the fused leak-rate estimate Q̂ as a line with a translucent ±σ band.</summary>
+    private static void AddLeakRateSeries(PlotModel model, RatioTrendData d)
+    {
+        if (!d.HasLeakRate) return;   // older file, or no calibration was active — meta explains
+
+        var band = new AreaSeries
+        {
+            Title = "±1σ",
+            Color = OxyColors.Transparent,
+            Color2 = OxyColors.Transparent,
+            Fill = OxyColor.FromAColor(46, OxyColors.MidnightBlue),
+            RenderInLegend = false,
+        };
+        var line = new LineSeries
+        {
+            Title = "leak rate Q̂",
+            Color = OxyColors.MidnightBlue,
+            StrokeThickness = 1.8,
+            CanTrackerInterpolatePoints = false,
+        };
+        for (int i = 0; i < d.RowCount; i++)
+        {
+            double q = d.LeakRate[i];
+            if (double.IsNaN(q)) continue;
+            double x = DateTimeAxis.ToDouble(d.Timestamps[i]);
+            double s = i < d.LeakRateSigma.Count && !double.IsNaN(d.LeakRateSigma[i]) ? d.LeakRateSigma[i] : 0;
+            line.Points.Add(new DataPoint(x, q));
+            band.Points.Add(new DataPoint(x, q + s));
+            band.Points2.Add(new DataPoint(x, Math.Max(0, q - s)));
+        }
+        model.Series.Add(band);
+        model.Series.Add(line);
+    }
+
     private static int StateLevel(string state) => state switch
     {
         "Alarm"   => 2,
@@ -392,6 +442,28 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         var span = d.Timestamps[d.RowCount - 1] - d.Timestamps[0];
         sb.Append($"{d.RowCount} rows · {d.Timestamps[0]:yyyy-MM-dd HH:mm:ss}–")
           .Append($"{d.Timestamps[d.RowCount - 1]:HH:mm:ss} ({span:hh\\:mm\\:ss})");
+
+        if (_mode == RatioReviewMode.LeakRate)
+        {
+            if (!d.HasLeakRate)
+            {
+                sb.Append("   ·   no leak-rate data in this file " +
+                          "(logged before calibration, or no calibration was active).");
+            }
+            else
+            {
+                var qs = d.LeakRate.Where(v => !double.IsNaN(v)).ToList();
+                double lastQ = double.NaN, lastS = double.NaN;
+                for (int i = d.RowCount - 1; i >= 0; i--)
+                    if (!double.IsNaN(d.LeakRate[i])) { lastQ = d.LeakRate[i]; lastS = d.LeakRateSigma[i]; break; }
+                sb.Append("   ·   leak rate (mbar·L/s): ");
+                sb.Append(qs.Count == 0
+                    ? "(no finite samples)"
+                    : $"min {qs.Min():G4} / max {qs.Max():G4} / last {lastQ:G4} ± {(double.IsNaN(lastS) ? 0 : lastS):G2}");
+            }
+            MetaText = sb.ToString();
+            return;
+        }
 
         bool pct = _mode == RatioReviewMode.PercentOfBaseline;
         foreach (var key in d.RatioKeys)
@@ -511,7 +583,12 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         var stem = _selectedFile is null
             ? "ratio_trend"
             : Path.GetFileNameWithoutExtension(_selectedFile.FileName);
-        return stem + (_mode == RatioReviewMode.RawRatio ? "_raw.png" : "_pct.png");
+        return stem + _mode switch
+        {
+            RatioReviewMode.RawRatio  => "_raw.png",
+            RatioReviewMode.LeakRate  => "_leakrate.png",
+            _                         => "_pct.png",
+        };
     }
 
     public void Dispose()

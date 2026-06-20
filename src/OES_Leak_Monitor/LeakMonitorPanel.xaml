@@ -15,7 +15,19 @@
                            FontSize="18" FontWeight="Bold"/>
                 <TextBlock Text="{Binding TestModeNote}" Foreground="#FFEFC8"
                            FontSize="11" Margin="0,2,0,0"/>
+                <TextBlock Text="{Binding SignalWarningNote}" Foreground="#FFE0B0"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding HasSignalWarning, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
+        </Border>
+
+        <!-- Quantitative leak-rate readout (from the active calibration) -->
+        <Border DockPanel.Dock="Top" Background="White"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="14,6">
+            <TextBlock Text="{Binding LeakRateText}" Foreground="{Binding LeakRateBrush}"
+                       FontSize="14" FontWeight="SemiBold"
+                       ToolTip="Estimated air-leak rate from the active calibration (Leak Calibration tab). Fuses all calibrated ratios by inverse variance."/>
         </Border>
 
         <!-- Toolbar: Golden Run + actions -->
@@ -96,9 +108,12 @@
                                     <TextBlock Text="{Binding BaselineText}" FontSize="12"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Column="5" Text="{Binding SlopeText}"
-                                           FontSize="12" Foreground="#555"
-                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="5" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SlopeText}"
+                                               FontSize="12" Foreground="#555"/>
+                                    <TextBlock Text="{Binding SnrText}"
+                                               FontSize="10" Foreground="#999"/>
+                                </StackPanel>
 
                                 <TextBlock Grid.Column="6" Text="{Binding StateText}"
                                            FontWeight="Bold"

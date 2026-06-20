@@ -95,6 +95,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup = new RatioSetupViewModel(_leakMonitorEngine,
             () => PersistLeakMonitorSettings("RatioSetupSaved"), _systemLogger);
 
+        // Leak Calibration tab: a guided wizard that captures "ratio rise ↔ known leak rate"
+        // points and fits a per-ratio sensitivity, persisted to settings.json (Engineer+).
+        LeakCalibration = new LeakCalibrationViewModel(_leakMonitorEngine,
+            () => PersistLeakMonitorSettings("LeakCalibrationSaved"), _systemLogger);
+
         // Ratio-trend CSV: a sibling of each intensity-logger save session, written
         // while the threshold logger is saving (plasma intensity above the threshold).
         _ratioCsvLogger = new RatioCsvLogger(_intensityLogger, _leakMonitorEngine, _systemLogger);
@@ -128,6 +133,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
         LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
         RatioSetup.SetRole(IsEngineerOrHigher);
+        LeakCalibration.SetRole(IsEngineerOrHigher);
     }
 
     /// <summary>
@@ -192,6 +198,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
         LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
         RatioSetup.SetRole(IsEngineerOrHigher);
+        LeakCalibration.SetRole(IsEngineerOrHigher);
 
         RaiseCanExec();
     }
@@ -260,6 +267,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RatioReviewViewModel RatioReview { get; }
     public LeakMonitorViewModel LeakMonitor { get; }
     public RatioSetupViewModel  RatioSetup  { get; }
+    public LeakCalibrationViewModel LeakCalibration { get; }
     public WavelengthTrendViewModel WavelengthTrend { get; }
 
     public RelayCommand ApplyAllCommand { get; }
@@ -296,6 +304,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Recordings.Dispose();
         RatioReview.Dispose();
         LeakMonitor.Dispose();
+        LeakCalibration.Dispose();
         _leakMonitorEngine.Dispose();
         _intensityLogger.Dispose();
         LogViewer.Dispose();

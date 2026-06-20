@@ -14,6 +14,9 @@ public enum RatioState
     Alarm,
     /// <summary>Reference (N2) line too weak — plasma is off or absent.</summary>
     NoPlasma,
+    /// <summary>Plasma is on but the signal or reference line sits too close to the noise floor
+    /// for the ratio to be trusted — held out of the alarm rather than allowed to swing.</summary>
+    LowSignal,
     /// <summary>No Golden Run baseline captured for this ratio yet.</summary>
     NoBaseline,
     /// <summary>Excluded by the operator — not computed and never alarmed.</summary>
@@ -36,7 +39,10 @@ public readonly record struct RatioSnapshot(
     double SlopePerMinute,
     bool PlasmaPresent,
     double NumeratorIntensity,
-    double DenominatorIntensity);
+    double DenominatorIntensity,
+    double RatioNoiseSigma,
+    double NumeratorSnr,
+    double DenominatorSnr);
 
 /// <summary>
 /// Runtime monitor for one actinometric ratio: EMA smoothing, two-level threshold
@@ -51,9 +57,12 @@ public sealed class RatioMonitor
 
     private double _ema;
     private bool _hasEma;
+    // EWMA variance of the raw ratio — feeds the leak-rate estimator's per-ratio σ_x.
+    private double _emaVar;
     private DateTime _lastTs;
     private double _rawRatio = double.NaN;
     private double _numerator = double.NaN, _denominator = double.NaN;
+    private double _numSnr = double.NaN, _denSnr = double.NaN;
 
     private double _baseMean, _baseSigma;
     private bool _hasBaseline;
@@ -70,6 +79,12 @@ public sealed class RatioMonitor
 
     public string Key => _def.Key;
     public RatioState State => _state;
+
+    /// <summary>Mean of the active Golden Run baseline for this ratio (0 if none).</summary>
+    public double BaselineMean => _baseMean;
+
+    /// <summary>True when a usable Golden Run baseline is set for this ratio.</summary>
+    public bool HasBaseline => _hasBaseline;
 
     public void SetBaseline(double mean, double sigma)
     {
@@ -100,23 +115,36 @@ public sealed class RatioMonitor
         _trend.Clear();
         _slopePerMinute = 0;
         _rawRatio = _numerator = _denominator = double.NaN;
+        _numSnr = _denSnr = double.NaN;
         _plasmaPresent = false;
     }
 
+    /// <summary>Live scatter of the smoothed ratio (√ of its EWMA variance), 0 until enough
+    /// frames have accumulated. Used to widen the alarm bands when the current signal is noisier
+    /// than the Golden Run was — a near-noise ratio shouldn't trip on its own jitter.</summary>
+    private double LiveSigma => _hasEma && _emaVar > 0 ? Math.Sqrt(_emaVar) : 0.0;
+
+    /// <summary>The larger of the baseline-capture σ and the live σ — so the threshold tracks
+    /// whichever noise estimate is currently worse.</summary>
+    private double EffectiveSigma => Math.Max(_baseSigma, LiveSigma);
+
     public double WarnThreshold => _hasBaseline
-        ? Math.Max(_def.WarnFactor * _baseMean, _baseMean + _def.SigmaWarn * _baseSigma)
+        ? Math.Max(_def.WarnFactor * _baseMean, _baseMean + _def.SigmaWarn * EffectiveSigma)
         : double.NaN;
 
     public double AlarmThreshold => _hasBaseline
-        ? Math.Max(_def.AlarmFactor * _baseMean, _baseMean + _def.SigmaAlarm * _baseSigma)
+        ? Math.Max(_def.AlarmFactor * _baseMean, _baseMean + _def.SigmaAlarm * EffectiveSigma)
         : double.NaN;
 
-    /// <summary>Feeds one frame's extracted line intensities into the state machine.</summary>
-    public void Update(double numerator, double denominator, DateTime ts, bool plasmaPresent)
+    /// <summary>Feeds one frame's extracted line measurements into the state machine.</summary>
+    public void Update(LineMeasurement num, LineMeasurement den, DateTime ts, bool plasmaPresent)
     {
+        double numerator = num.Value, denominator = den.Value;
         _plasmaPresent = plasmaPresent;
         _numerator = numerator;
         _denominator = denominator;
+        _numSnr = num.Snr;
+        _denSnr = den.Snr;
         double rawRatio = plasmaPresent && denominator != 0 && !double.IsNaN(denominator)
             ? numerator / denominator
             : double.NaN;
@@ -134,9 +162,30 @@ public sealed class RatioMonitor
             return;
         }
 
+        // Signal-quality gate: even with plasma on, a line sitting in the noise makes the
+        // ratio meaningless (σ_R/R blows up as either line → noise). An *unknown* SNR (NaN,
+        // no baseline window) is not treated as low — only a measured SNR below the floor.
+        double minSnr = _def.MinSnr;
+        bool lowSignal = minSnr > 0 &&
+            ((!double.IsNaN(_numSnr) && _numSnr < minSnr) ||
+             (!double.IsNaN(_denSnr) && _denSnr < minSnr));
+        if (lowSignal)
+        {
+            // Don't let near-noise excursions accumulate confirmation time, and don't smooth a
+            // garbage value into the EMA; preserve a latched alarm so a real, already-confirmed
+            // leak isn't cleared by the signal dipping.
+            _aboveWarnSince = _aboveAlarmSince = null;
+            _hasEma = false;
+            _trend.Clear();
+            _slopePerMinute = 0;
+            _state = _latchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
+            return;
+        }
+
         if (!_hasEma)
         {
             _ema = rawRatio;
+            _emaVar = 0;
             _hasEma = true;
         }
         else
@@ -145,7 +194,10 @@ public sealed class RatioMonitor
             if (dt <= 0) dt = 0.001;
             double tau = Math.Max(0.1, _def.EmaTauSeconds);
             double alpha = 1.0 - Math.Exp(-dt / tau);
-            _ema += alpha * (rawRatio - _ema);
+            double delta = rawRatio - _ema;
+            _ema += alpha * delta;
+            // EWMA variance (West, 1979): tracks the raw ratio's scatter about its mean.
+            _emaVar = (1.0 - alpha) * (_emaVar + alpha * delta * delta);
         }
         _lastTs = ts;
         UpdateTrend(ts, _ema);
@@ -212,5 +264,8 @@ public sealed class RatioMonitor
         _slopePerMinute,
         _plasmaPresent,
         _numerator,
-        _denominator);
+        _denominator,
+        _hasEma && _emaVar > 0 ? Math.Sqrt(_emaVar) : double.NaN,
+        _numSnr,
+        _denSnr);
 }
