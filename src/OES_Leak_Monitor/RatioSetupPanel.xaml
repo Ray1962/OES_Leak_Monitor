@@ -8,6 +8,8 @@
              Background="#F4F6FA">
 
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
         <!-- One emission-line entry inside a line picker -->
         <DataTemplate x:Key="LineItemTemplate">
             <StackPanel Orientation="Horizontal">
@@ -148,11 +150,22 @@
                             <CheckBox Content="Enabled — included in leak monitoring"
                                       IsChecked="{Binding Enabled}" Margin="0,8,0,0"/>
 
+                            <!-- Monitoring method -->
+                            <TextBlock Text="Monitoring method" Style="{StaticResource FieldLabel}"
+                                       Margin="0,12,0,0"/>
+                            <ComboBox ItemsSource="{Binding MonitorModeOptions}"
+                                      SelectedItem="{Binding MonitorMode}"
+                                      HorizontalAlignment="Left" MinWidth="220"
+                                      ToolTip="Ratio: signal ÷ reference (normalizes out plasma drift). Absolute intensity: track the signal line's intensity directly — for weak/near-noise lines where the ratio swings wildly; the reference line then only gates plasma-present (it is not divided in). Absolute mode needs a stable plasma operating point."/>
+                            <TextBlock FontSize="11" Foreground="#888" TextWrapping="Wrap" Margin="0,3,0,0"
+                                       Text="Absolute intensity drops the reference division (one less noise source) but no longer cancels plasma-condition drift — keep the operating point steady and re-baseline more often."
+                                       Visibility="{Binding IsAbsolute, Converter={StaticResource BoolToVis}}"/>
+
                             <!-- Signal line -->
                             <Border Background="#F7F9FC" BorderBrush="#E3E8F0" BorderThickness="1"
                                     CornerRadius="4" Padding="10" Margin="0,14,0,0">
                                 <StackPanel>
-                                    <TextBlock Text="Signal line (numerator)" FontWeight="SemiBold"
+                                    <TextBlock Text="{Binding SignalLineHeader}" FontWeight="SemiBold"
                                                Foreground="#1F3A66" Margin="0,0,0,6"/>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -195,7 +208,7 @@
                             <Border Background="#F7F9FC" BorderBrush="#E3E8F0" BorderThickness="1"
                                     CornerRadius="4" Padding="10" Margin="0,10,0,0">
                                 <StackPanel>
-                                    <TextBlock Text="Reference line (denominator / baseline species)"
+                                    <TextBlock Text="{Binding ReferenceLineHeader}"
                                                FontWeight="SemiBold" Foreground="#1F3A66" Margin="0,0,0,6"/>
                                     <Grid>
                                         <Grid.ColumnDefinitions>

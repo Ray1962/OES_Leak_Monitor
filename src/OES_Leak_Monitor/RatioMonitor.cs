@@ -42,7 +42,8 @@ public readonly record struct RatioSnapshot(
     double DenominatorIntensity,
     double RatioNoiseSigma,
     double NumeratorSnr,
-    double DenominatorSnr);
+    double DenominatorSnr,
+    MonitorMode Mode);
 
 /// <summary>
 /// Runtime monitor for one actinometric ratio: EMA smoothing, two-level threshold
@@ -145,9 +146,18 @@ public sealed class RatioMonitor
         _denominator = denominator;
         _numSnr = num.Snr;
         _denSnr = den.Snr;
-        double rawRatio = plasmaPresent && denominator != 0 && !double.IsNaN(denominator)
-            ? numerator / denominator
-            : double.NaN;
+        // Absolute-intensity mode tracks the signal line itself; the reference (denominator)
+        // only gates plasma-present (already folded into plasmaPresent), it is not divided in.
+        bool absolute = _def.MonitorMode == MonitorMode.AbsoluteIntensity;
+        double rawRatio;
+        if (!plasmaPresent)
+            rawRatio = double.NaN;
+        else if (absolute)
+            rawRatio = double.IsNaN(numerator) ? double.NaN : numerator;
+        else
+            rawRatio = denominator != 0 && !double.IsNaN(denominator)
+                ? numerator / denominator
+                : double.NaN;
         _rawRatio = rawRatio;
 
         if (!plasmaPresent || double.IsNaN(rawRatio) || double.IsInfinity(rawRatio))
@@ -267,5 +277,6 @@ public sealed class RatioMonitor
         _denominator,
         _hasEma && _emaVar > 0 ? Math.Sqrt(_emaVar) : double.NaN,
         _numSnr,
-        _denSnr);
+        _denSnr,
+        _def.MonitorMode);
 }

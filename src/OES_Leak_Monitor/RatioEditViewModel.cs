@@ -36,6 +36,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _emaTauSeconds  = def.EmaTauSeconds;
         _confirmSeconds = def.ConfirmSeconds;
         _minSnr         = def.MinSnr;
+        _monitorMode    = def.MonitorMode;
         _enabled        = def.Enabled;
 
         _autoName       = AutoName();
@@ -48,6 +49,38 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<LineExtractMode> ModeOptions { get; } =
         new[] { LineExtractMode.PeakHeight, LineExtractMode.Integral };
+
+    public IReadOnlyList<MonitorMode> MonitorModeOptions { get; } =
+        new[] { MonitorMode.Ratio, MonitorMode.AbsoluteIntensity };
+
+    private MonitorMode _monitorMode;
+    /// <summary>Ratio (signal ÷ reference) vs absolute signal-line intensity (reference then only
+    /// gates plasma-present). Switching re-derives the auto display name and the field labels.</summary>
+    public MonitorMode MonitorMode
+    {
+        get => _monitorMode;
+        set
+        {
+            if (!Set(ref _monitorMode, value)) return;
+            RenameIfAuto();
+            OnPropertyChanged(nameof(IsAbsolute));
+            OnPropertyChanged(nameof(SignalLineHeader));
+            OnPropertyChanged(nameof(ReferenceLineHeader));
+        }
+    }
+
+    /// <summary>True in absolute-intensity mode — drives the field-role hints in the UI.</summary>
+    public bool IsAbsolute => _monitorMode == MonitorMode.AbsoluteIntensity;
+
+    /// <summary>Header for the first line picker — the monitored line in both modes.</summary>
+    public string SignalLineHeader => IsAbsolute
+        ? "Monitored line (absolute intensity)"
+        : "Signal line (numerator)";
+
+    /// <summary>Header for the second line picker — divided in (ratio) or plasma gate (absolute).</summary>
+    public string ReferenceLineHeader => IsAbsolute
+        ? "Plasma-present reference (gate only, not divided)"
+        : "Reference line (denominator / baseline species)";
 
     private string _displayName;
     public string DisplayName { get => _displayName; set => Set(ref _displayName, value?.Trim() ?? ""); }
@@ -126,9 +159,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _autoName = next;
     }
 
-    private string AutoName() =>
-        $"{_signalLine.Species} {_signalLine.WavelengthNm:0.#} / " +
-        $"{_referenceLine.Species} {_referenceLine.WavelengthNm:0.#}";
+    private string AutoName() => IsAbsolute
+        ? $"{_signalLine.Species} {_signalLine.WavelengthNm:0.#} (abs)"
+        : $"{_signalLine.Species} {_signalLine.WavelengthNm:0.#} / " +
+          $"{_referenceLine.Species} {_referenceLine.WavelengthNm:0.#}";
 
     /// <summary>Builds a persistable definition from the current edits.</summary>
     public RatioDefinition ToDefinition() => new()
@@ -136,6 +170,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         Key = Key,
         DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? AutoName() : DisplayName,
         Enabled = Enabled,
+        MonitorMode = MonitorMode,
         Numerator = RegionFor(SignalLine, SignalMode, _origNumerator),
         Denominator = RegionFor(ReferenceLine, ReferenceMode, _origDenominator),
         WarnFactor = WarnFactor,

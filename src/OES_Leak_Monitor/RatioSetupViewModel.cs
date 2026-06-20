@@ -18,7 +18,7 @@ namespace OES_Leak_Monitor;
 public sealed class RatioSetupViewModel : INotifyPropertyChanged
 {
     /// <summary>Hard cap on the number of monitored ratios.</summary>
-    public const int MaxRatios = 5;
+    public const int MaxRatios = 10;
 
     private readonly LeakMonitorEngine _engine;
     private readonly Action _persistSettings;

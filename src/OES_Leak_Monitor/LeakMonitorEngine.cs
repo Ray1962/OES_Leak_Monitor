@@ -188,6 +188,11 @@ public sealed class LeakMonitorEngine : IDisposable
                 bool plasma = !double.IsNaN(den) && den > 0 && den > floor;
                 mon.Update(numM, denM, sample.Timestamp, plasma);
 
+                // The monitored quantity: the signal/reference ratio, or — in absolute mode —
+                // the signal line's intensity (the reference only gates plasma-present above).
+                bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
+                double value = absolute ? num : (den != 0 ? num / den : double.NaN);
+
                 if (_capturing)
                 {
                     // Tally why each frame did or didn't feed the baseline, so a ratio
@@ -196,10 +201,10 @@ public sealed class LeakMonitorEngine : IDisposable
                     diag.Frames++;
                     if (double.IsNaN(num)) diag.NumeratorMissing++;
                     if (double.IsNaN(den) || den <= 0) diag.ReferenceMissing++;
-                    if (plasma && den != 0 && !double.IsNaN(num))
+                    if (plasma && den != 0 && !double.IsNaN(value))
                     {
                         diag.Accepted++;
-                        GetAccum(mon.Key).Add(num / den);
+                        GetAccum(mon.Key).Add(value);
                         _captureDenom.Add(den);
                     }
                 }
@@ -207,9 +212,9 @@ public sealed class LeakMonitorEngine : IDisposable
                 // Calibration point: average the fractional rise relative to the active
                 // baseline. Needs a baseline (x is defined against it) and live plasma.
                 if (_calCapturing && mon.HasBaseline && plasma &&
-                    mon.BaselineMean > 0 && den != 0 && !double.IsNaN(num))
+                    mon.BaselineMean > 0 && den != 0 && !double.IsNaN(value))
                 {
-                    double x = (num / den) / mon.BaselineMean - 1.0;
+                    double x = value / mon.BaselineMean - 1.0;
                     GetCalAccum(mon.Key).Add(x);
                 }
             }
