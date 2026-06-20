@@ -101,8 +101,20 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     private double _minSnr;
     /// <summary>Minimum line SNR before the ratio is trusted; below it the ratio reads
-    /// "Low Signal" and is held out of the alarm. 0 disables the gate.</summary>
-    public double MinSnr { get => _minSnr; set => Set(ref _minSnr, value); }
+    /// "Low Signal" and is held out of the alarm. 0 disables the gate. A negative SNR is
+    /// meaningless, so it is clamped to 0 (gate off).</summary>
+    public double MinSnr
+    {
+        get => _minSnr;
+        set
+        {
+            double clamped = value < 0 || double.IsNaN(value) ? 0.0 : value;
+            // Notify even when the stored value is unchanged, so a rejected negative entry
+            // (e.g. typing "-3" while already 0) snaps the bound TextBox back to 0.
+            if (!Set(ref _minSnr, clamped) && clamped != value)
+                OnPropertyChanged();
+        }
+    }
 
     // --- auto display name ---------------------------------------------------
 
