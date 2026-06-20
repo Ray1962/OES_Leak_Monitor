@@ -92,13 +92,17 @@ public sealed class RatioViewModel : INotifyPropertyChanged
             : $"{s.PercentOfBaseline:F0} %";
         SnrText = FormatSnr(s);
         DetailText =
-            $"signal {Fmt(s.NumeratorIntensity)} (SNR {FmtSnr(s.NumeratorSnr)})  ÷  " +
-            $"reference {Fmt(s.DenominatorIntensity)} (SNR {FmtSnr(s.DenominatorSnr)})\n" +
+            (s.Mode == MonitorMode.AbsoluteIntensity
+                ? $"intensity {Fmt(s.NumeratorIntensity)} (SNR {FmtSnr(s.NumeratorSnr)})  ·  " +
+                  $"plasma-ref {Fmt(s.DenominatorIntensity)} (SNR {FmtSnr(s.DenominatorSnr)}, gate only)"
+                : $"signal {Fmt(s.NumeratorIntensity)} (SNR {FmtSnr(s.NumeratorSnr)})  ÷  " +
+                  $"reference {Fmt(s.DenominatorIntensity)} (SNR {FmtSnr(s.DenominatorSnr)})") +
+            "\n" +
             (s.HasBaseline
                 ? $"warn {s.WarnThreshold:G4}  ·  alarm {s.AlarmThreshold:G4}"
                 : "no baseline — capture a Golden Run") +
             (s.State == RatioState.LowSignal
-                ? "\nLow signal — emission near the noise floor; ratio not trusted."
+                ? "\nLow signal — emission near the noise floor; not trusted."
                 : "");
         SlopeText = FormatSlope(s);
     }

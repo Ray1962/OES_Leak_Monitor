@@ -4,6 +4,22 @@ using System.Linq;
 
 namespace OES_Leak_Monitor;
 
+/// <summary>What quantity a monitored entry tracks.</summary>
+public enum MonitorMode
+{
+    /// <summary>Signal line ÷ reference line — actinometric ratio (normalizes out plasma drift).</summary>
+    Ratio,
+    /// <summary>
+    /// The signal line's absolute baseline-subtracted intensity; the reference line is used only
+    /// as a plasma-present gate, not divided in. For weak/near-noise lines where the ratio of two
+    /// small numbers swings wildly: dropping the reference division removes one noise source, and a
+    /// leak raises the line clearly above noise. Trade-off: absolute intensity is sensitive to
+    /// plasma-condition drift (power / pressure / flow) that a ratio would cancel, so it needs a
+    /// stable operating point and more frequent re-baselining.
+    /// </summary>
+    AbsoluteIntensity,
+}
+
 /// <summary>
 /// One monitored actinometric ratio: an emission line divided by a reference line,
 /// plus its alarm thresholds and smoothing. Serialized inside <see cref="LeakMonitorSettings"/>.
@@ -16,6 +32,10 @@ public sealed class RatioDefinition
     public string DisplayName { get; set; } = "";
 
     public bool Enabled { get; set; } = true;
+
+    /// <summary>Whether this entry tracks the signal/reference ratio or the signal line's
+    /// absolute intensity (reference then only gates plasma-present). See <see cref="MonitorMode"/>.</summary>
+    public MonitorMode MonitorMode { get; set; } = MonitorMode.Ratio;
 
     public LineRegion Numerator { get; set; } = new();
     public LineRegion Denominator { get; set; } = new();
@@ -44,6 +64,7 @@ public sealed class RatioDefinition
     public RatioDefinition Clone() => new()
     {
         Key = Key, DisplayName = DisplayName, Enabled = Enabled,
+        MonitorMode = MonitorMode,
         Numerator = Numerator.Clone(), Denominator = Denominator.Clone(),
         WarnFactor = WarnFactor, AlarmFactor = AlarmFactor,
         SigmaWarn = SigmaWarn, SigmaAlarm = SigmaAlarm,
