@@ -333,14 +333,44 @@ public sealed class LeakMonitorEngine : IDisposable
             });
     }
 
-    /// <summary>Switches the active baseline to a previously captured Golden Run.</summary>
+    /// <summary>
+    /// Switches the active baseline to a previously captured Golden Run, and auto-selects the
+    /// leak-rate calibration bound to it (a calibration follows its recipe baseline, so the live
+    /// estimate doesn't fall into a stale <see cref="CalibrationStatus.BaselineMismatch"/> on a
+    /// recipe change). Persists the new baseline + paired calibration via
+    /// <see cref="ConfigurationChanged"/>.
+    /// </summary>
     public void SelectGoldenRun(string? name)
     {
         lock (_gate)
         {
             _settings.ActiveGoldenRun = name;
-            ApplyGoldenRun(_settings.FindGoldenRun(name));
+            AutoPairCalibration(name);
+            ApplyGoldenRun(_settings.FindGoldenRun(name)); // rebuilds the estimator + logs status
         }
+        ConfigurationChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Points <see cref="LeakMonitorSettings.ActiveCalibration"/> at the calibration bound to
+    /// <paramref name="goldenRunName"/> — the most recently captured one when several share the
+    /// baseline — or clears it when none exists, so the active calibration always tracks the
+    /// active recipe. Caller holds <see cref="_gate"/>; the subsequent
+    /// <see cref="ApplyGoldenRun"/> → <see cref="BuildEstimator"/> logs the status transition.
+    /// </summary>
+    private void AutoPairCalibration(string? goldenRunName)
+    {
+        string? match = null;
+        if (goldenRunName is not null)
+        {
+            LeakCalibration? best = null;
+            foreach (var c in _settings.Calibrations)
+                if (string.Equals(c.GoldenRunName, goldenRunName, StringComparison.Ordinal) &&
+                    (best is null || c.CapturedUtc > best.CapturedUtc))
+                    best = c;
+            match = best?.Name;
+        }
+        _settings.ActiveCalibration = match;
     }
 
     /// <summary>Rebuilds the runtime leak-rate estimator from <see cref="Settings"/>'s active
@@ -509,6 +539,10 @@ public sealed class LeakMonitorEngine : IDisposable
         _settings.GoldenRuns.RemoveAll(g => g.Name == run.Name);
         _settings.GoldenRuns.Add(run);
         _settings.ActiveGoldenRun = run.Name;
+        // Pair the calibration to the new baseline: re-capturing a recipe re-selects its
+        // calibration; a brand-new baseline has none, so estimation turns off rather than
+        // mismatching against a stale one.
+        AutoPairCalibration(run.Name);
         ApplyGoldenRun(run);
         return run;
     }
