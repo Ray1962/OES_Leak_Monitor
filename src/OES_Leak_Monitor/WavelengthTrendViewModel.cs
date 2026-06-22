@@ -125,6 +125,27 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
         PlotModel.InvalidatePlot(true);
     }
 
+    /// <summary>
+    /// Clears all retained trend data so the chart restarts its time axis from the next
+    /// incoming sample — used by the Monitor-tab Reset to begin a fresh experiment run.
+    /// Keeps the tracked-wavelength configuration and the Normalize toggle (each line
+    /// re-captures its baseline from its first post-reset sample). Must be called on the
+    /// UI thread.
+    /// </summary>
+    public void Reset()
+    {
+        foreach (var t in _tracked)
+        {
+            t.Raw.Clear();
+            t.Series.Points.Clear();
+            t.Baseline = double.NaN;
+        }
+        LatestText = "Waiting for spectra…";
+        PlotModel.ResetAllAxes();
+        _timeAxisZoomed = false;
+        PlotModel.InvalidatePlot(true);
+    }
+
     /// <summary>Filters out non-positive entries and keeps only the first
     /// <see cref="MaxMonitoredWavelengths"/> monitored wavelengths.</summary>
     private static IReadOnlyList<double> NormalizeMonitored(IEnumerable<double>? src) =>

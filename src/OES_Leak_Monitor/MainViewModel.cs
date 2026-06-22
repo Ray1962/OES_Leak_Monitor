@@ -127,6 +127,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ApplyAllCommand        = new RelayCommand(ApplyAll,        () => IsEngineerOrHigher);
         SaveAllCommand         = new RelayCommand(SaveSettings,    () => IsEngineerOrHigher);
         LoadDefaultsAllCommand = new RelayCommand(LoadDefaultsAll, () => IsEngineerOrHigher);
+        ResetExperimentCommand = new RelayCommand(ResetExperiment, () => IsOperatorOrHigher);
 
         // Initial role is Guest → propagate the action gate so the per-device buttons
         // start out disabled until the user signs in.
@@ -220,6 +221,36 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             related: $"User={AccessControl.CurrentUsername ?? "(guest)"}");
     }
 
+    /// <summary>
+    /// Monitor-tab "Reset Run": starts a fresh experiment after a parameter change without
+    /// stopping acquisition or touching any configuration. It (1) force-closes the current
+    /// Intensity save session — the next above-threshold frame opens a new Intensity CSV, and
+    /// the Ratio CSV follows in lockstep; (2) clears the Monitor-tab Intensity trend so its
+    /// time axis restarts; (3) clears the Leak Monitor % -of-baseline trend and resets each
+    /// ratio's live smoothing so pre-change frames don't bleed into the new run. Golden Run
+    /// baselines, calibration, ratio configuration, and latched alarms are kept.
+    /// </summary>
+    private void ResetExperiment()
+    {
+        // (1) Roll to a fresh Intensity (and lockstep Ratio) CSV. The logger stays armed —
+        // Stop() force-closes to Idle so the next threshold cross opens new files.
+        _intensityLogger.Stop();
+
+        // (2) Restart the live Monitor-tab intensity trend (new start time).
+        WavelengthTrend.Reset();
+
+        // (3) Restart the Leak Monitor trend + per-ratio smoothing; keep latched alarms so a
+        // real, already-confirmed leak isn't silently cleared (operator must Acknowledge).
+        LeakMonitor.ResetTrend();
+        _leakMonitorEngine.ResetRuntimeState(clearAlarms: false);
+
+        StatusMessage = "Reset: a new log file opens on the next above-threshold frame; trends cleared.";
+        _systemLogger.LogSystemEvent(LogSeverity.Information, "ExperimentReset",
+            "Operator reset the run — new Intensity/Ratio CSV on next threshold cross; " +
+            "Monitor trends and per-ratio smoothing cleared (baselines/calibration/alarms kept)",
+            related: $"User={AccessControl.CurrentUsername ?? "(guest)"}");
+    }
+
     private void LoadDefaultsAll()
     {
         foreach (var d in _devices) d.LoadDefaultsCommand.Execute(null);
@@ -273,6 +304,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand ApplyAllCommand { get; }
     public RelayCommand SaveAllCommand { get; }
     public RelayCommand LoadDefaultsAllCommand { get; }
+    public RelayCommand ResetExperimentCommand { get; }
 
     private string _statusMessage = "Ready";
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
@@ -282,6 +314,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ApplyAllCommand.RaiseCanExecuteChanged();
         SaveAllCommand.RaiseCanExecuteChanged();
         LoadDefaultsAllCommand.RaiseCanExecuteChanged();
+        ResetExperimentCommand.RaiseCanExecuteChanged();
     }
 
     public void Dispose()

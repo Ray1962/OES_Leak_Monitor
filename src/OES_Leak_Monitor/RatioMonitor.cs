@@ -105,6 +105,28 @@ public sealed class RatioMonitor
     /// <summary>Clears the latched alarm so a recovered process can return to Normal.</summary>
     public void Acknowledge() => _latchedAlarm = false;
 
+    /// <summary>
+    /// Drops the live smoothing / trend / confirmation state so a new experiment run starts
+    /// clean — pre-change frames no longer bridge into the post-change EMA. Keeps the Golden
+    /// Run baseline; keeps the latched alarm unless <paramref name="clearLatch"/> is set
+    /// (a Reset deliberately leaves a real, already-confirmed leak latched).
+    /// </summary>
+    public void ResetRuntime(bool clearLatch)
+    {
+        _hasEma = false;
+        _emaVar = 0;
+        _rawRatio = _numerator = _denominator = double.NaN;
+        _numSnr = _denSnr = double.NaN;
+        _aboveWarnSince = _aboveAlarmSince = null;
+        _trend.Clear();
+        _slopePerMinute = 0;
+        _plasmaPresent = false;
+        if (clearLatch) _latchedAlarm = false;
+        _state = _latchedAlarm
+            ? RatioState.Alarm
+            : (_hasBaseline ? RatioState.NoPlasma : RatioState.NoBaseline);
+    }
+
     /// <summary>Marks the ratio excluded — resets the latch and smoothing so a later
     /// re-enable starts fresh.</summary>
     public void MarkDisabled()

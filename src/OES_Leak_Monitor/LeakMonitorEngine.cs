@@ -358,6 +358,30 @@ public sealed class LeakMonitorEngine : IDisposable
     }
 
     /// <summary>
+    /// Resets every ratio's live smoothing / trend / confirmation state and the composite level
+    /// so a new experiment run starts clean — used by the Monitor-tab Reset after a parameter
+    /// change, so pre-change frames don't bleed into the post-change EMA. Leaves the Golden Run
+    /// baseline, the ratio configuration, and any calibration untouched; latched alarms are kept
+    /// unless <paramref name="clearAlarms"/> is set.
+    /// </summary>
+    public void ResetRuntimeState(bool clearAlarms)
+    {
+        LeakAlarmLevel oldOverall, newOverall;
+        lock (_gate)
+        {
+            foreach (var mon in _monitors) mon.ResetRuntime(clearAlarms);
+            oldOverall = _overall;
+            _overall = ComputeOverall();
+            newOverall = _overall;
+        }
+        if (newOverall != oldOverall)
+            AlarmStateChanged?.Invoke(this, new LeakAlarmEventArgs
+            {
+                OldLevel = oldOverall, NewLevel = newOverall, Timestamp = DateTime.Now,
+            });
+    }
+
+    /// <summary>
     /// Switches the active baseline to a previously captured Golden Run, and auto-selects the
     /// leak-rate calibration bound to it (a calibration follows its recipe baseline, so the live
     /// estimate doesn't fall into a stale <see cref="CalibrationStatus.BaselineMismatch"/> on a

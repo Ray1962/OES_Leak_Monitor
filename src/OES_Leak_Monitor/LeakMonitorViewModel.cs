@@ -316,6 +316,21 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private void OnTimeAxisChanged(object? sender, AxisChangedEventArgs e) =>
         _timeAxisZoomed = e.ChangeType != AxisChangeTypes.Reset;
 
+    /// <summary>
+    /// Clears the % -of-baseline trend series so the chart restarts from the next frame —
+    /// driven by the Monitor-tab Reset so the ratio trend aligns with a fresh experiment run.
+    /// The per-ratio rows keep showing live values; only the historical curve is dropped.
+    /// Must be called on the UI thread.
+    /// </summary>
+    public void ResetTrend()
+    {
+        foreach (var s in _seriesByKey.Values) s.Points.Clear();
+        PlotModel.ResetAllAxes();
+        _timeAxisZoomed = false;
+        PlotModel.InvalidatePlot(true);
+        StatusMessage = "Reset — trend cleared for a new run.";
+    }
+
     /// <summary>Resets the trend chart axes to fit all retained data.</summary>
     private void ZoomAll()
     {

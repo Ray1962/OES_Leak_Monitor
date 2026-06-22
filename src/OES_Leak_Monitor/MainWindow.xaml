@@ -46,24 +46,41 @@
         <TabControl Grid.Row="1" Margin="0" x:Name="MainTabControl"
                     SelectionChanged="MainTabControl_SelectionChanged">
             <TabItem Header="Monitor">
-                <!-- Spectrum panel at its natural size, the selected-wavelength trend
-                     chart stacked below it at a fixed readable height; the whole tab
-                     scrolls if the window is too short to show both. -->
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
+                <!-- A fixed header row (always visible) carries the Reset Run action; below it
+                     the spectrum panel at its natural size and the selected-wavelength trend
+                     chart stacked at a fixed readable height. The lower part scrolls if the
+                     window is too short to show both. -->
+                <DockPanel>
+                    <Border DockPanel.Dock="Top"
+                            Background="#FAFAFA"
+                            BorderBrush="#DDD" BorderThickness="0,0,0,1"
+                            Padding="10,6">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="Reset Run"
+                                    Command="{Binding ResetExperimentCommand}"
+                                    Padding="14,5" MinWidth="110"
+                                    ToolTip="Start a fresh experiment run after adjusting parameters: closes the current Intensity/Ratio CSV (a new file opens on the next above-threshold frame) and restarts the Monitor + Leak Monitor trends and per-ratio smoothing. Acquisition keeps running; Golden Run baselines, calibration, and any latched alarm are kept. If you changed integration time or another absolute-intensity setting, re-capture a Golden Run."/>
+                            <TextBlock VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#777"
+                                       Text="New log file + cleared trends. Baselines, calibration, and alarms are kept."/>
+                        </StackPanel>
+                    </Border>
 
-                        <wpf:DevicePanel Grid.Row="0" MinHeight="460"
-                                         DataContext="{Binding Devices[0]}"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                        <local:WavelengthTrendPanel Grid.Row="1" Height="320"
-                                                    DataContext="{Binding WavelengthTrend}"/>
-                    </Grid>
-                </ScrollViewer>
+                            <wpf:DevicePanel Grid.Row="0" MinHeight="460"
+                                             DataContext="{Binding Devices[0]}"/>
+
+                            <local:WavelengthTrendPanel Grid.Row="1" Height="320"
+                                                        DataContext="{Binding WavelengthTrend}"/>
+                        </Grid>
+                    </ScrollViewer>
+                </DockPanel>
             </TabItem>
 
             <TabItem Header="Leak Monitor">
