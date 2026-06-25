@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using Aqst.OesSpectrometer.Models;
+using Microsoft.Win32;
 using OxyPlot;
 
 namespace OES_Leak_Monitor;
@@ -18,6 +21,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly LeakMonitorEngine _leakMonitorEngine;
     private readonly RatioCsvLogger _ratioCsvLogger;
     private readonly List<DeviceViewModel> _devices;
+
+    // Test-mode plasma-spectrum playback: when an operator picks a full-spectrum CSV it
+    // replaces the device's built-in synthetic frames (a no-op for real hardware or when
+    // no file is loaded). Every device frame is routed through this before the consumers.
+    private readonly SpectrumSimulationSource _simulation = new();
 
     // Tracks the OES acquisition state so a Stop→Start transition applies a staged
     // Ratio Setup configuration. Single-device app, so one flag suffices.
@@ -50,8 +58,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             var (name, color, _) = DeviceProfiles[i];
             var vm = new DeviceViewModel(name, color, _systemLogger);
-            int slot = i;
-            vm.SpectrumAvailable += (s, sample) => _intensityLogger.ProcessSample(slot, sample);
+            // SpectrumAvailable is wired below, once all consumers (logger, leak engine,
+            // Monitor-tab trend) exist, so a single handler can fan one effective frame out.
             vm.PropertyChanged += OnDevicePropertyChanged;
             _devices.Add(vm);
         }
@@ -69,12 +77,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ApplySettingsToDevices(settings);
         Logger.LoadFrom(settings.Logger);
 
+        // Restore the last-used Test-mode simulation file (if it still exists on disk).
+        // A missing/unparseable file silently falls back to the synthetic generator.
+        if (!string.IsNullOrWhiteSpace(settings.SimulationCsvPath) && File.Exists(settings.SimulationCsvPath))
+        {
+            try { _simulation.Load(settings.SimulationCsvPath); }
+            catch (Exception ex) { _systemLogger.LogError("SimulationFile_Load_Failed", ex, settings.SimulationCsvPath); }
+        }
+
         // Monitor tab: a live intensity time-trend at the "selected" wavelength — i.e. the
         // trigger (threshold) wavelength configured in the LoggerPanel — plus the first few
         // monitored wavelengths logged into the intensity CSV. The chart follows that config:
         // seeded here and re-pointed by ApplyAll whenever it is applied.
         var loggerSettings = Logger.ToSettings();
-        WavelengthTrend = new WavelengthTrendViewModel(_devices[0],
+        WavelengthTrend = new WavelengthTrendViewModel(
             loggerSettings.TriggerWavelength, loggerSettings.SaveStartThresholdIntensity,
             loggerSettings.MonitoredWavelengths?.Select(w => (double)w));
 
@@ -83,8 +99,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // the system log. Golden Run captures are persisted as they happen.
         _leakMonitorEngine = new LeakMonitorEngine(settings.LeakMonitor, _systemLogger);
         LeakMonitor = new LeakMonitorViewModel(_leakMonitorEngine, _systemLogger);
-        foreach (var d in _devices)
-            d.SpectrumAvailable += (_, sample) => _leakMonitorEngine.ProcessSample(sample);
+
+        // Single fan-out: each device frame is mapped through the Test-mode simulation
+        // (a no-op unless a CSV is loaded and the frame is synthetic) and then handed to
+        // the intensity logger, the leak engine, and the Monitor-tab trend — so all three
+        // always see the same effective spectrum.
+        for (int i = 0; i < _devices.Count; i++)
+        {
+            int slot = i;
+            _devices[i].SpectrumAvailable += (_, sample) => OnDeviceSpectrum(slot, sample);
+        }
+
         _leakMonitorEngine.AlarmStateChanged += OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured += OnGoldenRunCaptured;
         _leakMonitorEngine.ConfigurationChanged += OnLeakConfigChanged;
@@ -128,6 +153,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         SaveAllCommand         = new RelayCommand(SaveSettings,    () => IsEngineerOrHigher);
         LoadDefaultsAllCommand = new RelayCommand(LoadDefaultsAll, () => IsEngineerOrHigher);
         ResetExperimentCommand = new RelayCommand(ResetExperiment, () => IsOperatorOrHigher);
+        ChooseSimulationFileCommand = new RelayCommand(ChooseSimulationFile, () => IsEngineerOrHigher);
+        ClearSimulationFileCommand  = new RelayCommand(ClearSimulationFile,
+            () => IsEngineerOrHigher && _simulation.IsLoaded);
 
         // Initial role is Guest → propagate the action gate so the per-device buttons
         // start out disabled until the user signs in.
@@ -175,6 +203,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 "Intensity/Ratio save session closed because OES acquisition stopped");
         }
         _wasAcquiring = now;
+    }
+
+    /// <summary>
+    /// The single fan-out for every device spectrum frame. Maps the raw frame through the
+    /// Test-mode simulation (returns it unchanged unless a playback CSV is loaded and the
+    /// frame is synthetic), then forwards the effective frame to the intensity logger, the
+    /// leak engine, and the Monitor-tab trend. Runs on the device's acquisition thread.
+    /// </summary>
+    private void OnDeviceSpectrum(int slot, SpectrumSample raw)
+    {
+        var sample = _simulation.Map(raw);
+        _intensityLogger.ProcessSample(slot, sample);
+        _leakMonitorEngine.ProcessSample(sample);
+        WavelengthTrend.OnSpectrum(sample);
     }
 
     public AccessControlService AccessControl { get; }
@@ -262,6 +304,76 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Lets the operator pick a full-spectrum CSV (same format the intensity logger writes)
+    /// to play back as the spectrum stream while in Test Mode. The chosen path is loaded
+    /// immediately and persisted so it is reused on the next launch. A parse failure leaves
+    /// the previous source untouched. Real-hardware frames ignore the simulation entirely.
+    /// </summary>
+    private void ChooseSimulationFile()
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Select a full-spectrum CSV to play back in Test Mode",
+            Filter = "Spectrum CSV (*.csv)|*.csv|All files (*.*)|*.*",
+            CheckFileExists = true,
+        };
+        if (Directory.Exists(_paths.DataDirectory)) dlg.InitialDirectory = _paths.DataDirectory;
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            _simulation.Load(dlg.FileName);
+            PersistSimulationPath();
+            OnPropertyChanged(nameof(SimulationFileText));
+            ClearSimulationFileCommand.RaiseCanExecuteChanged();
+            StatusMessage = $"Test-mode simulation loaded: {Path.GetFileName(dlg.FileName)} " +
+                            $"({_simulation.FrameCount} frames, loops).";
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "SimulationFileSelected",
+                "Test-mode plasma-spectrum playback file selected",
+                related: $"User={AccessControl.CurrentUsername ?? "(guest)"}",
+                value: $"Path={dlg.FileName},Frames={_simulation.FrameCount}");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "Could not load simulation file: " + ex.Message;
+            _systemLogger.LogError("SimulationFile_Load_Failed", ex, dlg.FileName);
+        }
+    }
+
+    /// <summary>Drops the loaded Test-mode simulation file (reverting to the built-in
+    /// synthetic generator) and persists the cleared selection.</summary>
+    private void ClearSimulationFile()
+    {
+        _simulation.Clear();
+        PersistSimulationPath();
+        OnPropertyChanged(nameof(SimulationFileText));
+        ClearSimulationFileCommand.RaiseCanExecuteChanged();
+        StatusMessage = "Test-mode simulation cleared — using built-in synthetic spectra.";
+        _systemLogger.LogSystemEvent(LogSeverity.Information, "SimulationFileCleared",
+            "Test-mode plasma-spectrum playback file cleared",
+            related: $"User={AccessControl.CurrentUsername ?? "(guest)"}");
+    }
+
+    /// <summary>
+    /// Persists the simulation-file path immediately — re-reads on-disk settings and swaps
+    /// in only that field, so an unsaved Configuration-tab edit is not clobbered (mirrors
+    /// how AccessControl and leak-monitor edits are persisted).
+    /// </summary>
+    private void PersistSimulationPath()
+    {
+        try
+        {
+            var onDisk = _settingsService.Load();
+            onDisk.SimulationCsvPath = _simulation.FilePath;
+            _settingsService.Save(onDisk);
+        }
+        catch (Exception ex)
+        {
+            _systemLogger.LogError("SimulationPath_Persist_Failed", ex, _simulation.FilePath ?? "(none)");
+        }
+    }
+
+    /// <summary>
     /// Persist all devices' parameters and the shared logger settings as one JSON
     /// file. Backs the unified Save button at the bottom of the Configuration tab.
     /// </summary>
@@ -273,6 +385,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Logger        = Logger.ToSettings(),
             LeakMonitor   = _leakMonitorEngine.Settings, // includes captured Golden Runs
             AccessControl = AccessControl.SnapshotConfig(), // preserve user list across saves
+            SimulationCsvPath = _simulation.FilePath, // keep the Test-mode playback selection
         };
         _settingsService.Save(settings);
         StatusMessage = "Settings saved to " + _settingsService.ConfigFilePath;
@@ -305,6 +418,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand SaveAllCommand { get; }
     public RelayCommand LoadDefaultsAllCommand { get; }
     public RelayCommand ResetExperimentCommand { get; }
+    public RelayCommand ChooseSimulationFileCommand { get; }
+    public RelayCommand ClearSimulationFileCommand { get; }
+
+    /// <summary>Configuration-tab readout for the Test-mode simulation source: the loaded
+    /// CSV's name and frame count, or a note that the built-in synthetic generator is used.</summary>
+    public string SimulationFileText =>
+        _simulation.IsLoaded
+            ? $"{Path.GetFileName(_simulation.FilePath)} · {_simulation.FrameCount} frames (loops)"
+            : "(built-in synthetic spectra)";
 
     private string _statusMessage = "Ready";
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
@@ -315,6 +437,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         SaveAllCommand.RaiseCanExecuteChanged();
         LoadDefaultsAllCommand.RaiseCanExecuteChanged();
         ResetExperimentCommand.RaiseCanExecuteChanged();
+        ChooseSimulationFileCommand.RaiseCanExecuteChanged();
+        ClearSimulationFileCommand.RaiseCanExecuteChanged();
     }
 
     public void Dispose()

@@ -46,7 +46,6 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
     };
 
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
-    private readonly DeviceViewModel _device;
 
     private readonly List<Track> _tracked = new();
     /// <summary>Snapshot of the tracked wavelengths for the off-thread spectrum reader;
@@ -62,10 +61,9 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
     private double _thresholdIntensity;
     private IReadOnlyList<double> _monitoredNm = Array.Empty<double>();
 
-    public WavelengthTrendViewModel(DeviceViewModel device, double triggerWavelengthNm,
+    public WavelengthTrendViewModel(double triggerWavelengthNm,
         double thresholdIntensity, IEnumerable<double>? monitoredWavelengthsNm)
     {
-        _device = device ?? throw new ArgumentNullException(nameof(device));
         _triggerNm = triggerWavelengthNm;
         _thresholdIntensity = thresholdIntensity;
         _monitoredNm = NormalizeMonitored(monitoredWavelengthsNm);
@@ -73,8 +71,6 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
         BuildPlot();
         RebuildSeries();
         ZoomAllCommand = new RelayCommand(ZoomAll);
-
-        _device.SpectrumAvailable += OnSpectrumAvailable;
     }
 
     public PlotModel PlotModel { get; private set; } = null!;
@@ -207,7 +203,15 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
 
     // --- spectrum ingest -----------------------------------------------------
 
-    private void OnSpectrumAvailable(object? sender, SpectrumSample sample)
+    /// <summary>
+    /// Feeds one spectrum frame into the trend. Called by <c>MainViewModel</c> at the device
+    /// fan-out point (after any Test-mode CSV substitution) rather than the view-model
+    /// subscribing to the device directly, so the chart sees the same effective spectrum as
+    /// the intensity logger and leak engine. May be called off the UI thread; the heavy
+    /// peak-search runs on the caller's thread and the chart mutation is marshalled via the
+    /// dispatcher (as before).
+    /// </summary>
+    public void OnSpectrum(SpectrumSample sample)
     {
         if (sample is null) return;
         double[] nms = _trackedNm;
@@ -401,7 +405,6 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
 
     public void Dispose()
     {
-        _device.SpectrumAvailable -= OnSpectrumAvailable;
 #pragma warning disable CS0618 // AxisChanged: still the supported zoom/pan hook in OxyPlot 2.2.
         _timeAxis.AxisChanged -= OnTimeAxisChanged;
 #pragma warning restore CS0618

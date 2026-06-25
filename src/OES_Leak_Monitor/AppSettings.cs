@@ -19,6 +19,14 @@ public sealed class AppSettings : IJsonOnDeserialized
     /// <summary>Actinometry leak-monitoring model configuration and Golden Run baselines.</summary>
     public LeakMonitorSettings LeakMonitor { get; set; } = LeakMonitorSettings.CreateDefault();
 
+    /// <summary>
+    /// Optional full-spectrum CSV played back as the spectrum stream while in Test Mode
+    /// (no spectrometer attached). Null/empty → use the built-in synthetic generator.
+    /// Persisted so the last-used simulation file is reused on the next launch.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SimulationCsvPath { get; set; }
+
     // Pre-list schema kept for one-shot migration from v0.x settings.json.
     // Deserializer fills these; OnDeserialized folds them into Devices and nulls them
     // so the next Save emits only the new `devices` array.
