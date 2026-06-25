@@ -194,26 +194,10 @@ public sealed class RatioMonitor
             return;
         }
 
-        // Signal-quality gate: even with plasma on, a line sitting in the noise makes the
-        // ratio meaningless (σ_R/R blows up as either line → noise). An *unknown* SNR (NaN,
-        // no baseline window) is not treated as low — only a measured SNR below the floor.
-        double minSnr = _def.MinSnr;
-        bool lowSignal = minSnr > 0 &&
-            ((!double.IsNaN(_numSnr) && _numSnr < minSnr) ||
-             (!double.IsNaN(_denSnr) && _denSnr < minSnr));
-        if (lowSignal)
-        {
-            // Don't let near-noise excursions accumulate confirmation time, and don't smooth a
-            // garbage value into the EMA; preserve a latched alarm so a real, already-confirmed
-            // leak isn't cleared by the signal dipping.
-            _aboveWarnSince = _aboveAlarmSince = null;
-            _hasEma = false;
-            _trend.Clear();
-            _slopePerMinute = 0;
-            _state = _latchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
-            return;
-        }
-
+        // Smooth the raw ratio into the EMA and trend regardless of signal quality, so the
+        // % -of-baseline trend chart keeps drawing even when a line dips toward the noise
+        // floor. The SNR gate below only governs the Warn/Alarm decision and the leak-rate
+        // fit — not the plotted curve (the operator asked to always see the trend).
         if (!_hasEma)
         {
             _ema = rawRatio;
@@ -233,6 +217,25 @@ public sealed class RatioMonitor
         }
         _lastTs = ts;
         UpdateTrend(ts, _ema);
+
+        // Signal-quality gate: even with plasma on, a line sitting in the noise makes the
+        // ratio meaningless (σ_R/R blows up as either line → noise). An *unknown* SNR (NaN,
+        // no baseline window) is not treated as low — only a measured SNR below the floor.
+        // The trend is still plotted (above); we only hold the ratio out of the Warn/Alarm
+        // decision so near-noise jitter can't trip an alarm — and the engine drops LowSignal
+        // ratios from the leak-rate fit.
+        double minSnr = _def.MinSnr;
+        bool lowSignal = minSnr > 0 &&
+            ((!double.IsNaN(_numSnr) && _numSnr < minSnr) ||
+             (!double.IsNaN(_denSnr) && _denSnr < minSnr));
+        if (lowSignal)
+        {
+            // Don't let near-noise excursions accumulate confirmation time; preserve a latched
+            // alarm so a real, already-confirmed leak isn't cleared by the signal dipping.
+            _aboveWarnSince = _aboveAlarmSince = null;
+            _state = _latchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
+            return;
+        }
 
         if (!_hasBaseline)
         {

@@ -769,7 +769,10 @@ public sealed class LeakMonitorEngine : IDisposable
         var readings = new List<LeakRateEstimator.RatioReading>(ratios.Count);
         foreach (var r in ratios)
         {
-            double x = r.HasBaseline && !double.IsNaN(r.PercentOfBaseline)
+            // A low-SNR ratio still carries a (now-plotted) PercentOfBaseline, but its value is
+            // near-noise garbage — keep it out of the leak-rate fit as before.
+            double x = r.HasBaseline && r.State != RatioState.LowSignal &&
+                       !double.IsNaN(r.PercentOfBaseline)
                 ? r.PercentOfBaseline / 100.0 - 1.0
                 : double.NaN;
             double sigX = r.BaselineMean > 0 && !double.IsNaN(r.RatioNoiseSigma)
