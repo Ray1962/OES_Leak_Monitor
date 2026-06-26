@@ -10,13 +10,22 @@ public sealed class AppSettings : IJsonOnDeserialized
 
     public List<DeviceSettings> Devices { get; set; } = new() { new(), new() };
 
-    // TriggerWavelength defaults to 337 nm (the N2 337.1 band) for a fresh settings.json;
-    // overrides the Aqst.OesApp.Core LoggerSettings default of 387 nm.
-    public LoggerSettings Logger  { get; set; } = new() { TriggerWavelength = 337f };
+    // TriggerWavelength defaults to the N2 337.1 nm band head for a fresh settings.json —
+    // kept to one decimal place (the line is at 337.1, not a round 337); overrides the
+    // Aqst.OesApp.Core LoggerSettings default of 387 nm.
+    public LoggerSettings Logger  { get; set; } = new() { TriggerWavelength = 337.1f };
     public AccessControlConfig AccessControl { get; set; } = new();
 
     /// <summary>Actinometry leak-monitoring model configuration and Golden Run baselines.</summary>
     public LeakMonitorSettings LeakMonitor { get; set; } = LeakMonitorSettings.CreateDefault();
+
+    /// <summary>
+    /// Optional full-spectrum CSV played back as the spectrum stream while in Test Mode
+    /// (no spectrometer attached). Null/empty → use the built-in synthetic generator.
+    /// Persisted so the last-used simulation file is reused on the next launch.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SimulationCsvPath { get; set; }
 
     // Pre-list schema kept for one-shot migration from v0.x settings.json.
     // Deserializer fills these; OnDeserialized folds them into Devices and nulls them

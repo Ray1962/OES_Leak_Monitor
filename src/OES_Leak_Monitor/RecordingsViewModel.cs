@@ -69,7 +69,8 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
             throw new ArgumentException("Default data directory is required.", nameof(defaultDataDirectory));
         _defaultDataDirectory = defaultDataDirectory;
 
-        _wavelengthNm = _logger.TriggerWavelength > 0 ? _logger.TriggerWavelength : 337f;
+        // Fallback to the N2 337.1 nm band head (one decimal place) when no trigger is set.
+        _wavelengthNm = _logger.TriggerWavelength > 0 ? _logger.TriggerWavelength : 337.1f;
 
         // --- line plot ---
         _linePlotModel = NewBaseModel(
