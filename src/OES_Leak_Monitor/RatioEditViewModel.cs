@@ -26,8 +26,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
         _signalLine     = NearestLine(def.Numerator.CenterNm);
         _signalMode     = def.Numerator.Mode;
+        _signalCalibrationNm = def.Numerator.CalibrationNm;
         _referenceLine  = NearestLine(def.Denominator.CenterNm);
         _referenceMode  = def.Denominator.Mode;
+        _referenceCalibrationNm = def.Denominator.CalibrationNm;
 
         _warnFactor     = def.WarnFactor;
         _alarmFactor    = def.AlarmFactor;
@@ -100,6 +102,20 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     private LineExtractMode _signalMode;
     public LineExtractMode SignalMode { get => _signalMode; set => Set(ref _signalMode, value); }
 
+    private double _signalCalibrationNm;
+    /// <summary>Wavelength-drift correction for the monitored line, nm; overrides the catalog
+    /// wavelength at runtime. 0 keeps the catalog value. Negative / NaN clamps to 0.</summary>
+    public double SignalCalibrationNm
+    {
+        get => _signalCalibrationNm;
+        set
+        {
+            double clamped = value < 0 || double.IsNaN(value) ? 0.0 : value;
+            // Notify even when unchanged so a rejected entry snaps the bound TextBox back.
+            if (!Set(ref _signalCalibrationNm, clamped) && clamped != value) OnPropertyChanged();
+        }
+    }
+
     // --- reference (denominator) line ----------------------------------------
 
     private SpectralLine _referenceLine;
@@ -111,6 +127,19 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     private LineExtractMode _referenceMode;
     public LineExtractMode ReferenceMode { get => _referenceMode; set => Set(ref _referenceMode, value); }
+
+    private double _referenceCalibrationNm;
+    /// <summary>Wavelength-drift correction for the reference / plasma-gate line, nm; overrides
+    /// the catalog wavelength at runtime. 0 keeps the catalog value. Negative / NaN clamps to 0.</summary>
+    public double ReferenceCalibrationNm
+    {
+        get => _referenceCalibrationNm;
+        set
+        {
+            double clamped = value < 0 || double.IsNaN(value) ? 0.0 : value;
+            if (!Set(ref _referenceCalibrationNm, clamped) && clamped != value) OnPropertyChanged();
+        }
+    }
 
     // --- thresholds ----------------------------------------------------------
 
@@ -171,8 +200,8 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? AutoName() : DisplayName,
         Enabled = Enabled,
         MonitorMode = MonitorMode,
-        Numerator = RegionFor(SignalLine, SignalMode, _origNumerator),
-        Denominator = RegionFor(ReferenceLine, ReferenceMode, _origDenominator),
+        Numerator = RegionFor(SignalLine, SignalMode, _origNumerator, SignalCalibrationNm),
+        Denominator = RegionFor(ReferenceLine, ReferenceMode, _origDenominator, ReferenceCalibrationNm),
         WarnFactor = WarnFactor,
         AlarmFactor = AlarmFactor,
         SigmaWarn = SigmaWarn,
@@ -188,13 +217,17 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         Math.Abs(_signalLine.WavelengthNm - _referenceLine.WavelengthNm) < 1e-6;
 
     // Reuses the original region (exact label + tuned windows preserved) when the line and
-    // mode are unchanged; otherwise builds a fresh region for the newly picked line.
-    private static LineRegion RegionFor(SpectralLine line, LineExtractMode mode, LineRegion orig)
+    // mode are unchanged; otherwise builds a fresh region for the newly picked line. Either way
+    // the current manual wavelength-drift correction is stamped on (0 = use the catalog value).
+    private static LineRegion RegionFor(SpectralLine line, LineExtractMode mode, LineRegion orig,
+        double calibrationNm)
     {
         bool unchanged = !string.IsNullOrEmpty(orig.Label)
                        && orig.Mode == mode
                        && Math.Abs(orig.CenterNm - line.WavelengthNm) < 1e-6;
-        return unchanged ? orig.Clone() : BuildRegion(line, mode);
+        var region = unchanged ? orig.Clone() : BuildRegion(line, mode);
+        region.CalibrationNm = calibrationNm > 0 ? calibrationNm : 0.0;
+        return region;
     }
 
     // A peak-height line is a narrow atomic transition; an integral line is a broader

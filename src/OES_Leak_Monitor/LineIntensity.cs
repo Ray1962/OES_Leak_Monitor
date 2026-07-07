@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace OES_Leak_Monitor;
 
@@ -21,8 +22,22 @@ public sealed class LineRegion
     /// <summary>Free-text label for UI / CSV (e.g. "OH 308.9").</summary>
     public string Label { get; set; } = "";
 
-    /// <summary>Center wavelength of the line / band head, nm.</summary>
+    /// <summary>Center wavelength of the line / band head, nm — from the emission-line catalog.</summary>
     public double CenterNm { get; set; }
+
+    /// <summary>
+    /// Manual wavelength-drift correction, nm. When &gt; 0 it overrides <see cref="CenterNm"/>
+    /// at extraction time: the signal / baseline windows (and the peak search) center on this
+    /// value instead of the catalog wavelength, so a drifted OES axis can be re-aligned without
+    /// re-picking the catalog line. 0 keeps the catalog <see cref="CenterNm"/>. Persisted with
+    /// the region; edited on the Ratio Setup tab and applied on the next acquisition restart.
+    /// </summary>
+    public double CalibrationNm { get; set; }
+
+    /// <summary>The wavelength the windows actually center on: the <see cref="CalibrationNm"/>
+    /// override when set (&gt; 0), otherwise the catalog <see cref="CenterNm"/>.</summary>
+    [JsonIgnore]
+    public double EffectiveCenterNm => CalibrationNm > 0 ? CalibrationNm : CenterNm;
 
     /// <summary>Half-width of the signal window, nm. Signal window = Center ± this.</summary>
     public double HalfWidthNm { get; set; } = 0.5;
@@ -87,12 +102,14 @@ public static class LineIntensityExtractor
         int n = Math.Min(wavelengths.Length, intensities.Length);
         if (n < 2) return LineMeasurement.Invalid;
 
-        // Re-center on the actual peak so a shifted line or a mis-calibrated wavelength
-        // axis is still measured correctly (see LineRegion.PeakSearchHalfWidthNm).
+        // Start from the effective center (the manual drift correction when set, else the
+        // catalog wavelength), then re-center on the actual peak so a shifted line or a
+        // mis-calibrated wavelength axis is still measured correctly (see
+        // LineRegion.CalibrationNm / PeakSearchHalfWidthNm).
         double center = region.PeakSearchHalfWidthNm > 0
             ? FindPeakWavelength(wavelengths, intensities, n,
-                                 region.CenterNm, region.PeakSearchHalfWidthNm)
-            : region.CenterNm;
+                                 region.EffectiveCenterNm, region.PeakSearchHalfWidthNm)
+            : region.EffectiveCenterNm;
 
         double sigLo = center - region.HalfWidthNm;
         double sigHi = center + region.HalfWidthNm;
