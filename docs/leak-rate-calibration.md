@@ -143,8 +143,11 @@ engine.BeginCalibrationPointCapture(double knownLeakRate, double seconds);
 > 第三個檢視模式「Leak rate」：以 `mbar·L/s` 軸畫 `Q̂` 折線 + 半透明 ±1σ 帶，狀態色帶仍在背後；
 > 舊檔在此模式顯示「no leak-rate data in this file」。PNG 檔名後綴 `_leakrate.png`。
 
-> **P2 實作細節**：每幀 `xᵢ` 來自各 `RatioMonitor` 的 % -of-baseline；`σ_xᵢ` 來自比值的 EWMA
-> 變異（`RatioMonitor` 新增 `_emaVar`，`σ_raw = √emaVar`，再除以基線 mean 換成 `σ_x`）餵進權重。
+> **P2 實作細節**：Ratio 模式每幀 `xᵢ` 是分數上升 `ema/baseMean − 1`；`σ_xᵢ` 來自比值的 EWMA
+> 變異（`RatioMonitor._emaVar`，`σ_raw = √emaVar`，再除以基線 mean 換成 `σ_x`）餵進權重。
+> **Absolute 模式**因為 signal 線基線 mean 貼近雜訊底、除以小分母會爆，改用**絕對上升**
+> `Δ = ema − baseMean`（`σ_Δ = √emaVar`，不除基線），並在 `RatioSensitivity.Absolute` 記錄擬合單位；
+> 若某比值的 monitor mode 在校正後被改動，`Estimate` 會拒用該擬合（與 reference-label 閘門同理）。
 > 引擎持有一個由作用中校正建構的 `LeakRateEstimator`，存進 `LeakMonitorSnapshot.LeakRate`。
 > 存檔後呼叫 `engine.ReloadCalibration()` 即時生效，**不需重啟 acquisition**（與 ratio-set 變更不同）。
 > 面板在合成狀態橫幅下方顯示「Leak rate ≈ Q̂ ± σ · NN% confidence」，外插時標 `extrapolated`、

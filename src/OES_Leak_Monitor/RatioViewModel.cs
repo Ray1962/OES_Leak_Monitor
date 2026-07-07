@@ -101,6 +101,9 @@ public sealed class RatioViewModel : INotifyPropertyChanged
             (s.HasBaseline
                 ? $"warn {s.WarnThreshold:G4}  ·  alarm {s.AlarmThreshold:G4}"
                 : "no baseline — capture a Golden Run") +
+            (s.Mode == MonitorMode.AbsoluteIntensity
+                ? "\n% is σ-normalized (100 = baseline, +20 ≈ one warn-σ above) — not raw intensity ÷ baseline."
+                : "") +
             (s.State == RatioState.LowSignal
                 ? "\nLow signal — emission near the noise floor; not trusted."
                 : "");
@@ -125,6 +128,19 @@ public sealed class RatioViewModel : INotifyPropertyChanged
     {
         if (!s.HasBaseline || s.BaselineMean <= 0 || double.IsNaN(s.SlopePerMinute))
             return "—";
+
+        // Absolute-intensity mode: baseMean is near the noise floor, so a %/min against it is
+        // as jumpy as the %-of-baseline it mirrors. Report the trend in noise σ per minute
+        // instead — the same σ-normalized frame the trend chart uses.
+        if (s.Mode == MonitorMode.AbsoluteIntensity)
+        {
+            double sigma = Math.Max(s.BaselineSigma, double.IsNaN(s.RatioNoiseSigma) ? 0 : s.RatioNoiseSigma);
+            if (!(sigma > 0)) return "—";
+            double sigmaPerMin = s.SlopePerMinute / sigma;
+            if (Math.Abs(sigmaPerMin) < 0.05) return "→ stable";
+            return $"{(sigmaPerMin > 0 ? "▲" : "▼")} {sigmaPerMin:+0.00;-0.00} σ/min";
+        }
+
         double pctPerMin = s.SlopePerMinute / s.BaselineMean * 100.0;
         if (Math.Abs(pctPerMin) < 0.5) return "→ stable";
         string arrow = pctPerMin > 0 ? "▲" : "▼";

@@ -228,12 +228,16 @@ public sealed class LeakMonitorEngine : IDisposable
                     }
                 }
 
-                // Calibration point: average the fractional rise relative to the active
-                // baseline. Needs a baseline (x is defined against it) and live plasma.
+                // Calibration point: average the rise relative to the active baseline. Needs a
+                // baseline (x is defined against it) and live plasma. In absolute-intensity mode
+                // the baseline mean sits near the noise floor, so record the *absolute* rise
+                // Δ = value − baseMean (matching the runtime reading and dodging a division by a
+                // near-zero mean) rather than the fractional rise; the fit's Absolute flag records
+                // which unit was used.
                 if (_calCapturing && mon.HasBaseline && plasma &&
                     mon.BaselineMean > 0 && den != 0 && !double.IsNaN(value))
                 {
-                    double x = value / mon.BaselineMean - 1.0;
+                    double x = absolute ? value - mon.BaselineMean : value / mon.BaselineMean - 1.0;
                     GetCalAccum(mon.Key).Add(x);
                 }
             }
@@ -337,6 +341,16 @@ public sealed class LeakMonitorEngine : IDisposable
     {
         lock (_gate)
             return _defs.ToDictionary(kv => kv.Key, kv => kv.Value.Denominator.Label);
+    }
+
+    /// <summary>Current monitor mode per ratio (true = absolute-intensity) — used to stamp a
+    /// fitted calibration with the unit it was made in, and to reject it later if the ratio's
+    /// mode changed (a fractional fit can't score an absolute reading, or vice versa).</summary>
+    public IReadOnlyDictionary<string, bool> CurrentMonitorModes()
+    {
+        lock (_gate)
+            return _defs.ToDictionary(kv => kv.Key,
+                kv => kv.Value.MonitorMode == MonitorMode.AbsoluteIntensity);
     }
 
     /// <summary>Clears every latched alarm.</summary>
@@ -759,8 +773,11 @@ public sealed class LeakMonitorEngine : IDisposable
 
     /// <summary>
     /// Inverts the current per-ratio rises into a fused leak-rate estimate via the active
-    /// calibration. Returns null when no calibration is active. The fractional rise feeds
-    /// from each ratio's % -of-baseline; its noise from the ratio's EWMA scatter, scaled to x.
+    /// calibration. Returns null when no calibration is active. In ratio mode each ratio's
+    /// rise is the fractional rise (from % -of-baseline) with σ scaled by the baseline mean;
+    /// in absolute-intensity mode it is the absolute rise Δ = smoothed − baseMean with σ taken
+    /// straight from the EWMA scatter — no division by the near-noise baseline mean, matching
+    /// the unit the calibration was fit in.
     /// </summary>
     private LeakRateEstimate? ComputeLeakRate(IReadOnlyList<RatioSnapshot> ratios)
     {
@@ -771,18 +788,32 @@ public sealed class LeakMonitorEngine : IDisposable
         {
             // A low-SNR ratio still carries a (now-plotted) PercentOfBaseline, but its value is
             // near-noise garbage — keep it out of the leak-rate fit as before.
-            double x = r.HasBaseline && r.State != RatioState.LowSignal &&
-                       !double.IsNaN(r.PercentOfBaseline)
-                ? r.PercentOfBaseline / 100.0 - 1.0
-                : double.NaN;
-            double sigX = r.BaselineMean > 0 && !double.IsNaN(r.RatioNoiseSigma)
-                ? r.RatioNoiseSigma / r.BaselineMean
-                : 0.0;
+            bool usable = r.HasBaseline && r.State != RatioState.LowSignal &&
+                          !double.IsNaN(r.SmoothedRatio) && r.BaselineMean > 0;
+            double x, sigX;
+            if (!usable)
+            {
+                x = double.NaN;
+                sigX = 0.0;
+            }
+            else if (r.Mode == MonitorMode.AbsoluteIntensity)
+            {
+                // Absolute rise Δ and its raw σ (both in intensity units).
+                x = r.SmoothedRatio - r.BaselineMean;
+                sigX = double.IsNaN(r.RatioNoiseSigma) ? 0.0 : r.RatioNoiseSigma;
+            }
+            else
+            {
+                x = r.SmoothedRatio / r.BaselineMean - 1.0;
+                sigX = double.IsNaN(r.RatioNoiseSigma) ? 0.0 : r.RatioNoiseSigma / r.BaselineMean;
+            }
             readings.Add(new LeakRateEstimator.RatioReading(r.Key, x, sigX));
         }
 
         var refLabels = _defs.ToDictionary(kv => kv.Key, kv => kv.Value.Denominator.Label);
-        return _estimator.Estimate(readings, refLabels);
+        var modes = _defs.ToDictionary(kv => kv.Key,
+            kv => kv.Value.MonitorMode == MonitorMode.AbsoluteIntensity);
+        return _estimator.Estimate(readings, refLabels, modes);
     }
 
     private Accum GetAccum(string key)

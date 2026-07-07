@@ -318,6 +318,31 @@ public sealed class RatioMonitor
         return Math.Abs(denom) < 1e-9 ? 0 : (n * sxy - sx * sy) / denom;
     }
 
+    /// <summary>
+    /// The value plotted on the % -of-baseline trend and shown in the row's percent column.
+    /// <para>Ratio mode: the honest <c>ema / baseMean · 100</c>.</para>
+    /// <para>Absolute-intensity mode: <c>baseMean</c> sits near the noise floor, so dividing by
+    /// it makes that percentage swing wildly on ordinary noise (σ/baseMean is large). Instead we
+    /// normalize the excess above baseline by the <em>noise σ</em> (a z-score) and rescale it onto
+    /// the same axis — baseline stays at 100, and one warning-σ above baseline lands at 120 — so
+    /// the curve is readable and the shared 100/120/150 guide lines still mean what they say.
+    /// The state machine and the leak-rate fit use their own stable quantities (additive σ
+    /// thresholds and the absolute rise Δ), not this display value.</para>
+    /// </summary>
+    private double PercentOfBaselineDisplay()
+    {
+        if (!_hasBaseline || !_hasEma) return double.NaN;
+        if (_def.MonitorMode != MonitorMode.AbsoluteIntensity)
+            return _ema / _baseMean * 100.0;
+
+        double sigma = EffectiveSigma;
+        // No usable noise estimate yet (no baseline scatter, no live scatter) — fall back to the
+        // raw form for the first few frames rather than leaving a gap in the trend.
+        if (!(sigma > 0)) return _ema / _baseMean * 100.0;
+        double ptsPerSigma = _def.SigmaWarn > 0 ? 20.0 / _def.SigmaWarn : 20.0;
+        return 100.0 + ptsPerSigma * (_ema - _baseMean) / sigma;
+    }
+
     public RatioSnapshot Snapshot() => new(
         _def.Key,
         _def.DisplayName,
@@ -327,7 +352,7 @@ public sealed class RatioMonitor
         _hasBaseline,
         _baseMean,
         _baseSigma,
-        _hasBaseline && _hasEma ? _ema / _baseMean * 100.0 : double.NaN,
+        PercentOfBaselineDisplay(),
         WarnThreshold,
         AlarmThreshold,
         _slopePerMinute,

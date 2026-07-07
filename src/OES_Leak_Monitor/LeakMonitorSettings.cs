@@ -107,14 +107,19 @@ public sealed class GoldenRun
 
 /// <summary>
 /// One ratio's measured response at a single known leak rate, captured during a leak-rate
-/// calibration. <see cref="X"/> is the fractional rise relative to the Golden Run baseline
-/// (<c>smoothedRatio / baselineMean − 1</c>), the same quantity the runtime estimator inverts.
+/// calibration. <see cref="X"/> is the mean rise relative to the Golden Run baseline over the
+/// capture window — the same quantity the runtime estimator inverts. Its units depend on the
+/// ratio's monitor mode: for <see cref="MonitorMode.Ratio"/> it is the <em>fractional</em> rise
+/// (<c>smoothedRatio / baselineMean − 1</c>); for <see cref="MonitorMode.AbsoluteIntensity"/> it
+/// is the <em>absolute</em> rise <c>Δ = value − baselineMean</c> (avoiding a division by the
+/// near-noise baseline mean). The fit's <see cref="RatioSensitivity.Absolute"/> flag records which.
 /// </summary>
 public sealed class RatioCalMeasurement
 {
     public string Key { get; set; } = "";
 
-    /// <summary>Mean fractional rise over the capture window (0 at the leak-free baseline).</summary>
+    /// <summary>Mean rise over the capture window (0 at the leak-free baseline). Fractional in
+    /// ratio mode, absolute (Δ intensity) in absolute-intensity mode — see the class summary.</summary>
     public double X { get; set; }
 
     /// <summary>Standard deviation of <see cref="X"/> over the capture window.</summary>
@@ -161,6 +166,14 @@ public sealed class RatioSensitivity
 
     /// <summary>Through-origin coefficient of determination (uncentered), 0..1.</summary>
     public double RSquared { get; set; }
+
+    /// <summary>Whether this ratio was calibrated in absolute-intensity mode. When true the
+    /// slope maps mbar·L/s → absolute rise <c>Δ = value − baselineMean</c>; when false it maps
+    /// to the fractional rise. The runtime estimator must feed a reading in the matching unit,
+    /// so a fit is rejected if the ratio's current monitor mode no longer agrees with this flag
+    /// (same spirit as <see cref="ReferenceLabel"/>). Defaults to false so pre-existing
+    /// (ratio-mode) calibrations keep their fractional meaning.</summary>
+    public bool Absolute { get; set; }
 
     /// <summary>Largest leak rate used in the fit — readings above this are extrapolated.</summary>
     public double MaxCalibratedLeakRate { get; set; }
