@@ -17,6 +17,9 @@
                 <TextBlock Text="Latest:" FontWeight="Bold" VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding LatestText}" VerticalAlignment="Center"
                            Margin="6,0,16,0" Foreground="#444"/>
+                <CheckBox Content="Smooth" VerticalAlignment="Center" Margin="0,0,16,0"
+                          IsChecked="{Binding Smooth}"
+                          ToolTip="Apply light EMA time-smoothing (τ ≈ 3 s) to each line to damp per-frame noise. Off by default — the raw view shows exactly what the detector reports. Toggling also re-smooths the history already on screen."/>
                 <CheckBox Content="Normalize" VerticalAlignment="Center" Margin="0,0,16,0"
                           IsChecked="{Binding Normalize}"
                           ToolTip="Divide every line by its value at the moment you tick this, so all trends snap to 1.0 and then show divergence from that state."/>
