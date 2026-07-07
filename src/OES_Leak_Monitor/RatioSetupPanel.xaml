@@ -171,6 +171,8 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="96"/>
+                                            <ColumnDefinition Width="10"/>
                                             <ColumnDefinition Width="170"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
@@ -195,6 +197,11 @@
                                             </ComboBox>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Calib. λ (nm)" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox Text="{Binding SignalCalibrationNm}" Padding="4,3"
+                                                     ToolTip="Wavelength-drift correction for this line, nm. Overrides the catalog wavelength at runtime so a drifted OES axis is re-aligned without re-picking the line. 0 = use the catalog wavelength. Applies on the next Stop → Start OES."/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
                                             <TextBlock Text="Extraction" Style="{StaticResource FieldLabel}"/>
                                             <ComboBox ItemsSource="{Binding ModeOptions}"
                                                       SelectedItem="{Binding SignalMode}"
@@ -213,6 +220,8 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="96"/>
                                             <ColumnDefinition Width="10"/>
                                             <ColumnDefinition Width="170"/>
                                         </Grid.ColumnDefinitions>
@@ -238,6 +247,11 @@
                                             </ComboBox>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Calib. λ (nm)" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox Text="{Binding ReferenceCalibrationNm}" Padding="4,3"
+                                                     ToolTip="Wavelength-drift correction for this line, nm. Overrides the catalog wavelength at runtime so a drifted OES axis is re-aligned without re-picking the line. 0 = use the catalog wavelength. Applies on the next Stop → Start OES."/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
                                             <TextBlock Text="Extraction" Style="{StaticResource FieldLabel}"/>
                                             <ComboBox ItemsSource="{Binding ModeOptions}"
                                                       SelectedItem="{Binding ReferenceMode}"
