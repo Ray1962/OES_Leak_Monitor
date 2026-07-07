@@ -38,6 +38,11 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
     /// <summary>How much trend history is kept on the chart (matches the Leak Monitor trend).</summary>
     private static readonly TimeSpan TrendRetention = TimeSpan.FromMinutes(30);
 
+    /// <summary>Time constant for the optional EMA smoothing, seconds — the same
+    /// α = 1 − exp(−dt/τ) scheme the Leak Monitor ratio EMA uses. Light by design: it damps
+    /// per-frame noise for readability without adding much lag.</summary>
+    private const double SmoothTauSeconds = 3.0;
+
     /// <summary>Series colours; index 0 is the trigger wavelength, the rest are monitored.</summary>
     private static readonly OxyColor[] Palette =
     {
@@ -91,7 +96,19 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
     public bool Normalize
     {
         get => _normalize;
-        set { if (Set(ref _normalize, value)) ApplyNormalization(); }
+        // Re-fit the y-axis: normalized vs raw scales differ by orders of magnitude.
+        set { if (Set(ref _normalize, value)) ReprojectAll(resetAxes: true); }
+    }
+
+    /// <summary>When true, each line is EMA-smoothed (τ = <see cref="SmoothTauSeconds"/>) to damp
+    /// per-frame noise. Off by default so the chart shows the raw detector output. Toggling
+    /// re-projects the retained history, so the smoothing also applies to what's already drawn.</summary>
+    private bool _smooth;
+    public bool Smooth
+    {
+        get => _smooth;
+        // Smoothing keeps the same y-scale, so don't disturb the operator's current zoom.
+        set { if (Set(ref _smooth, value)) ReprojectAll(resetAxes: false); }
     }
 
     /// <summary>
@@ -135,6 +152,9 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
             t.Raw.Clear();
             t.Series.Points.Clear();
             t.Baseline = double.NaN;
+            t.HasEma = false;
+            t.Ema = double.NaN;
+            t.LastX = 0;
         }
         LatestText = "Waiting for spectra…";
         PlotModel.ResetAllAxes();
@@ -244,12 +264,19 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
             if (double.IsNaN(v)) continue;
 
             var t = _tracked[i];
-            // While normalized, a line with no baseline yet — empty when Normalize was
-            // switched on, or freshly rebuilt since — captures it from its first sample.
-            if (_normalize && double.IsNaN(t.Baseline)) t.Baseline = v;
+            // Advance the running EMA every frame (O(1)) so it stays live whether or not
+            // smoothing is currently shown; the display just picks the smoothed or raw value.
+            UpdateEma(t, x, v);
+            double shown = _smooth ? t.Ema : v;
+
+            // The normalize baseline is captured in the display domain, so a smoothed line
+            // also snaps to 1.0. A line with no baseline yet — Normalize just switched on, or
+            // the track was freshly rebuilt — captures it from this first sample.
+            if (_normalize && double.IsNaN(t.Baseline)) t.Baseline = shown;
+            double disp = _normalize && t.Baseline > 0 ? shown / t.Baseline : shown;
 
             t.Raw.Add(new DataPoint(x, v));
-            t.Series.Points.Add(new DataPoint(x, DisplayValue(t, v)));
+            t.Series.Points.Add(new DataPoint(x, disp));
 
             // Drop points older than the retention window from raw + display in lockstep.
             int drop = 0;
@@ -276,36 +303,74 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
         PlotModel.InvalidatePlot(true);
     }
 
-    /// <summary>The value plotted for a raw reading — normalized to the line's first
-    /// recorded value when <see cref="Normalize"/> is on, otherwise the raw intensity.</summary>
-    private double DisplayValue(Track t, double raw) =>
-        _normalize && t.Baseline > 0 ? raw / t.Baseline : raw;
-
-    /// <summary>Re-projects every series between raw and normalized display from the
-    /// retained raw data, and updates the value axis / threshold line to match. Switching
-    /// normalization on captures each line's current value as its baseline.</summary>
-    private void ApplyNormalization()
+    /// <summary>Advances one track's running EMA with a new (x, value). <paramref name="x"/> is
+    /// the OxyPlot time-axis value (an OLE date, i.e. days), converted to seconds for the
+    /// α = 1 − exp(−dt/τ) step so the smoothing is frame-rate independent.</summary>
+    private static void UpdateEma(Track t, double x, double v)
     {
-        if (_normalize)
+        if (!t.HasEma) { t.Ema = v; t.HasEma = true; }
+        else
         {
-            // Baseline = each line's value at the moment Normalize was switched on; a
-            // line with no data yet captures its baseline from its next sample (Append).
-            foreach (var t in _tracked)
-                t.Baseline = t.Raw.Count > 0 ? t.Raw[^1].Y : double.NaN;
+            double dt = (x - t.LastX) * 86400.0;
+            if (dt <= 0) dt = 0.001;
+            double alpha = 1.0 - Math.Exp(-dt / SmoothTauSeconds);
+            t.Ema += alpha * (v - t.Ema);
         }
-        foreach (var t in _tracked)
-        {
-            var pts = t.Series.Points;
-            pts.Clear();
-            foreach (var rp in t.Raw)
-                pts.Add(new DataPoint(rp.X, DisplayValue(t, rp.Y)));
-        }
+        t.LastX = x;
+    }
+
+    /// <summary>Re-projects every series from its retained raw data under the current
+    /// Smooth / Normalize settings, so a toggle applies to the history already on screen — not
+    /// just new points — and updates the value axis / threshold line to match.</summary>
+    private void ReprojectAll(bool resetAxes)
+    {
+        foreach (var t in _tracked) Reproject(t);
         UpdateValueAxis();
         UpdateThresholdLine();
-        // The y-scale differs by orders of magnitude between modes — refit it.
-        PlotModel.ResetAllAxes();
-        _timeAxisZoomed = false;
+        if (resetAxes)
+        {
+            PlotModel.ResetAllAxes();
+            _timeAxisZoomed = false;
+        }
         PlotModel.InvalidatePlot(true);
+    }
+
+    /// <summary>Rebuilds one track's plotted points from its raw data: replays the EMA across
+    /// the retained points to redraw smoothed history, re-captures the normalize baseline in the
+    /// display domain (latest value, so the most recent point snaps to 1.0), and leaves the live
+    /// EMA state consistent so the next <see cref="Append"/> continues it seamlessly.</summary>
+    private void Reproject(Track t)
+    {
+        int n = t.Raw.Count;
+        var shown = new double[n];
+        double ema = double.NaN; bool has = false; double lastX = 0;
+        for (int i = 0; i < n; i++)
+        {
+            var p = t.Raw[i];
+            if (!has) { ema = p.Y; has = true; }
+            else
+            {
+                double dt = (p.X - lastX) * 86400.0;
+                if (dt <= 0) dt = 0.001;
+                double alpha = 1.0 - Math.Exp(-dt / SmoothTauSeconds);
+                ema += alpha * (p.Y - ema);
+            }
+            lastX = p.X;
+            shown[i] = _smooth ? ema : p.Y;
+        }
+        t.HasEma = has; t.Ema = ema; t.LastX = lastX;
+
+        // Baseline = latest shown value when normalizing; NaN otherwise so a later Normalize
+        // re-captures from the next sample.
+        t.Baseline = _normalize && n > 0 ? shown[n - 1] : double.NaN;
+
+        var pts = t.Series.Points;
+        pts.Clear();
+        for (int i = 0; i < n; i++)
+        {
+            double d = _normalize && t.Baseline > 0 ? shown[i] / t.Baseline : shown[i];
+            pts.Add(new DataPoint(t.Raw[i].X, d));
+        }
     }
 
     /// <summary>Largest intensity whose wavelength falls in [lo, hi]; NaN if the window is empty.
@@ -382,7 +447,8 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
     }
 
     private void UpdateValueAxis() =>
-        _valueAxis.Title = _normalize ? "Relative to start value" : "Intensity (counts)";
+        _valueAxis.Title = (_normalize ? "Relative to start value" : "Intensity (counts)")
+                         + (_smooth ? " · smoothed" : "");
 
     /// <summary>Positions (or hides) the dashed save-start threshold reference line. The line
     /// is an absolute intensity, so it is meaningless — and hidden — while normalized.</summary>
@@ -433,5 +499,12 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
         /// <summary>Normalization reference — the line's value when Normalize was switched
         /// on; NaN when not normalized or not yet captured.</summary>
         public double Baseline = double.NaN;
+
+        // --- running EMA state for the optional Smooth mode ---
+        /// <summary>Current EMA of the raw intensity; NaN until the first sample.</summary>
+        public double Ema = double.NaN;
+        public bool HasEma;
+        /// <summary>Time-axis value (OLE date, days) of the last EMA update, for the dt step.</summary>
+        public double LastX;
     }
 }
