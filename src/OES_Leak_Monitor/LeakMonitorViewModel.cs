@@ -65,6 +65,13 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _engine.AlarmStateChanged += OnAlarmStateChanged;
         _engine.GoldenRunCaptured += OnGoldenRunCaptured;
         _engine.RatiosReloaded    += OnRatiosReloaded;
+
+        _bannerTimer = new DispatcherTimer(DispatcherPriority.Normal, _dispatcher)
+        {
+            Interval = BannerMinHold,
+        };
+        _bannerTimer.Tick += (_, _) => { if (_bannerDirty) FlushBanner(); };
+        _bannerTimer.Start();
     }
 
     /// <summary>Builds one bindable row and one trend series per monitored ratio.</summary>
@@ -107,6 +114,46 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
     private LeakAlarmLevel _overallState = LeakAlarmLevel.Idle;
     private bool _testMode;
+
+    // --- banner readability throttle -----------------------------------------
+    // The banner texts are recomputed every spectrum frame, but flushing them to the UI at the
+    // frame rate makes them change faster than they can be read (leak-rate digits churn, a ratio
+    // flickering at its SNR floor toggles the LOW SIGNAL line, an Idle<->OK flip that outlives the
+    // state-machine grace). Each frame writes the latest values to the _pending* fields; a timer
+    // flushes them at most once per BannerMinHold. An escalation to a MORE severe alarm bypasses
+    // the throttle and flushes immediately — a worsening leak is never delayed for readability.
+    private static readonly TimeSpan BannerMinHold = TimeSpan.FromSeconds(1.2);
+    private DispatcherTimer? _bannerTimer;
+    private bool _bannerDirty;
+    private LeakAlarmLevel _pendingOverall = LeakAlarmLevel.Idle;
+    private string _pendingLeakRateText = "Leak rate: not calibrated";
+    private Brush _pendingLeakRateBrush = Brushes.SlateGray;
+    private string _pendingSignalWarning = "";
+
+    private static int Severity(LeakAlarmLevel l) => l switch
+    {
+        LeakAlarmLevel.Alarm   => 3,
+        LeakAlarmLevel.Warning => 2,
+        LeakAlarmLevel.Normal  => 1,
+        _                      => 0,
+    };
+
+    /// <summary>Pushes the latest computed banner values to the bound properties. Called on the
+    /// throttle timer and immediately on alarm escalation.</summary>
+    private void FlushBanner()
+    {
+        if (_overallState != _pendingOverall)
+        {
+            _overallState = _pendingOverall;
+            OnPropertyChanged(nameof(OverallText));
+            OnPropertyChanged(nameof(OverallBrush));
+            RaiseCanExec();
+        }
+        LeakRateText = _pendingLeakRateText;
+        LeakRateBrush = _pendingLeakRateBrush;
+        SignalWarningNote = _pendingSignalWarning;
+        _bannerDirty = false;
+    }
 
     public string OverallText => _overallState switch
     {
@@ -156,38 +203,38 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private Brush _leakRateBrush = Brushes.SlateGray;
     public Brush LeakRateBrush { get => _leakRateBrush; private set => Set(ref _leakRateBrush, value); }
 
-    /// <summary>Formats the per-frame leak-rate estimate (and its validity) for the readout
-    /// above the trend.</summary>
+    /// <summary>Formats the per-frame leak-rate estimate (and its validity) into the pending
+    /// banner fields — the throttle timer flushes it to the readout above the trend.</summary>
     private void ApplyLeakRate(LeakMonitorSnapshot snap)
     {
         switch (snap.CalibrationStatus)
         {
             case CalibrationStatus.NotCalibrated:
-                LeakRateText = "Leak rate: not calibrated";
-                LeakRateBrush = Brushes.SlateGray;
+                _pendingLeakRateText = "Leak rate: not calibrated";
+                _pendingLeakRateBrush = Brushes.SlateGray;
                 return;
 
             case CalibrationStatus.BaselineMismatch:
                 // A calibration is selected but the active baseline isn't the one it was
                 // captured against — estimation is suspended rather than silently wrong.
-                LeakRateText = $"Leak rate: calibration “{snap.ActiveCalibration}” needs its " +
+                _pendingLeakRateText = $"Leak rate: calibration “{snap.ActiveCalibration}” needs its " +
                                "baseline — select that Golden Run to enable estimation";
-                LeakRateBrush = Brushes.DarkOrange;
+                _pendingLeakRateBrush = Brushes.DarkOrange;
                 return;
 
             case CalibrationStatus.Active:
                 var est = snap.LeakRate;
                 if (est is not { HasEstimate: true })
                 {
-                    LeakRateText = "Leak rate: — (waiting for plasma / baseline)";
-                    LeakRateBrush = Brushes.SlateGray;
+                    _pendingLeakRateText = "Leak rate: — (waiting for plasma / baseline)";
+                    _pendingLeakRateBrush = Brushes.SlateGray;
                     return;
                 }
                 string s = $"Leak rate ≈ {est.LeakRate:G3} ± {est.Sigma:G2} mbar·L/s" +
                            $"   ·   {est.Confidence * 100:0}% confidence";
                 if (est.OutOfCalibratedRange) s += "   ·   extrapolated";
-                LeakRateText = s;
-                LeakRateBrush = est.OutOfCalibratedRange ? Brushes.DarkOrange : Brushes.MidnightBlue;
+                _pendingLeakRateText = s;
+                _pendingLeakRateBrush = est.OutOfCalibratedRange ? Brushes.DarkOrange : Brushes.MidnightBlue;
                 return;
         }
     }
@@ -267,15 +314,8 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         TestMode = snap.TestMode;
         CaptureActive = snap.CaptureActive;
         CaptureProgressPercent = snap.CaptureProgress01 * 100.0;
-        ApplyLeakRate(snap);
-
-        if (_overallState != snap.Overall)
-        {
-            _overallState = snap.Overall;
-            OnPropertyChanged(nameof(OverallText));
-            OnPropertyChanged(nameof(OverallBrush));
-            RaiseCanExec();
-        }
+        ApplyLeakRate(snap);          // writes _pendingLeakRate*
+        _pendingOverall = snap.Overall;
 
         double x = DateTimeAxis.ToDouble(snap.Timestamp);
         double cutoff = DateTimeAxis.ToDouble(snap.Timestamp - TrendRetention);
@@ -295,10 +335,16 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
             }
         }
 
-        SignalWarningNote = lowSignal.Count == 0
+        _pendingSignalWarning = lowSignal.Count == 0
             ? ""
             : $"LOW SIGNAL — {string.Join(", ", lowSignal)} near the noise floor; " +
               "leak detection unreliable. Raise plasma intensity / exposure or recapture the baseline.";
+
+        // Flush the banner immediately on alarm escalation (never delay a worsening leak);
+        // otherwise mark it dirty and let the throttle timer flush at BannerMinHold so the
+        // text stays readable instead of churning at the frame rate.
+        if (Severity(_pendingOverall) > Severity(_overallState)) FlushBanner();
+        else _bannerDirty = true;
 
         // Once the user zooms or pans the time axis, OxyPlot stops auto-scaling it.
         // Keep the zoomed window sliding forward with live data so the newest samples
@@ -315,6 +361,21 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     /// updates can keep a zoomed window following the latest data.</summary>
     private void OnTimeAxisChanged(object? sender, AxisChangedEventArgs e) =>
         _timeAxisZoomed = e.ChangeType != AxisChangeTypes.Reset;
+
+    /// <summary>
+    /// Clears the % -of-baseline trend series so the chart restarts from the next frame —
+    /// driven by the Monitor-tab Reset so the ratio trend aligns with a fresh experiment run.
+    /// The per-ratio rows keep showing live values; only the historical curve is dropped.
+    /// Must be called on the UI thread.
+    /// </summary>
+    public void ResetTrend()
+    {
+        foreach (var s in _seriesByKey.Values) s.Points.Clear();
+        PlotModel.ResetAllAxes();
+        _timeAxisZoomed = false;
+        PlotModel.InvalidatePlot(true);
+        StatusMessage = "Reset — trend cleared for a new run.";
+    }
 
     /// <summary>Resets the trend chart axes to fit all retained data.</summary>
     private void ZoomAll()
@@ -431,6 +492,8 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        _bannerTimer?.Stop();
+        _bannerTimer = null;
         _engine.SampleProcessed   -= OnSampleProcessed;
         _engine.AlarmStateChanged -= OnAlarmStateChanged;
         _engine.GoldenRunCaptured -= OnGoldenRunCaptured;

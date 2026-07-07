@@ -73,6 +73,16 @@ public sealed class RatioMonitor
     private RatioState _state = RatioState.NoBaseline;
     private bool _plasmaPresent;
 
+    // Grace window before an active display (Normal/Warning/Alarm) is allowed to drop back to
+    // NoPlasma/LowSignal. Mirrors the Warn/Alarm confirmation timers, applied to the Idle<->active
+    // boundary so a single frame jittering at the plasma floor or SNR floor doesn't flicker the
+    // banner between "OK" (green) and "waiting for plasma / baseline" (grey) at the frame rate.
+    private const double IdleGraceSeconds = 1.5;
+    private DateTime? _plasmaLostSince, _lowSignalSince;
+
+    private static bool StateIsActive(RatioState s) =>
+        s is RatioState.Normal or RatioState.Warning or RatioState.Alarm;
+
     private readonly List<(double T, double V)> _trend = new();
     private double _slopePerMinute;
 
@@ -105,6 +115,29 @@ public sealed class RatioMonitor
     /// <summary>Clears the latched alarm so a recovered process can return to Normal.</summary>
     public void Acknowledge() => _latchedAlarm = false;
 
+    /// <summary>
+    /// Drops the live smoothing / trend / confirmation state so a new experiment run starts
+    /// clean — pre-change frames no longer bridge into the post-change EMA. Keeps the Golden
+    /// Run baseline; keeps the latched alarm unless <paramref name="clearLatch"/> is set
+    /// (a Reset deliberately leaves a real, already-confirmed leak latched).
+    /// </summary>
+    public void ResetRuntime(bool clearLatch)
+    {
+        _hasEma = false;
+        _emaVar = 0;
+        _rawRatio = _numerator = _denominator = double.NaN;
+        _numSnr = _denSnr = double.NaN;
+        _aboveWarnSince = _aboveAlarmSince = null;
+        _plasmaLostSince = _lowSignalSince = null;
+        _trend.Clear();
+        _slopePerMinute = 0;
+        _plasmaPresent = false;
+        if (clearLatch) _latchedAlarm = false;
+        _state = _latchedAlarm
+            ? RatioState.Alarm
+            : (_hasBaseline ? RatioState.NoPlasma : RatioState.NoBaseline);
+    }
+
     /// <summary>Marks the ratio excluded — resets the latch and smoothing so a later
     /// re-enable starts fresh.</summary>
     public void MarkDisabled()
@@ -112,6 +145,7 @@ public sealed class RatioMonitor
         _state = RatioState.Disabled;
         _hasEma = false;
         _aboveWarnSince = _aboveAlarmSince = null;
+        _plasmaLostSince = _lowSignalSince = null;
         _latchedAlarm = false;
         _trend.Clear();
         _slopePerMinute = 0;
@@ -162,6 +196,16 @@ public sealed class RatioMonitor
 
         if (!plasmaPresent || double.IsNaN(rawRatio) || double.IsInfinity(rawRatio))
         {
+            // Grace: if we were showing an active state, hold it (and the EMA/trend) for a
+            // short window so a single frame dipping below the plasma floor doesn't flicker
+            // the banner. Only commit to NoPlasma once the dropout is sustained.
+            if (StateIsActive(_state))
+            {
+                _plasmaLostSince ??= ts;
+                if ((ts - _plasmaLostSince.Value).TotalSeconds < IdleGraceSeconds)
+                    return;
+            }
+            _plasmaLostSince = null;
             // Plasma off: hold the latch, but restart smoothing/trend so a stale
             // value doesn't bridge the gap when plasma returns.
             _state = RatioState.NoPlasma;
@@ -171,27 +215,12 @@ public sealed class RatioMonitor
             _slopePerMinute = 0;
             return;
         }
+        _plasmaLostSince = null;
 
-        // Signal-quality gate: even with plasma on, a line sitting in the noise makes the
-        // ratio meaningless (σ_R/R blows up as either line → noise). An *unknown* SNR (NaN,
-        // no baseline window) is not treated as low — only a measured SNR below the floor.
-        double minSnr = _def.MinSnr;
-        bool lowSignal = minSnr > 0 &&
-            ((!double.IsNaN(_numSnr) && _numSnr < minSnr) ||
-             (!double.IsNaN(_denSnr) && _denSnr < minSnr));
-        if (lowSignal)
-        {
-            // Don't let near-noise excursions accumulate confirmation time, and don't smooth a
-            // garbage value into the EMA; preserve a latched alarm so a real, already-confirmed
-            // leak isn't cleared by the signal dipping.
-            _aboveWarnSince = _aboveAlarmSince = null;
-            _hasEma = false;
-            _trend.Clear();
-            _slopePerMinute = 0;
-            _state = _latchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
-            return;
-        }
-
+        // Smooth the raw ratio into the EMA and trend regardless of signal quality, so the
+        // % -of-baseline trend chart keeps drawing even when a line dips toward the noise
+        // floor. The SNR gate below only governs the Warn/Alarm decision and the leak-rate
+        // fit — not the plotted curve (the operator asked to always see the trend).
         if (!_hasEma)
         {
             _ema = rawRatio;
@@ -211,6 +240,36 @@ public sealed class RatioMonitor
         }
         _lastTs = ts;
         UpdateTrend(ts, _ema);
+
+        // Signal-quality gate: even with plasma on, a line sitting in the noise makes the
+        // ratio meaningless (σ_R/R blows up as either line → noise). An *unknown* SNR (NaN,
+        // no baseline window) is not treated as low — only a measured SNR below the floor.
+        // The trend is still plotted (above); we only hold the ratio out of the Warn/Alarm
+        // decision so near-noise jitter can't trip an alarm — and the engine drops LowSignal
+        // ratios from the leak-rate fit.
+        double minSnr = _def.MinSnr;
+        bool lowSignal = minSnr > 0 &&
+            ((!double.IsNaN(_numSnr) && _numSnr < minSnr) ||
+             (!double.IsNaN(_denSnr) && _denSnr < minSnr));
+        if (lowSignal)
+        {
+            // Grace: hold an active display briefly so a single frame at the SNR floor doesn't
+            // flicker the banner to LowSignal. A latched alarm is never grace-gated (it already
+            // shows Alarm); only the Normal/Warning -> LowSignal flip is held.
+            if (!_latchedAlarm && StateIsActive(_state))
+            {
+                _lowSignalSince ??= ts;
+                if ((ts - _lowSignalSince.Value).TotalSeconds < IdleGraceSeconds)
+                    return;
+            }
+            _lowSignalSince = null;
+            // Don't let near-noise excursions accumulate confirmation time; preserve a latched
+            // alarm so a real, already-confirmed leak isn't cleared by the signal dipping.
+            _aboveWarnSince = _aboveAlarmSince = null;
+            _state = _latchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
+            return;
+        }
+        _lowSignalSince = null;
 
         if (!_hasBaseline)
         {
@@ -259,6 +318,31 @@ public sealed class RatioMonitor
         return Math.Abs(denom) < 1e-9 ? 0 : (n * sxy - sx * sy) / denom;
     }
 
+    /// <summary>
+    /// The value plotted on the % -of-baseline trend and shown in the row's percent column.
+    /// <para>Ratio mode: the honest <c>ema / baseMean · 100</c>.</para>
+    /// <para>Absolute-intensity mode: <c>baseMean</c> sits near the noise floor, so dividing by
+    /// it makes that percentage swing wildly on ordinary noise (σ/baseMean is large). Instead we
+    /// normalize the excess above baseline by the <em>noise σ</em> (a z-score) and rescale it onto
+    /// the same axis — baseline stays at 100, and one warning-σ above baseline lands at 120 — so
+    /// the curve is readable and the shared 100/120/150 guide lines still mean what they say.
+    /// The state machine and the leak-rate fit use their own stable quantities (additive σ
+    /// thresholds and the absolute rise Δ), not this display value.</para>
+    /// </summary>
+    private double PercentOfBaselineDisplay()
+    {
+        if (!_hasBaseline || !_hasEma) return double.NaN;
+        if (_def.MonitorMode != MonitorMode.AbsoluteIntensity)
+            return _ema / _baseMean * 100.0;
+
+        double sigma = EffectiveSigma;
+        // No usable noise estimate yet (no baseline scatter, no live scatter) — fall back to the
+        // raw form for the first few frames rather than leaving a gap in the trend.
+        if (!(sigma > 0)) return _ema / _baseMean * 100.0;
+        double ptsPerSigma = _def.SigmaWarn > 0 ? 20.0 / _def.SigmaWarn : 20.0;
+        return 100.0 + ptsPerSigma * (_ema - _baseMean) / sigma;
+    }
+
     public RatioSnapshot Snapshot() => new(
         _def.Key,
         _def.DisplayName,
@@ -268,7 +352,7 @@ public sealed class RatioMonitor
         _hasBaseline,
         _baseMean,
         _baseSigma,
-        _hasBaseline && _hasEma ? _ema / _baseMean * 100.0 : double.NaN,
+        PercentOfBaselineDisplay(),
         WarnThreshold,
         AlarmThreshold,
         _slopePerMinute,

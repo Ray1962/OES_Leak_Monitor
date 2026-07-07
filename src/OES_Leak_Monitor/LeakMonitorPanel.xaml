@@ -9,8 +9,9 @@
     <DockPanel Background="#F4F6FA">
 
         <!-- Composite status banner -->
-        <Border DockPanel.Dock="Top" Background="{Binding OverallBrush}" Padding="14,10">
-            <StackPanel>
+        <Border DockPanel.Dock="Top" Background="{Binding OverallBrush}" Padding="14,10"
+                MinHeight="78">
+            <StackPanel VerticalAlignment="Center">
                 <TextBlock Text="{Binding OverallText}" Foreground="White"
                            FontSize="18" FontWeight="Bold"/>
                 <TextBlock Text="{Binding TestModeNote}" Foreground="#FFEFC8"

@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ratio 值的雜訊防線</title>
+<style>
+  :root{
+    --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+    --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+    --signal:#0E9AA8; --signal-deep:#0A6C76;
+    --ok:#2E9E5B; --warn:#DE7F17; --alarm:#C33D37;
+    --n-jitter:#3E8A93; --n-nearnoise:#7A6AA6; --n-spike:#BE853A;
+    --n-drift:#4A79A3; --n-flicker:#B06478;
+    --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+    --sans:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:
+      radial-gradient(120% 60% at 50% -10%, #FAFCFC 0%, var(--paper) 55%) fixed;
+    color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.6;}
+  .wrap{max-width:880px;margin:0 auto;padding:56px 24px 80px;}
+
+  /* ---- header ---- */
+  .eyebrow{font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--signal-deep);font-weight:600;margin:0 0 14px;}
+  h1{font-size:clamp(28px,5vw,38px);line-height:1.1;letter-spacing:-.02em;
+    font-weight:700;margin:0 0 14px;text-wrap:balance;}
+  .lede{font-size:16px;color:var(--ink-soft);max-width:60ch;margin:0;}
+  .lede b{color:var(--ink);font-weight:600;}
+
+  /* ---- flow strip (raw -> clean) ---- */
+  .flowstrip{display:flex;align-items:center;gap:14px;margin:30px 0 40px;
+    padding:16px 20px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;box-shadow:0 1px 0 rgba(15,30,34,.03);}
+  .flowstrip canvas{width:100%;height:44px;display:block;flex:1;min-width:0;}
+  .flowstrip .cap{font-family:var(--mono);font-size:11px;color:var(--faint);
+    white-space:nowrap;letter-spacing:.02em;}
+
+  /* ---- legend ---- */
+  .legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:0 0 8px;
+    align-items:center;}
+  .legend .lg-title{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);font-weight:600;margin-right:2px;}
+  .cat{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);}
+  .cat i{width:9px;height:9px;border-radius:50%;flex:none;}
+
+  /* ---- pipeline ---- */
+  .pipe{margin-top:34px;display:flex;flex-direction:column;}
+  .stage{position:relative;display:grid;grid-template-columns:52px 1fr;
+    gap:20px;padding-bottom:22px;}
+  /* connector line down the node rail */
+  .rail{position:relative;display:flex;flex-direction:column;align-items:center;}
+  .rail::before{content:"";position:absolute;top:6px;bottom:-22px;width:2px;
+    background:linear-gradient(var(--line),var(--line-soft));}
+  .stage:last-of-type .rail::before{display:none;}
+  .node{position:relative;z-index:1;width:34px;height:34px;border-radius:50%;
+    background:var(--card);border:2px solid var(--signal);color:var(--signal-deep);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;
+    box-shadow:0 0 0 4px var(--paper);}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px 16px;box-shadow:0 1px 2px rgba(15,30,34,.04);
+    transition:box-shadow .18s ease,transform .18s ease;}
+  .card:hover{box-shadow:0 6px 20px rgba(14,110,118,.10);transform:translateY(-1px);}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+  .titleblock{min-width:0;}
+  .kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--signal-deep);font-weight:600;margin:0 0 3px;}
+  .title{font-size:17.5px;font-weight:650;margin:0;letter-spacing:-.01em;}
+  .spark{flex:none;width:88px;height:34px;}
+  .spark canvas{width:88px;height:34px;display:block;}
+
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:13px 0 12px;}
+  .chip{font-family:var(--mono);font-size:11.5px;line-height:1.5;
+    padding:3px 8px;border-radius:6px;background:#EEF4F4;color:var(--signal-deep);
+    border:1px solid #DDE9E9;white-space:nowrap;max-width:100%;overflow-x:auto;}
+  .chip.dim{background:#F3F5F6;color:var(--ink-soft);border-color:var(--line-soft);}
+
+  .desc{font-size:14px;color:var(--ink-soft);margin:0 0 13px;}
+  .desc code{font-family:var(--mono);font-size:12.5px;background:#F1F5F5;
+    padding:1px 5px;border-radius:4px;color:var(--signal-deep);}
+
+  .catch{display:flex;flex-wrap:wrap;align-items:center;gap:7px;}
+  .catch .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--faint);font-weight:600;}
+  .tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
+    padding:3px 9px 3px 8px;border-radius:20px;background:var(--tagbg,#EEF2F2);
+    color:var(--tagfg,#3a4a4f);border:1px solid var(--tagbd,#e0e7e7);}
+  .tag i{width:8px;height:8px;border-radius:50%;background:var(--tagfg);}
+
+  /* semantic thresholds row inside stage 4 */
+  .thline{display:flex;gap:14px;flex-wrap:wrap;margin-top:2px;}
+  .th{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;
+    font-family:var(--mono);color:var(--ink-soft);}
+  .th b{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* ---- outcome ---- */
+  .outcome{display:grid;grid-template-columns:52px 1fr;gap:20px;margin-top:2px;}
+  .outcome .node{border-color:var(--ink);color:var(--ink);}
+  .verdict{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;}
+  .lvl{flex:1;min-width:150px;border-radius:12px;padding:13px 16px;color:#fff;}
+  .lvl .n{font-family:var(--mono);font-size:11px;opacity:.85;letter-spacing:.04em;}
+  .lvl .t{font-size:15px;font-weight:700;margin-top:2px;}
+  .lvl .s{font-size:12.5px;opacity:.92;margin-top:3px;line-height:1.45;}
+
+  .foot{margin-top:34px;padding:20px 22px;background:#0F2226;border-radius:14px;
+    color:#CFE0E1;font-size:14px;line-height:1.7;}
+  .foot b{color:#fff;font-weight:650;}
+  .foot .dot{color:var(--signal);}
+
+  @media (max-width:560px){
+    .stage,.outcome{grid-template-columns:40px 1fr;gap:14px;}
+    .node{width:30px;height:30px;font-size:13px;}
+    .spark{display:none;}
+    .card-top{gap:8px;}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .stage,.outcome,.flowstrip{animation:rise .5s cubic-bezier(.2,.7,.3,1) both;}
+    .pipe .stage:nth-child(2){animation-delay:.04s}
+    .pipe .stage:nth-child(3){animation-delay:.08s}
+    .pipe .stage:nth-child(4){animation-delay:.12s}
+    .pipe .stage:nth-child(5){animation-delay:.16s}
+    .pipe .stage:nth-child(6){animation-delay:.20s}
+    .pipe .stage:nth-child(7){animation-delay:.24s}
+    .pipe .stage:nth-child(8){animation-delay:.28s}
+    @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  }
+  .card:focus-within{outline:2px solid var(--signal);outline-offset:3px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <p class="eyebrow">OES Leak Monitor · 訊號鏈</p>
+  <h1>Ratio 值的雜訊防線</h1>
+  <p class="lede">每個 ratio 從原始光譜到告警狀態之間，會通過 <b>八道濾網</b>。每一道擋掉不同性質的雜訊 —— 隨機抖動靠平滑與門檻放寬壓制，near-noise 的無意義比值整條剔除，暫態突波靠時間確認過濾。雜訊不是被單一步驟消滅，而是被逐層量化、放寬、剔除或降權。</p>
+
+  <div class="flowstrip">
+    <span class="cap">raw ratio</span>
+    <canvas id="strip" width="1200" height="88" aria-label="訊號從雜訊到乾淨的示意"></canvas>
+    <span class="cap">alarm 決策</span>
+  </div>
+
+  <div class="legend">
+    <span class="lg-title">雜訊類型</span>
+    <span class="cat"><i style="background:var(--n-jitter)"></i>隨機抖動</span>
+    <span class="cat"><i style="background:var(--n-nearnoise)"></i>near-noise 無意義</span>
+    <span class="cat"><i style="background:var(--n-spike)"></i>暫態突波</span>
+    <span class="cat"><i style="background:var(--n-drift)"></i>波長/背景漂移</span>
+    <span class="cat"><i style="background:var(--n-flicker)"></i>邊界閃爍</span>
+  </div>
+
+  <div class="pipe" id="pipe">
+
+    <!-- 1 -->
+    <div class="stage">
+      <div class="rail"><div class="node">1</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">Extraction</p>
+            <h2 class="title">擷取層 · 把線強度量乾淨</h2>
+          </div>
+          <div class="spark"><canvas data-noise="1.0" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">LineIntensityExtractor.Extract → LineMeasurement</span>
+          <span class="chip">LineRegion.PeakSearchHalfWidthNm</span>
+        </div>
+        <p class="desc">每條線 = 峰/積分減去兩側 baseline 窗；同時從 baseline 窗估一個<b>局部連續雜訊 σ</b>，換算成 SNR，讓後面每一層都知道這個數字有多可信。每幀在 ±HalfWidth 內<b>重新對準真正的峰</b>，波長校正漂移不會把讀值推到窗邊、混進背景。</p>
+        <div class="catch"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-drift);--tagbg:#EEF3F8;--tagbd:#DCE7F1"><i></i>波長/背景漂移</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="stage">
+      <div class="rail"><div class="node">2</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">Smoothing</p>
+            <h2 class="title">平滑層 · 壓隨機抖動</h2>
+          </div>
+          <div class="spark"><canvas data-noise="0.58" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">EMA α = 1 − exp(−dt/τ), τ = EmaTauSeconds (5s)</span>
+          <span class="chip">_emaVar (EWMA 變異數) → LiveSigma</span>
+        </div>
+        <p class="desc">比值先過<b>時間常數式 EMA</b>：用 <code>dt</code> 而非固定權重，幀率不均、掉幀時平滑強度仍正確。告警吃的是平滑後的 <code>_ema</code>，不是單幀原始值。同時用 EWMA 變異數量測「現在這條 ratio 有多吵」，餵給第 4 層與 leak-rate。</p>
+        <div class="catch"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-jitter);--tagbg:#EAF3F3;--tagbd:#D6E8E8"><i></i>隨機抖動</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="stage">
+      <div class="rail"><div class="node">3</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">SNR gate</p>
+            <h2 class="title">訊號品質閘 · near-noise 直接不採信</h2>
+          </div>
+          <div class="spark"><canvas data-noise="0.5" data-gate="1" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">MinSnr (5) → RatioState.LowSignal</span>
+          <span class="chip dim">Golden Run 同閘 · MinBaselineAcceptFraction (0.5)</span>
+        </div>
+        <p class="desc">signal 或 reference 任一線 SNR &lt; 門檻 → 整條 ratio <b>移出合成告警、也踢出 leak-rate 擬合</b>。兩條貼近雜訊的線相除毫無意義，再怎麼平滑都是垃圾。基線擷取用同一個閘，且通過幀數不足一半時<b>整條拒收</b>，防止弱線偏出假基線。</p>
+        <div class="catch"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-nearnoise);--tagbg:#F1EEF7;--tagbd:#E4DDF0"><i></i>near-noise 無意義</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="stage">
+      <div class="rail"><div class="node">4</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">Adaptive thresholds</p>
+            <h2 class="title">門檻放寬 · 隨雜訊自動抬高</h2>
+          </div>
+          <div class="spark"><canvas data-noise="0.36" data-th="1" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">EffectiveSigma = max(GoldenRun σ, LiveSigma)</span>
+        </div>
+        <p class="desc">雙層門檻取「基線當時的雜訊」與「現在的即時雜訊」<b>較大者</b>放寬。訊號比基線更吵時門檻自動抬高 —— ratio 不會被自己的抖動絆倒。</p>
+        <div class="thline">
+          <span class="th"><b style="background:var(--warn)"></b>Warn = max(WarnFactor·μ, μ + 3σ)</span>
+          <span class="th"><b style="background:var(--alarm)"></b>Alarm = max(AlarmFactor·μ, μ + 6σ)</span>
+        </div>
+        <div class="catch" style="margin-top:12px"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-jitter);--tagbg:#EAF3F3;--tagbd:#D6E8E8"><i></i>隨機抖動</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="stage">
+      <div class="rail"><div class="node">5</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">Sustained confirm</p>
+            <h2 class="title">時間確認 · 濾掉暫態尖峰</h2>
+          </div>
+          <div class="spark"><canvas data-noise="0.3" data-spike="1" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">ConfirmSeconds (15s) 持續超標才升級</span>
+          <span class="chip dim">latched alarm</span>
+        </div>
+        <p class="desc"><code>_ema</code> 必須<b>持續</b>超過門檻達 15 秒才升級狀態；單一幀或幾秒的突波不會升警。確認後閂住 (latch)，直到操作者 Acknowledge —— 訊號在門檻邊緣抖動不會造成告警閃爍。</p>
+        <div class="catch"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-spike);--tagbg:#F6EFE3;--tagbd:#ECDFCA"><i></i>暫態突波</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="stage">
+      <div class="rail"><div class="node">6</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">Grace window</p>
+            <h2 class="title">邊界防閃 · 別在 floor 上抖動</h2>
+          </div>
+          <div class="spark"><canvas data-noise="0.2" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">IdleGraceSeconds (1.5s)</span>
+          <span class="chip dim">plasma floor · SNR floor</span>
+        </div>
+        <p class="desc">單幀掉到 plasma floor 或 SNR floor 以下時，先保持目前的 active 狀態 1.5 秒，避免橫幅以幀率在「OK ↔ 等待電漿 / 低訊號」之間閃爍。熄電漿時保留 latch，但重啟平滑與趨勢，讓舊值不會跨過空窗橋接進來。</p>
+        <div class="catch"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-flicker);--tagbg:#F6EDF0;--tagbd:#EDDCE2"><i></i>邊界閃爍</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="stage">
+      <div class="rail"><div class="node">7</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">Absolute mode · 新增</p>
+            <h2 class="title">弱線 σ 正規化 · 取代小分母</h2>
+          </div>
+          <div class="spark"><canvas data-noise="0.13" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">顯示 100 + (20/SigmaWarn)·(ema−baseMean)/EffectiveSigma</span>
+          <span class="chip">leak-rate 擬合 Δ = value − baseMean</span>
+        </div>
+        <p class="desc">絕對強度模式下 signal 線基線 mean 貼近雜訊底，任何 <code>value ÷ baseline</code> 都會大幅擺盪。改用<b>雜訊 σ 正規化</b>顯示、用<b>絕對增量 Δ</b> 算 leak-rate（σ 直接取 √emaVar），熱路徑上不再除小分母 —— baseline 仍落在 100，一個 warn-σ 落在 120。</p>
+        <div class="catch"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-nearnoise);--tagbg:#F1EEF7;--tagbd:#E4DDF0"><i></i>near-noise 無意義</span>
+          <span class="tag" style="--tagfg:var(--n-jitter);--tagbg:#EAF3F3;--tagbd:#D6E8E8"><i></i>隨機抖動</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8 -->
+    <div class="stage">
+      <div class="rail"><div class="node">8</div></div>
+      <div class="card">
+        <div class="card-top">
+          <div class="titleblock">
+            <p class="kicker">Leak-rate fusion</p>
+            <h2 class="title">融合層 · 用雜訊當權重</h2>
+          </div>
+          <div class="spark"><canvas data-noise="0.06" data-leak="1" width="176" height="68"></canvas></div>
+        </div>
+        <div class="chips">
+          <span class="chip">LeakRateEstimator.Estimate</span>
+          <span class="chip dim">反變異數加權 w = 1/σ_x²</span>
+          <span class="chip dim">跨比值一致性 → confidence</span>
+        </div>
+        <p class="desc">每條 ratio 的 <code>σ_x</code>（來自 √emaVar）決定它在<b>反變異數加權</b>融合中的份量 —— 越吵的 ratio 權重越低。多條 ratio 一致性再換算成 confidence，χ² 越大信心越低。雜訊在這裡不是被濾掉，而是被<b>量化並用來降權</b>。</p>
+        <div class="catch"><span class="lbl">處理</span>
+          <span class="tag" style="--tagfg:var(--n-jitter);--tagbg:#EAF3F3;--tagbd:#D6E8E8"><i></i>隨機抖動（降權）</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="outcome">
+    <div class="rail" style="align-self:start"><div class="node" aria-hidden="true">✓</div></div>
+    <div>
+      <p class="kicker" style="color:var(--ink);margin:6px 0 10px">Composite LeakAlarmLevel</p>
+      <div class="verdict">
+        <div class="lvl" style="background:var(--ok)"><div class="n">Normal</div><div class="t">在基線內</div><div class="s">乾淨訊號通過八層後落在門檻下。</div></div>
+        <div class="lvl" style="background:var(--warn)"><div class="n">Warning</div><div class="t">比值上升中</div><div class="s">持續超過 warn 門檻但未達 alarm。</div></div>
+        <div class="lvl" style="background:var(--alarm)"><div class="n">Alarm</div><div class="t">疑似 O₂ / 空氣洩漏</div><div class="s">多條 ratio 確認超標並閂住。</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>一句話總結。</b><span class="dot"> ● </span>隨機抖動靠 EMA 平滑 + σ-加寬門檻 + 時間確認三重壓制；near-noise 的無意義比值靠 SNR gate 整條剔除；暫態突波靠 confirmation timer 過濾；邊界閃爍靠 grace window。而「雜訊有多大」這件事本身被 <b>EWMA 變異數</b>持續量測，一路餵進門檻放寬與 leak-rate 降權。
+  </div>
+</div>
+
+<script>
+(function(){
+  // seeded PRNG so the traces are stable across redraws
+  function lcg(seed){return function(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff-0.5;};}
+
+  // one signal: flat baseline + a leak bump in the right third, plus noise
+  function drawTrace(cv, noise, opts){
+    opts=opts||{};
+    var dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=cv.width, H=cv.height;
+    cv.width=W*dpr; cv.height=H*dpr;
+    var ctx=cv.getContext('2d'); ctx.scale(dpr,dpr);
+    ctx.clearRect(0,0,W,H);
+    var pad=4, w=W-pad*2, h=H-pad*2, mid=pad+h*0.62;
+    var rnd=lcg(97+Math.round(noise*1000));
+    var N=64, pts=[];
+    for(var i=0;i<N;i++){
+      var x=i/(N-1);
+      var bump=0.30*Math.exp(-Math.pow((x-0.74)/0.11,2)); // the true leak signal
+      var n=noise*0.30*rnd();
+      var v=0.16+bump+n;                    // 0..~0.6 upward = value
+      var px=pad+x*w, py=mid-v*h*0.92;
+      pts.push([px,py,x,bump]);
+    }
+    // faint midline (baseline reference)
+    ctx.strokeStyle='#E3ECEC'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad,mid); ctx.lineTo(W-pad,mid); ctx.stroke();
+
+    // warn/alarm guide lines for stage 4
+    if(opts.th){
+      [[0.22,'#F0C48A'],[0.42,'#E39C97']].forEach(function(g){
+        var y=mid-g[0]*h*0.92; ctx.strokeStyle=g[1]; ctx.setLineDash([3,3]);
+        ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(W-pad,y); ctx.stroke();
+      }); ctx.setLineDash([]);
+    }
+
+    // the trace
+    ctx.lineJoin='round'; ctx.lineCap='round'; ctx.lineWidth=1.6;
+    ctx.strokeStyle=opts.leak?'#0A6C76':'#0E9AA8';
+    ctx.beginPath();
+    pts.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); });
+    ctx.stroke();
+
+    // gate stage: strike a faded X to signal "rejected when below floor"
+    if(opts.gate){
+      ctx.strokeStyle='rgba(122,106,166,.55)'; ctx.lineWidth=1.4; ctx.setLineDash([2,3]);
+      var fy=mid-0.10*h*0.92;
+      ctx.beginPath(); ctx.moveTo(pad,fy); ctx.lineTo(W-pad,fy); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // spike stage: a lone rejected transient early on
+    if(opts.spike){
+      var sx=pad+0.30*w, sy=mid-0.50*h*0.92;
+      ctx.strokeStyle='rgba(190,133,58,.9)'; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.moveTo(sx,mid); ctx.lineTo(sx,sy); ctx.stroke();
+      ctx.fillStyle='rgba(190,133,58,.9)';
+      ctx.beginPath(); ctx.arc(sx,sy,1.8,0,7); ctx.fill();
+    }
+
+    // leak stage: mark the confirmed peak
+    if(opts.leak){
+      var pk=pts[Math.round(0.74*(N-1))];
+      ctx.fillStyle='#C33D37';
+      ctx.beginPath(); ctx.arc(pk[0],pk[1],2.6,0,7); ctx.fill();
+      ctx.strokeStyle='rgba(195,61,55,.35)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(pk[0],pk[1],5,0,7); ctx.stroke();
+    }
+  }
+
+  document.querySelectorAll('.spark canvas').forEach(function(cv){
+    drawTrace(cv, parseFloat(cv.dataset.noise), {
+      th:cv.dataset.th, gate:cv.dataset.gate, spike:cv.dataset.spike, leak:cv.dataset.leak
+    });
+  });
+
+  // header strip: continuous noisy -> clean, left to right
+  (function(){
+    var cv=document.getElementById('strip');
+    var dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=cv.width,H=cv.height; cv.width=W*dpr;cv.height=H*dpr;
+    var ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+    var pad=6,w=W-pad*2,h=H-pad*2,mid=pad+h*0.55;
+    ctx.strokeStyle='#E3ECEC';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pad,mid);ctx.lineTo(W-pad,mid);ctx.stroke();
+    var rnd=lcg(41),N=260;
+    var grad=ctx.createLinearGradient(pad,0,W-pad,0);
+    grad.addColorStop(0,'#9BB0B3');grad.addColorStop(.55,'#2C97A2');grad.addColorStop(1,'#0A6C76');
+    ctx.strokeStyle=grad;ctx.lineWidth=1.6;ctx.lineJoin='round';
+    ctx.beginPath();
+    for(var i=0;i<N;i++){
+      var x=i/(N-1);
+      var amp=0.44*(1-x)*(1-x);                 // noise fades to the right
+      var bump=0.34*Math.exp(-Math.pow((x-0.86)/0.05,2));
+      var v=0.12+bump+amp*rnd();
+      var px=pad+x*w, py=mid-v*h*0.9;
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+    ctx.stroke();
+  })();
+})();
+</script>
+</body>
+</html>

@@ -65,7 +65,7 @@ public sealed class LeakRateEstimator
     /// (Q = 0, x = 0) is implicit and need not be passed.
     /// </summary>
     public static RatioSensitivity FitRatio(string key, IReadOnlyList<CalSample> samples,
-        string referenceLabel = "")
+        string referenceLabel = "", bool absolute = false)
     {
         var pts = samples?.Where(s => s.LeakRate > 0 && !double.IsNaN(s.X)).ToList()
                   ?? new List<CalSample>();
@@ -73,6 +73,7 @@ public sealed class LeakRateEstimator
         {
             Key = key,
             ReferenceLabel = referenceLabel,
+            Absolute = absolute,
             PointCount = pts.Count,
             MaxCalibratedLeakRate = pts.Count > 0 ? pts.Max(p => p.LeakRate) : 0.0,
         };
@@ -127,7 +128,8 @@ public sealed class LeakRateEstimator
     /// <summary>Fits every ratio present in <paramref name="points"/> and returns the sensitivities,
     /// stamping each with the reference label from <paramref name="referenceLabels"/> when supplied.</summary>
     public static List<RatioSensitivity> FitAll(IReadOnlyList<LeakCalPoint> points,
-        IReadOnlyDictionary<string, string>? referenceLabels = null)
+        IReadOnlyDictionary<string, string>? referenceLabels = null,
+        IReadOnlyDictionary<string, bool>? monitorModes = null)
     {
         var byKey = new Dictionary<string, List<CalSample>>();
         foreach (var pt in points ?? Array.Empty<LeakCalPoint>())
@@ -142,7 +144,8 @@ public sealed class LeakRateEstimator
         foreach (var (key, samples) in byKey)
         {
             string refLabel = referenceLabels != null && referenceLabels.TryGetValue(key, out var r) ? r : "";
-            fits.Add(FitRatio(key, samples, refLabel));
+            bool absolute = monitorModes != null && monitorModes.TryGetValue(key, out var a) && a;
+            fits.Add(FitRatio(key, samples, refLabel, absolute));
         }
         return fits;
     }
@@ -158,11 +161,17 @@ public sealed class LeakRateEstimator
     /// <c>σ_x</c> per ratio; ratios without a usable fit (missing, insensitive, or whose reference
     /// line no longer matches the one fit against) are skipped with a reason.
     /// </summary>
-    /// <param name="readings">(ratioKey, x, σ_x) for each ratio currently being monitored.</param>
+    /// <param name="readings">(ratioKey, x, σ_x) for each ratio currently being monitored. The
+    /// reading's <c>x</c> must be in the same unit the fit was made in — fractional rise for a
+    /// ratio-mode fit, absolute rise Δ for an absolute-mode fit (see <paramref name="currentModes"/>).</param>
     /// <param name="currentReferenceLabels">Optional current reference label per ratio; when given,
     /// a fit whose <see cref="RatioSensitivity.ReferenceLabel"/> differs is rejected.</param>
+    /// <param name="currentModes">Optional current monitor mode per ratio (true = absolute-intensity);
+    /// when given, a fit whose <see cref="RatioSensitivity.Absolute"/> flag disagrees is rejected,
+    /// because its slope is in a unit the current reading no longer matches.</param>
     public LeakRateEstimate Estimate(IReadOnlyList<RatioReading> readings,
-        IReadOnlyDictionary<string, string>? currentReferenceLabels = null)
+        IReadOnlyDictionary<string, string>? currentReferenceLabels = null,
+        IReadOnlyDictionary<string, bool>? currentModes = null)
     {
         if (readings is null || readings.Count == 0) return LeakRateEstimate.None;
 
@@ -182,6 +191,10 @@ public sealed class LeakRateEstimator
                      !string.IsNullOrEmpty(fit.ReferenceLabel) &&
                      curRef != fit.ReferenceLabel)
                 skip = "reference line changed since calibration";
+            else if (currentModes != null &&
+                     currentModes.TryGetValue(r.Key, out var curAbs) &&
+                     curAbs != fit.Absolute)
+                skip = "monitor mode changed since calibration";
 
             if (skip != null || fit is null)
             {
