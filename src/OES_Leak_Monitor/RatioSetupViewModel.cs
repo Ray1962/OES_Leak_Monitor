@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -27,6 +28,11 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
     private bool _engineerPlus;
     private bool _loading;
 
+    // Backing list of the shared line pickers — the option instances are long-lived so that
+    // RefreshCorrections can update their offsets in place without disturbing any selection.
+    private readonly IReadOnlyList<SpectralLineOption> _lineOptions =
+        SpectralLineCatalog.All.Select(l => new SpectralLineOption(l)).ToList();
+
     public RatioSetupViewModel(LeakMonitorEngine engine, Action persistSettings,
         SystemLogger? log = null)
     {
@@ -37,10 +43,10 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
         // One shared, species-grouped view of the line catalog feeds every line picker;
         // IsSynchronizedWithCurrentItem="False" on the combos keeps their selections
         // independent despite the shared source.
-        var cvs = new CollectionViewSource { Source = SpectralLineCatalog.All };
-        cvs.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SpectralLine.Species)));
-        cvs.SortDescriptions.Add(new SortDescription(nameof(SpectralLine.Species), ListSortDirection.Ascending));
-        cvs.SortDescriptions.Add(new SortDescription(nameof(SpectralLine.WavelengthNm), ListSortDirection.Ascending));
+        var cvs = new CollectionViewSource { Source = _lineOptions };
+        cvs.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SpectralLineOption.Species)));
+        cvs.SortDescriptions.Add(new SortDescription(nameof(SpectralLineOption.Species), ListSortDirection.Ascending));
+        cvs.SortDescriptions.Add(new SortDescription(nameof(SpectralLineOption.WavelengthNm), ListSortDirection.Ascending));
         LineCatalog = cvs.View;
 
         Ratios = new ObservableCollection<RatioEditViewModel>();
@@ -56,8 +62,24 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
 
     public ObservableCollection<RatioEditViewModel> Ratios { get; }
 
-    /// <summary>Species-grouped emission-line catalog shared by every line picker.</summary>
+    /// <summary>Species-grouped emission-line catalog shared by every line picker. Each entry
+    /// also carries the line's wavelength correction, shown alongside species and wavelength.</summary>
     public ICollectionView LineCatalog { get; }
+
+    /// <summary>Re-reads the wavelength-correction overlay into the line pickers, so a correction
+    /// saved on the Wavelength Calibration tab shows up here without reloading the ratio rows
+    /// (which would discard unsaved edits). Offsets are display-only.</summary>
+    public void RefreshCorrections()
+    {
+        var lookup = WavelengthCalibration.Build(_engine.Settings.WavelengthCorrections);
+        foreach (var option in _lineOptions)
+        {
+            option.OffsetNm =
+                lookup.TryGetValue((option.Species, Math.Round(option.WavelengthNm, 3)), out double off)
+                    ? off
+                    : 0.0;
+        }
+    }
 
     public RelayCommand AddRatioCommand    { get; }
     public RelayCommand RemoveRatioCommand { get; }
@@ -102,12 +124,14 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
     /// <summary>(Re)loads the editor from the engine's current ratio definitions.</summary>
     public void LoadFromEngine()
     {
+        RefreshCorrections();
+
         _loading = true;
         foreach (var row in Ratios) row.PropertyChanged -= OnRatioEdited;
         Ratios.Clear();
         foreach (var def in _engine.Settings.Ratios)
         {
-            var row = new RatioEditViewModel(def.Clone());
+            var row = new RatioEditViewModel(def.Clone(), _lineOptions);
             row.PropertyChanged += OnRatioEdited;
             Ratios.Add(row);
         }
@@ -130,7 +154,7 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
             Numerator   = new LineRegion { CenterNm = 777.2, Mode = LineExtractMode.PeakHeight },
             Denominator = new LineRegion { CenterNm = 337.1, Mode = LineExtractMode.Integral },
         };
-        var row = new RatioEditViewModel(template);
+        var row = new RatioEditViewModel(template, _lineOptions);
         row.PropertyChanged += OnRatioEdited;
         Ratios.Add(row);
         SelectedRatio = row;

@@ -120,6 +120,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup = new RatioSetupViewModel(_leakMonitorEngine,
             () => PersistLeakMonitorSettings("RatioSetupSaved"), _systemLogger);
 
+        // Wavelength Calibration tab: a staged editor for the catalog-level wavelength-drift
+        // correction overlay. Like a Ratio Setup edit it is persisted immediately but only
+        // applied to the engine when acquisition (re)starts (via ReloadRatios).
+        WavelengthCorrection = new WavelengthCorrectionViewModel(_leakMonitorEngine,
+            () => PersistLeakMonitorSettings("WavelengthCorrectionsSaved"), _systemLogger);
+        // The Ratio Setup line pickers annotate each line with its offset, so refresh them
+        // when the overlay changes — without reloading rows, which would drop unsaved edits.
+        WavelengthCorrection.CorrectionsSaved += (_, _) => RatioSetup.RefreshCorrections();
+
         // Leak Calibration tab: a guided wizard that captures "ratio rise ↔ known leak rate"
         // points and fits a per-ratio sensitivity, persisted to settings.json (Engineer+).
         LeakCalibration = new LeakCalibrationViewModel(_leakMonitorEngine,
@@ -162,6 +171,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
         LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
         RatioSetup.SetRole(IsEngineerOrHigher);
+        WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
     }
 
@@ -241,6 +251,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
         LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
         RatioSetup.SetRole(IsEngineerOrHigher);
+        WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
 
         RaiseCanExec();
@@ -411,6 +422,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RatioReviewViewModel RatioReview { get; }
     public LeakMonitorViewModel LeakMonitor { get; }
     public RatioSetupViewModel  RatioSetup  { get; }
+    public WavelengthCorrectionViewModel WavelengthCorrection { get; }
     public LeakCalibrationViewModel LeakCalibration { get; }
     public WavelengthTrendViewModel WavelengthTrend { get; }
 

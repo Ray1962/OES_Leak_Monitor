@@ -10,11 +10,16 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <!-- One emission-line entry inside a line picker -->
+        <!-- One emission-line entry inside a line picker. A line carrying a wavelength-drift
+             correction (Wavelength Calibration tab) shows the offset and effective center here. -->
         <DataTemplate x:Key="LineItemTemplate">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding Species}" FontWeight="SemiBold" MinWidth="46"/>
                 <TextBlock Text="{Binding WavelengthNm, StringFormat={}{0:0.#} nm}" Foreground="#555"/>
+                <TextBlock Text="{Binding CorrectionText}" Margin="10,0,0,0"
+                           Foreground="#B36B00" FontSize="11" VerticalAlignment="Center"
+                           Visibility="{Binding HasCorrection, Converter={StaticResource BoolToVis}}"
+                           ToolTip="Wavelength-drift correction applied to this catalog line."/>
             </StackPanel>
         </DataTemplate>
 

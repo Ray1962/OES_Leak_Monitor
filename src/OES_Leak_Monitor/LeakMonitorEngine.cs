@@ -118,10 +118,15 @@ public sealed class LeakMonitorEngine : IDisposable
         _log = systemLogger;
         // A monitor exists for every defined ratio; the per-ratio Enabled flag decides
         // at runtime whether it is computed, so the operator can toggle it live.
+        // _defs holds wavelength-corrected *clones* (not the persisted _settings.Ratios
+        // objects), so the drift correction never leaks back into settings.json. Any future
+        // live mutation of a ratio must therefore write through to _settings.Ratios too.
+        var lookup = WavelengthCalibration.Build(_settings.WavelengthCorrections);
         foreach (var def in _settings.Ratios)
         {
-            _defs[def.Key] = def;
-            _monitors.Add(new RatioMonitor(def));
+            var corrected = WavelengthCalibration.Correct(def, lookup);
+            _defs[corrected.Key] = corrected;
+            _monitors.Add(new RatioMonitor(corrected));
         }
         ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // also builds the estimator
     }
@@ -546,10 +551,12 @@ public sealed class LeakMonitorEngine : IDisposable
         {
             _monitors.Clear();
             _defs.Clear();
+            var lookup = WavelengthCalibration.Build(_settings.WavelengthCorrections);
             foreach (var def in _settings.Ratios)
             {
-                _defs[def.Key] = def;
-                _monitors.Add(new RatioMonitor(def));
+                var corrected = WavelengthCalibration.Correct(def, lookup);
+                _defs[corrected.Key] = corrected;
+                _monitors.Add(new RatioMonitor(corrected));
             }
             ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // rebuilds the estimator
             _overall = LeakAlarmLevel.Idle;
