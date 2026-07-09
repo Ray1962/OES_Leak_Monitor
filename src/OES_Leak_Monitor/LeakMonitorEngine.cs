@@ -691,10 +691,10 @@ public sealed class LeakMonitorEngine : IDisposable
         if (d is { Disabled: false, Frames: > 0 })
         {
             if (d.NumeratorMissing == d.Frames)
-                reason = $"the numerator line {def.Numerator.Label} ({def.Numerator.EffectiveCenterNm:0.#} nm) " +
+                reason = $"the numerator line {def.Numerator.Label} ({def.Numerator.CenterNm:0.#} nm) " +
                          "fell outside the spectrometer wavelength range in every frame";
             else if (d.ReferenceMissing == d.Frames)
-                reason = $"the reference line {def.Denominator.Label} ({def.Denominator.EffectiveCenterNm:0.#} nm) " +
+                reason = $"the reference line {def.Denominator.Label} ({def.Denominator.CenterNm:0.#} nm) " +
                          "never registered — the plasma was off, or the line is outside the spectrum";
             else if (d.LowSnr > 0)
                 reason = $"the line(s) stayed below the SNR floor ({def.MinSnr:0.#}) — near the noise " +
