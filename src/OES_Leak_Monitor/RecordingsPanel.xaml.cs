@@ -13,6 +13,17 @@ public partial class RecordingsPanel : UserControl
     }
 
     /// <summary>
+    /// The wavelength box commits on LostFocus (see the binding); Enter commits too, so a
+    /// typed wavelength applies without having to click away.
+    /// </summary>
+    private void WavelengthBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || sender is not TextBox box) return;
+        box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        e.Handled = true;
+    }
+
+    /// <summary>
     /// DataGrid.SelectedItems isn't bindable directly. Project the first two
     /// selected rows into the VM (primary, compare) and trigger a reload.
     /// </summary>

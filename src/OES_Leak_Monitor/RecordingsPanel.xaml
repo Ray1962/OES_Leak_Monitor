@@ -54,9 +54,13 @@
                     <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#444"/>
                     <DatePicker SelectedDate="{Binding EndDate}"   Margin="0,0,16,0"/>
                     <TextBlock Text="Wavelength (nm):" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#444"/>
+                    <!-- LostFocus, not PropertyChanged: updating the float source on every keystroke
+                         makes the binding rewrite the text ("777." converts back to "777"), so the
+                         decimal point can never be typed. KeyDown commits on Enter. -->
                     <TextBox Width="70" Padding="4,2"
-                             Text="{Binding WavelengthNm, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Wavelength projected onto the line view; closest header column wins."/>
+                             Text="{Binding WavelengthNm, UpdateSourceTrigger=LostFocus}"
+                             KeyDown="WavelengthBox_KeyDown"
+                             ToolTip="Wavelength projected onto the line view; closest header column wins. Press Enter or click away to apply."/>
                 </StackPanel>
 
                 <!-- Left side: actions + view mode -->

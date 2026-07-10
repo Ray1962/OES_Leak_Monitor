@@ -52,6 +52,7 @@ public sealed class AppSettings : IJsonOnDeserialized
         if (LeakMonitor.Ratios is null || LeakMonitor.Ratios.Count == 0)
             LeakMonitor.Ratios = LeakMonitorSettings.CreateDefault().Ratios;
         LeakMonitor.GoldenRuns ??= new();
+        LeakMonitor.WavelengthCorrections ??= new();
     }
 
     private void EnsureAt(int idx)

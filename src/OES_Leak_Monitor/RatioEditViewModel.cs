@@ -1,15 +1,60 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace OES_Leak_Monitor;
 
 /// <summary>
+/// One entry of a Ratio Setup line picker: a catalog <see cref="SpectralLine"/> plus the
+/// wavelength-drift <see cref="OffsetNm"/> currently configured for it on the Wavelength
+/// Calibration tab, so the picker can show which lines are corrected and by how much.
+/// The offset is display-only — it never round-trips into the saved <see cref="RatioDefinition"/>
+/// (the engine applies it at monitor-build time; see <see cref="WavelengthCalibration"/>).
+/// </summary>
+public sealed class SpectralLineOption : INotifyPropertyChanged
+{
+    public SpectralLineOption(SpectralLine line) => Line = line;
+
+    public SpectralLine Line { get; }
+    public string Species => Line.Species;
+    public double WavelengthNm => Line.WavelengthNm;
+
+    private double _offsetNm;
+    /// <summary>Additive drift correction for this line, nm; 0 when the line is uncorrected.</summary>
+    public double OffsetNm
+    {
+        get => _offsetNm;
+        set
+        {
+            if (_offsetNm == value) return;
+            _offsetNm = value;
+            OnPropertyChanged(nameof(OffsetNm));
+            OnPropertyChanged(nameof(HasCorrection));
+            OnPropertyChanged(nameof(CorrectionText));
+        }
+    }
+
+    public bool HasCorrection => _offsetNm != 0.0;
+
+    /// <summary>Offset and the resulting effective center, e.g. "+0.20 nm → 777.4 nm". Empty
+    /// when the line is uncorrected.</summary>
+    public string CorrectionText => HasCorrection
+        ? $"{_offsetNm:+0.00;-0.00} nm → {WavelengthNm + _offsetNm:0.##} nm"
+        : "";
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged(string name) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>
 /// Editable working copy of one <see cref="RatioDefinition"/> for the Ratio Setup tab.
-/// The signal and reference lines are picked as <see cref="SpectralLine"/> entries from
-/// <see cref="SpectralLineCatalog"/>; the extraction window is derived from the chosen
-/// <see cref="LineExtractMode"/> when <see cref="ToDefinition"/> rebuilds the definition.
+/// The signal and reference lines are picked as <see cref="SpectralLineOption"/> entries from
+/// the shared catalog list the owning <see cref="RatioSetupViewModel"/> hands in; the extraction
+/// window is derived from the chosen <see cref="LineExtractMode"/> when <see cref="ToDefinition"/>
+/// rebuilds the definition.
 /// </summary>
 public sealed class RatioEditViewModel : INotifyPropertyChanged
 {
@@ -18,18 +63,19 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     private readonly LineRegion _origNumerator;
     private readonly LineRegion _origDenominator;
 
-    public RatioEditViewModel(RatioDefinition def)
+    private readonly IReadOnlyList<SpectralLineOption> _lines;
+
+    public RatioEditViewModel(RatioDefinition def, IReadOnlyList<SpectralLineOption> lines)
     {
+        _lines = lines;
         Key = string.IsNullOrWhiteSpace(def.Key) ? GenerateKey() : def.Key;
         _origNumerator   = def.Numerator.Clone();
         _origDenominator = def.Denominator.Clone();
 
-        _signalLine     = NearestLine(def.Numerator.CenterNm);
+        _signalLine     = MatchLine(def.Numerator);
         _signalMode     = def.Numerator.Mode;
-        _signalCalibrationNm = def.Numerator.CalibrationNm;
-        _referenceLine  = NearestLine(def.Denominator.CenterNm);
+        _referenceLine  = MatchLine(def.Denominator);
         _referenceMode  = def.Denominator.Mode;
-        _referenceCalibrationNm = def.Denominator.CalibrationNm;
 
         _warnFactor     = def.WarnFactor;
         _alarmFactor    = def.AlarmFactor;
@@ -92,8 +138,8 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     // --- signal (numerator) line ---------------------------------------------
 
-    private SpectralLine _signalLine;
-    public SpectralLine SignalLine
+    private SpectralLineOption _signalLine;
+    public SpectralLineOption SignalLine
     {
         get => _signalLine;
         set { if (Set(ref _signalLine, value)) RenameIfAuto(); }
@@ -102,24 +148,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     private LineExtractMode _signalMode;
     public LineExtractMode SignalMode { get => _signalMode; set => Set(ref _signalMode, value); }
 
-    private double _signalCalibrationNm;
-    /// <summary>Wavelength-drift correction for the monitored line, nm; overrides the catalog
-    /// wavelength at runtime. 0 keeps the catalog value. Negative / NaN clamps to 0.</summary>
-    public double SignalCalibrationNm
-    {
-        get => _signalCalibrationNm;
-        set
-        {
-            double clamped = value < 0 || double.IsNaN(value) ? 0.0 : value;
-            // Notify even when unchanged so a rejected entry snaps the bound TextBox back.
-            if (!Set(ref _signalCalibrationNm, clamped) && clamped != value) OnPropertyChanged();
-        }
-    }
-
     // --- reference (denominator) line ----------------------------------------
 
-    private SpectralLine _referenceLine;
-    public SpectralLine ReferenceLine
+    private SpectralLineOption _referenceLine;
+    public SpectralLineOption ReferenceLine
     {
         get => _referenceLine;
         set { if (Set(ref _referenceLine, value)) RenameIfAuto(); }
@@ -127,19 +159,6 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     private LineExtractMode _referenceMode;
     public LineExtractMode ReferenceMode { get => _referenceMode; set => Set(ref _referenceMode, value); }
-
-    private double _referenceCalibrationNm;
-    /// <summary>Wavelength-drift correction for the reference / plasma-gate line, nm; overrides
-    /// the catalog wavelength at runtime. 0 keeps the catalog value. Negative / NaN clamps to 0.</summary>
-    public double ReferenceCalibrationNm
-    {
-        get => _referenceCalibrationNm;
-        set
-        {
-            double clamped = value < 0 || double.IsNaN(value) ? 0.0 : value;
-            if (!Set(ref _referenceCalibrationNm, clamped) && clamped != value) OnPropertyChanged();
-        }
-    }
 
     // --- thresholds ----------------------------------------------------------
 
@@ -200,8 +219,8 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? AutoName() : DisplayName,
         Enabled = Enabled,
         MonitorMode = MonitorMode,
-        Numerator = RegionFor(SignalLine, SignalMode, _origNumerator, SignalCalibrationNm),
-        Denominator = RegionFor(ReferenceLine, ReferenceMode, _origDenominator, ReferenceCalibrationNm),
+        Numerator = RegionFor(SignalLine.Line, SignalMode, _origNumerator),
+        Denominator = RegionFor(ReferenceLine.Line, ReferenceMode, _origDenominator),
         WarnFactor = WarnFactor,
         AlarmFactor = AlarmFactor,
         SigmaWarn = SigmaWarn,
@@ -217,17 +236,13 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         Math.Abs(_signalLine.WavelengthNm - _referenceLine.WavelengthNm) < 1e-6;
 
     // Reuses the original region (exact label + tuned windows preserved) when the line and
-    // mode are unchanged; otherwise builds a fresh region for the newly picked line. Either way
-    // the current manual wavelength-drift correction is stamped on (0 = use the catalog value).
-    private static LineRegion RegionFor(SpectralLine line, LineExtractMode mode, LineRegion orig,
-        double calibrationNm)
+    // mode are unchanged; otherwise builds a fresh region for the newly picked line.
+    private static LineRegion RegionFor(SpectralLine line, LineExtractMode mode, LineRegion orig)
     {
         bool unchanged = !string.IsNullOrEmpty(orig.Label)
                        && orig.Mode == mode
                        && Math.Abs(orig.CenterNm - line.WavelengthNm) < 1e-6;
-        var region = unchanged ? orig.Clone() : BuildRegion(line, mode);
-        region.CalibrationNm = calibrationNm > 0 ? calibrationNm : 0.0;
-        return region;
+        return unchanged ? orig.Clone() : BuildRegion(line, mode);
     }
 
     // A peak-height line is a narrow atomic transition; an integral line is a broader
@@ -243,12 +258,22 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         PeakSearchHalfWidthNm = 1.0,
     };
 
-    private static SpectralLine NearestLine(double wl)
+    // The region's label carries the species it was built from, so prefer the nearest line of
+    // that species: several species share a wavelength (Ar and N2 both list 750.4 nm), and a
+    // wavelength-only match would silently re-label the region — and pick up the wrong line's
+    // wavelength correction. Regions without a resolvable species fall back to the global nearest.
+    private SpectralLineOption MatchLine(LineRegion region)
     {
-        var all = SpectralLineCatalog.All;
-        var best = all[0];
-        double bestD = Math.Abs(best.WavelengthNm - wl);
-        foreach (var l in all)
+        string species = WavelengthCalibration.SpeciesOf(region.Label);
+        return Nearest(_lines.Where(o => o.Species == species), region.CenterNm)
+            ?? Nearest(_lines, region.CenterNm)!;
+    }
+
+    private static SpectralLineOption? Nearest(IEnumerable<SpectralLineOption> lines, double wl)
+    {
+        SpectralLineOption? best = null;
+        double bestD = double.MaxValue;
+        foreach (var l in lines)
         {
             double d = Math.Abs(l.WavelengthNm - wl);
             if (d < bestD) { bestD = d; best = l; }

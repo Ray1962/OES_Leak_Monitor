@@ -242,6 +242,11 @@ public sealed class LeakMonitorSettings
     public List<GoldenRun> GoldenRuns { get; set; } = new();
     public List<LeakCalibration> Calibrations { get; set; } = new();
 
+    /// <summary>Catalog-level wavelength-drift corrections (a sparse <c>(species, wavelength)</c> →
+    /// offset overlay). Applied to every ratio line that matches, at monitor-build time. Empty by
+    /// default. See <see cref="WavelengthCorrection"/> / <see cref="WavelengthCalibration"/>.</summary>
+    public List<WavelengthCorrection> WavelengthCorrections { get; set; } = new();
+
     public GoldenRun? FindGoldenRun(string? name) =>
         name is null ? null : GoldenRuns.FirstOrDefault(g => g.Name == name);
 

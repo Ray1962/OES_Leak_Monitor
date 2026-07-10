@@ -91,6 +91,10 @@
                 <local:RatioSetupPanel DataContext="{Binding RatioSetup}"/>
             </TabItem>
 
+            <TabItem Header="Wavelength Calibration">
+                <local:WavelengthCorrectionPanel DataContext="{Binding WavelengthCorrection}"/>
+            </TabItem>
+
             <TabItem Header="Leak Calibration">
                 <local:LeakCalibrationPanel DataContext="{Binding LeakCalibration}"/>
             </TabItem>
