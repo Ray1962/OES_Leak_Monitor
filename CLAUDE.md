@@ -37,7 +37,17 @@ Two guards exist because a publish can "succeed" and still produce an unshippabl
 
 ### NuGet feed prerequisite
 
-`nuget.config` pins a local feed at `C:\Users\infor\source\repos\Ray1962\LocalPackages` and clears default sources before adding nuget.org. Restore will fail if the three `Aqst.*` nupkgs (`Aqst.OesApp.Core`, `Aqst.OesApp.Wpf`, `Aqst.OesSpectrometer`) are not present there. Those packages are produced by the sibling repo `Ray1962/DualOes_PlasmaMonitor`; rebuild and re-pack there if you bump versions.
+`nuget.config` pins a local feed at `C:\Users\infor\source\repos\Ray1962\LocalPackages` and clears default sources before adding nuget.org. Restore will fail if the three `Aqst.*` nupkgs are not present there at (at least) the pinned versions:
+
+| Package | Pinned | Built from |
+|---|---|---|
+| `Aqst.OesApp.Core` | 0.1.3 | `Ray1962/DualOes_PlasmaMonitor` — `dotnet pack DualOes_PlasmaMonitor.sln -c Release -p:Platform=x64` |
+| `Aqst.OesApp.Wpf` | 0.1.7 | same solution, same command |
+| `Aqst.OesSpectrometer` | 0.4.6 | a **different** repo, `Ray1962/Aqst.OesSpectrometer` — the hardware SDK, not the app framework |
+
+The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj as the source of truth and update this table when it moves. Bumping `Aqst.OesApp.*` means editing `<Version>` in that library's csproj, re-packing (the `<PackageOutputPath>` writes straight into the local feed), then bumping the `<PackageReference>` here — and in `DualOes_PlasmaMonitor`'s own app and `template/`, which pin the same packages.
+
+`0.4.6` of the SDK is what supplies `OesAcquireMode` / `OesAverageMode`; it also stopped opting into `UAI_BackgroundRemove` implicitly, though `DeviceViewModel` still passes `EnableBackgroundRemove = true`, so this app's behaviour is unchanged.
 
 ### Native DLL flattening (do not remove)
 
