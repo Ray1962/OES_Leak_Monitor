@@ -67,10 +67,25 @@ Treat that NuGet surface as the framework. When something looks "missing," it is
 ### Conventions worth knowing
 
 - The single device keeps the tag `"OES1"` (not `"OES"`) so the existing recording file-pairing infrastructure, filename scan, and `RecordingGroup` logic keep working unchanged. Don't rename it.
-- The Configuration tab is gated to Engineer+; window close is blocked for Guest. Both gates are enforced in `MainWindow.xaml.cs` (`MainTabControl_SelectionChanged`, `MainWindow_Closing`).
+- The Configuration tab is gated to Engineer+; window close is blocked for Guest. Both gates are enforced in `MainWindow.xaml.cs` (`MainTabControl_SelectionChanged`, `MainWindow_Closing`). The gate identifies its tabs by `x:Name` (`ConfigurationTab`, `MonitorTab`) and compares by reference — **never reintroduce a hard-coded tab index here**. It was written that way twice and silently broke both times a tab was inserted ahead of Configuration (most recently `6734da1`, which left Configuration ungated for anyone including Guest while the gate guarded Leak Calibration instead).
 - Sample flow: each `DeviceViewModel.SpectrumAvailable` event is forwarded to `DualIntensityLogger.ProcessSample(slot, sample)`. The logger's threshold state machine decides when to open/close CSV writers; lifecycle events (`StateChanged`, `ErrorOccurred`, `FilesChanged`) are bridged into `SystemLogger` for the audit log.
 - `MainViewModel.ConnectBothAsync` calls `OesDiscovery.OpenAllDevices()` once, then hands one handle to each slot via `AttachAsync`; slots with `ForceTestMode=true` or that run out of handles fall back to `ConnectStandaloneAsync`. Unused handles are explicitly closed.
 - Settings are saved atomically (temp file + `File.Move(..., overwrite:true)`). The `AccessControl` user list is re-read from disk on each persist so user-management edits don't clobber unsaved Configuration-tab edits, and vice versa.
+
+## Documentation
+
+`docs/` holds the human-facing docs (the design notes there are the authority on the maths, not this file):
+
+- `user-manual-zh-TW.md` — the operator manual (Traditional Chinese): the actinometry model, every tab control by control, file layout and CSV formats, day-to-day SOPs, troubleshooting, default-value tables. **This is the source of truth — edit the Markdown, never the HTML.**
+- `user-manual-zh-TW.html` — a generated, self-contained rendering of the manual (inlined CSS, sticky section list, dark-mode and print stylesheets, no external requests) for operators who won't open the repo. Regenerate it after **every** edit to the Markdown, or the two drift apart:
+
+  ```
+  python3 tools/md2html.py docs/user-manual-zh-TW.md docs/user-manual-zh-TW.html "OES Leak Monitor 操作手冊"
+  ```
+
+  `tools/md2html.py` is a deliberately small converter covering only the Markdown subset the manual uses — there is no pandoc or python-markdown in this environment. It is deterministic (same input → byte-identical output), so a regeneration that produces no diff means the HTML was already current. Anchor ids follow GitHub's slug rules so the manual's hand-written table of contents works in both renderings; note that `\w` in Python is already Unicode-aware, and naming extra CJK ranges in the slug regex breaks it by preserving fullwidth punctuation.
+- `leak-rate-calibration.md` — full design + maths for the leak-rate calibration (P0–P4).
+- `ratio-noise-pipeline.html` — a standalone illustrated note on the ratio noise defences.
 
 ## Related skills
 

@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor 操作手冊</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#1-這個軟體在做什麼">1. 這個軟體在做什麼</a>
+<a class="l2" href="#2-安裝與啟動">2. 安裝與啟動</a>
+<a class="l3" href="#21-標準安裝免安裝-net">2.1 標準安裝（免安裝 .NET）</a>
+<a class="l3" href="#22-啟動">2.2 啟動</a>
+<a class="l3" href="#23-測試模式無硬體">2.3 測試模式（無硬體）</a>
+<a class="l2" href="#3-帳號與權限">3. 帳號與權限</a>
+<a class="l3" href="#31-四種角色">3.1 四種角色</a>
+<a class="l3" href="#32-登入">3.2 登入</a>
+<a class="l3" href="#33-自動鎖定">3.3 自動鎖定</a>
+<a class="l2" href="#4-畫面總覽">4. 畫面總覽</a>
+<a class="l2" href="#5-快速上手從零到監控">5. 快速上手：從零到監控</a>
+<a class="l3" href="#步驟-1-連線並確認有光譜">步驟 1 — 連線並確認有光譜</a>
+<a class="l3" href="#步驟-2-調整硬體參數">步驟 2 — 調整硬體參數</a>
+<a class="l3" href="#步驟-3-設定要監控的比值">步驟 3 — 設定要監控的比值</a>
+<a class="l3" href="#步驟-4-錄基準線golden-run">步驟 4 — 錄基準線（Golden Run）</a>
+<a class="l3" href="#步驟-5選用-洩漏率定量校正">步驟 5（選用）— 洩漏率定量校正</a>
+<a class="l3" href="#步驟-6-開啟資料記錄">步驟 6 — 開啟資料記錄</a>
+<a class="l2" href="#6-分頁詳解">6. 分頁詳解</a>
+<a class="l3" href="#61-monitor即時監看">6.1 Monitor（即時監看）</a>
+<a class="l3" href="#62-configuration設定">6.2 Configuration（設定）</a>
+<a class="l3" href="#63-leak-monitor洩漏監控主畫面">6.3 Leak Monitor（洩漏監控主畫面）</a>
+<a class="l3" href="#64-ratio-setup比值設定">6.4 Ratio Setup（比值設定）</a>
+<a class="l3" href="#65-wavelength-calibration波長校正">6.5 Wavelength Calibration（波長校正）</a>
+<a class="l3" href="#66-leak-calibration洩漏率校正">6.6 Leak Calibration（洩漏率校正）</a>
+<a class="l3" href="#67-recordings光譜回放">6.7 Recordings（光譜回放）</a>
+<a class="l3" href="#68-ratio-review比值回放">6.8 Ratio Review（比值回放）</a>
+<a class="l3" href="#69-logs系統日誌">6.9 Logs（系統日誌）</a>
+<a class="l2" href="#7-檔案與資料夾">7. 檔案與資料夾</a>
+<a class="l3" href="#71-位置">7.1 位置</a>
+<a class="l3" href="#72-檔名規則">7.2 檔名規則</a>
+<a class="l3" href="#73-比值-csv-格式">7.3 比值 CSV 格式</a>
+<a class="l3" href="#74-備份建議">7.4 備份建議</a>
+<a class="l2" href="#8-日常操作-sop">8. 日常操作 SOP</a>
+<a class="l3" href="#81-每天開機">8.1 每天開機</a>
+<a class="l3" href="#82-換配方">8.2 換配方</a>
+<a class="l3" href="#83-警報發生時">8.3 警報發生時</a>
+<a class="l3" href="#84-定期維護">8.4 定期維護</a>
+<a class="l2" href="#9-疑難排解">9. 疑難排解</a>
+<a class="l3" href="#91-按-connect-後掉進測試模式明明接了硬體">9.1 按 Connect 後掉進測試模式（明明接了硬體）</a>
+<a class="l3" href="#92-光譜幀出現斷裂撕裂">9.2 光譜幀出現斷裂／撕裂</a>
+<a class="l3" href="#93-峰形變寬峰位偏移">9.3 峰形變寬、峰位偏移</a>
+<a class="l3" href="#94-一直顯示-low-signal">9.4 一直顯示 Low Signal</a>
+<a class="l3" href="#95-golden-run-錄完後某條比值沒有基準線">9.5 Golden Run 錄完後某條比值沒有基準線</a>
+<a class="l3" href="#96-進不了-configuration-分頁">9.6 進不了 Configuration 分頁</a>
+<a class="l3" href="#97-改了-ratio-setup-但沒反應">9.7 改了 Ratio Setup 但沒反應</a>
+<a class="l3" href="#98-沒有產生-ratio-csv">9.8 沒有產生 Ratio CSV</a>
+<a class="l3" href="#99-測試模式下警報不會跳">9.9 測試模式下警報不會跳</a>
+<a class="l3" href="#910-guest-關不掉程式">9.10 Guest 關不掉程式</a>
+<a class="l2" href="#10-附錄參數預設值">10. 附錄：參數預設值</a>
+<a class="l3" href="#101-硬體參數">10.1 硬體參數</a>
+<a class="l3" href="#102-比值門檻每組比值各自可調">10.2 比值門檻（每組比值各自可調）</a>
+<a class="l3" href="#103-洩漏監控全域設定">10.3 洩漏監控全域設定</a>
+<a class="l3" href="#104-出廠預設比值">10.4 出廠預設比值</a>
+<a class="l3" href="#105-可選參考譜線">10.5 可選參考譜線</a>
+<a class="l3" href="#106-趨勢圖">10.6 趨勢圖</a>
+<a class="l3" href="#107-帳號">10.7 帳號</a>
+<a class="l2" href="#名詞對照">名詞對照</a>
+</nav>
+<main>
+<h1 id="oes-leak-monitor-操作手冊">OES Leak Monitor 操作手冊</h1>
+<blockquote><p>版本對應：<code>Aqst.OesSpectrometer 0.4.6</code> / <code>Aqst.OesApp.Core 0.1.3</code> / <code>Aqst.OesApp.Wpf 0.1.7</code> 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）</p></blockquote>
+<hr>
+<h2 id="目錄">目錄</h2>
+<ol>
+<li><a href="#1-這個軟體在做什麼">這個軟體在做什麼</a>
+</li>
+<li><a href="#2-安裝與啟動">安裝與啟動</a>
+</li>
+<li><a href="#3-帳號與權限">帳號與權限</a>
+</li>
+<li><a href="#4-畫面總覽">畫面總覽</a>
+</li>
+<li><a href="#5-快速上手從零到監控">快速上手：從零到監控</a>
+</li>
+<li><a href="#6-分頁詳解">分頁詳解</a>
+</li>
+<li><a href="#7-檔案與資料夾">檔案與資料夾</a>
+</li>
+<li><a href="#8-日常操作-sop">日常操作 SOP</a>
+</li>
+<li><a href="#9-疑難排解">疑難排解</a>
+</li>
+<li><a href="#10-附錄參數預設值">附錄：參數預設值</a>
+</li>
+</ol>
+<hr>
+<h2 id="1-這個軟體在做什麼">1. 這個軟體在做什麼</h2>
+<p>OES Leak Monitor 用<strong>光學發射光譜（OES）</strong>即時偵測製程腔體的<strong>空氣／氧氣洩漏</strong>。</p>
+<p>核心方法是 <strong>actinometry（比值法）</strong>：</p>
+<ul>
+<li>空氣漏進電漿後，會生成 O、OH、NO 等自由基，它們的特徵譜線強度上升。
+</li>
+<li>但譜線的絕對強度也會隨電漿功率、壓力、氣流、窗口髒污而漂移 —— 直接看絕對強度會誤判。
+</li>
+<li>所以把「訊號譜線」除以一條<strong>參考譜線</strong>（預設 N₂ 337.1 nm）。電漿條件漂移會同時放大／縮小兩者，相除後被抵消，剩下的變化就主要來自洩漏。
+</li>
+</ul>
+<p>軟體會：</p>
+<ol>
+<li>在無洩漏的良品製程中錄下<strong>基準線（Golden Run）</strong> —— 每個比值的平均值與標準差 σ。
+</li>
+<li>即時計算比值，做 EMA 平滑，與基準線比較。
+</li>
+<li>超過警告／警報門檻並<strong>持續一段時間</strong>後才升級狀態（避免瞬間雜訊誤報）。
+</li>
+<li>若做過<strong>洩漏率校正（Leak Calibration）</strong>，還會把比值上升量換算成<strong>定量洩漏率 Q̂（mbar·L/s）</strong>。
+</li>
+</ol>
+<p>同時它也是一台資料記錄器：當指定波長的強度超過門檻時，自動開檔記錄光譜 CSV 與比值 CSV，事後可在 Recordings / Ratio Review 分頁回放。</p>
+<hr>
+<h2 id="2-安裝與啟動">2. 安裝與啟動</h2>
+<h3 id="21-標準安裝免安裝-net">2.1 標準安裝（免安裝 .NET）</h3>
+<p>發布產物是一個資料夾，內含單一 <code>.exe</code> 與數個原生 DLL：</p>
+<pre><code>OES_Leak_Monitor.exe          ← 主程式（已內含 .NET 8 執行環境）
+UserApplication.dll           ← OES 硬體 SDK
+SiUSBXp.dll                   ← USB 驅動介面
+libsodium.dll                 ← SDK 相依
+wpfgfx_cor3.dll               ← 以下為 WPF 原生元件
+PresentationNative_cor3.dll
+D3DCompiler_47_cor3.dll
+PenImc_cor3.dll
+vcruntime140_cor3.dll</code></pre>
+<blockquote><p>⚠️ <strong>整個資料夾要一起複製，不能只拷貝 <code>.exe</code>。</strong> 那幾個 DLL 是刻意放在 <code>.exe</code> 旁邊的 —— SDK 的 <code>DllResolver</code> 只會在程式所在目錄找它們。少了 <code>UserApplication.dll</code> / <code>SiUSBXp.dll</code>，程式仍會啟動，但<strong>連線會無聲地掉進測試模式</strong>（畫面看得到假光譜，卻連不到硬體）。</p></blockquote>
+<p>需求：64 位元 Windows。目標電腦<strong>不需要</strong>安裝 .NET。</p>
+<h3 id="22-啟動">2.2 啟動</h3>
+<p>雙擊 <code>OES_Leak_Monitor.exe</code>。首次啟動會在 <code>%APPDATA%\OES_Leak_Monitor\</code> 建立設定與資料夾。</p>
+<h3 id="23-測試模式無硬體">2.3 測試模式（無硬體）</h3>
+<p>沒接到光譜儀時，按 <strong>Connect</strong> 會自動退回<strong>測試模式</strong>，產生合成光譜（正弦波＋雜訊，約 200–800 nm、1000 點）。整個 UI 都能操作，適合教育訓練與功能驗證。</p>
+<p>在測試模式下：</p>
+<ul>
+<li>Leak Monitor 分頁會顯示 <strong>"test mode"</strong> 註記。
+</li>
+<li><strong>警報預設被抑制</strong>（<code>SuppressAlarmsInTestMode</code>），比值照算照畫，但不會真的跳 ALARM。
+</li>
+<li>可以在 Configuration 分頁用 <strong>Choose CSV…</strong> 選一個已錄製的全光譜 CSV 來取代合成波形（見 §6.2.4）。
+</li>
+</ul>
+<hr>
+<h2 id="3-帳號與權限">3. 帳號與權限</h2>
+<h3 id="31-四種角色">3.1 四種角色</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>角色</th><th>等級</th><th>可以做什麼</th></tr></thead>
+<tbody>
+<tr><td><strong>Guest</strong></td><td>0</td><td>只能看。<strong>不能關閉程式</strong>（必須先登入）</td></tr>
+<tr><td><strong>Operator</strong></td><td>1</td><td>連線／啟動擷取、Start/Stop Save、Reset Run、<strong>Acknowledge Alarm</strong></td></tr>
+<tr><td><strong>Engineer</strong></td><td>2</td><td>以上全部，加：Configuration 分頁、Capture Golden Run、Ratio Setup 存檔、Wavelength Calibration 存檔、Leak Calibration 存檔</td></tr>
+<tr><td><strong>Admin</strong></td><td>3</td><td>以上全部，加：<strong>Users</strong> 使用者管理（新增／刪除帳號、改密碼、改角色）</td></tr>
+</tbody></table></div>
+<h3 id="32-登入">3.2 登入</h3>
+<p>右上角工具列：</p>
+<ul>
+<li><strong>Sign In</strong> — 未登入（Guest）時顯示。
+</li>
+<li><strong>Sign Out</strong> — 已登入時顯示。
+</li>
+<li><strong>Users</strong> — 只有 Admin 看得到。
+</li>
+</ul>
+<p><strong>出廠預設帳號：<code>admin</code> / 密碼 <code>admin</code>。</strong></p>
+<blockquote><p>🔒 <strong>請在第一次部署後立刻改掉這組密碼</strong>（Sign In 成 admin → Users → 改密碼）。</p></blockquote>
+<h3 id="33-自動鎖定">3.3 自動鎖定</h3>
+<p>閒置超過 <strong>5 分鐘</strong>（<code>AutoLockTimeoutMinutes</code>）會自動登出回 Guest。滑鼠移動或按鍵都會重置計時。</p>
+<p>若在 Configuration 分頁時角色掉到 Engineer 以下，畫面會自動跳回 Monitor 分頁。</p>
+<hr>
+<h2 id="4-畫面總覽">4. 畫面總覽</h2>
+<p>視窗上方是工具列（標題、狀態訊息、使用者／角色），下方是九個分頁：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>分頁</th><th>用途</th><th>權限</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Monitor</strong></td><td>即時全光譜圖 + 選定波長強度趨勢；裝置連線／擷取控制</td><td>Operator+ 操作</td></tr>
+<tr><td>2</td><td><strong>Leak Monitor</strong></td><td>洩漏偵測主畫面：狀態燈號、各比值、趨勢圖、Golden Run</td><td>檢視全開放</td></tr>
+<tr><td>3</td><td><strong>Ratio Setup</strong></td><td>設定要監控哪些譜線比值、門檻</td><td>Engineer+ 存檔</td></tr>
+<tr><td>4</td><td><strong>Wavelength Calibration</strong></td><td>波長漂移補償（校正整個 catalog 的譜線位置）</td><td>Engineer+ 存檔</td></tr>
+<tr><td>5</td><td><strong>Leak Calibration</strong></td><td>用已知漏率的標準漏孔，把比值上升換算成 mbar·L/s</td><td>Engineer+ 存檔</td></tr>
+<tr><td>6</td><td><strong>Configuration</strong></td><td>光譜儀硬體參數 + 資料記錄器設定</td><td>Engineer+</td></tr>
+<tr><td>7</td><td><strong>Recordings</strong></td><td>回放已存的光譜 CSV（線圖／熱圖／單幀光譜）</td><td>全開放</td></tr>
+<tr><td>8</td><td><strong>Ratio Review</strong></td><td>回放已存的比值 CSV（% 基準／原始比值／洩漏率）</td><td>全開放</td></tr>
+<tr><td>9</td><td><strong>Logs</strong></td><td>系統稽核日誌</td><td>全開放</td></tr>
+</tbody></table></div>
+<blockquote><p>Configuration 分頁在切入時會檢查角色；權限不足會跳出登入視窗，取消就退回原本的分頁。</p></blockquote>
+<hr>
+<h2 id="5-快速上手從零到監控">5. 快速上手：從零到監控</h2>
+<p>第一次在一台新機台上導入，依序做完這六步：</p>
+<h3 id="步驟-1-連線並確認有光譜">步驟 1 — 連線並確認有光譜</h3>
+<ol>
+<li>到 <strong>Monitor</strong> 分頁。
+</li>
+<li>按 <strong>Connect</strong>。下方狀態列的 <strong>Test Mode</strong> 應顯示 <code>False</code>，<strong>Serial</strong> 應顯示實際序號。
+<ul>
+<li>若顯示 <code>True</code> 但硬體確實接著 → 見 §9.1。</li>
+</ul>
+</li>
+<li>按 <strong>Start</strong>。全光譜圖應開始更新，<strong>Last</strong> 時間持續跳動。
+</li>
+</ol>
+<h3 id="步驟-2-調整硬體參數">步驟 2 — 調整硬體參數</h3>
+<ol>
+<li>到 <strong>Configuration</strong> 分頁（需 Engineer）。
+</li>
+<li>設定 <strong>Integration Time</strong>（積分時間）：讓最強的譜線約落在滿刻度的 50–80%，不要飽和。
+</li>
+<li>需要降雜訊時調 <strong>Average Count</strong>；若發現峰位被硬體平均扭曲，把 <strong>Average Mode</strong> 改成 <code>Software</code>（見 §6.2.1）。
+</li>
+<li>按 <strong>Apply</strong> 推送到硬體，再按 <strong>Save</strong> 寫入 <code>settings.json</code>。
+</li>
+</ol>
+<h3 id="步驟-3-設定要監控的比值">步驟 3 — 設定要監控的比值</h3>
+<ol>
+<li>到 <strong>Ratio Setup</strong> 分頁。
+</li>
+<li>出廠預設已有四組比值：<code>O 777 / N₂ 337</code>、<code>OH 309 / N₂ 337</code>、<code>NO 237 / N₂ 337</code>、<code>Ar 750 / N₂ 337</code>。
+</li>
+<li>檢查你的光譜儀波段是否涵蓋這些波長 —— 涵蓋不到的請<strong>取消勾選</strong>或改選別的譜線。
+</li>
+<li>若某條訊號線太弱（接近雜訊底），把該比值的 <strong>Monitoring method</strong> 改成 <code>AbsoluteIntensity</code>（見 §6.3.2）。
+</li>
+<li>按 <strong>Save</strong>。
+</li>
+<li><strong>⚠️ 回 Monitor 分頁按 Stop → 再按 Start</strong>。Ratio Setup 的修改是「暫存」的，只有在擷取重啟後才生效。
+</li>
+</ol>
+<h3 id="步驟-4-錄基準線golden-run">步驟 4 — 錄基準線（Golden Run）</h3>
+<ol>
+<li>讓機台跑一段<strong>確定沒有洩漏</strong>的良品製程，電漿條件穩定。
+</li>
+<li>到 <strong>Leak Monitor</strong> 分頁 → 按 <strong>Capture Golden Run</strong>。
+</li>
+<li>輸入配方／基準線名稱（例如 <code>Recipe-A-20260804</code>）。
+</li>
+<li>勾選「I confirm the process is currently running leak-free.」→ 按 <strong>Start Capture</strong>。
+</li>
+<li>預設平均 <strong>60 秒</strong>。進度條跑完後，基準線立刻寫入 <code>settings.json</code>。
+</li>
+<li>上方 <strong>Baseline</strong> 下拉會自動選到這條新基準線。
+</li>
+</ol>
+<p>此時洩漏偵測就已經在運作了 —— 狀態列會顯示 <code>OK — within baseline</code>。</p>
+<h3 id="步驟-5選用-洩漏率定量校正">步驟 5（選用）— 洩漏率定量校正</h3>
+<p>只有需要把「比值上升」讀成 <strong>mbar·L/s</strong> 時才要做。見 §6.5。</p>
+<h3 id="步驟-6-開啟資料記錄">步驟 6 — 開啟資料記錄</h3>
+<ol>
+<li><strong>Configuration</strong> → 下半部 <strong>Data Logger</strong>。
+</li>
+<li>設定 <strong>Trigger Wavelength</strong>（判斷「電漿開了」的波長，例如 337.1）與 <strong>Save Threshold Intensity</strong>。
+</li>
+<li>按 <strong>Apply</strong> → <strong>Save</strong>。
+</li>
+<li>按 <strong>Start Save</strong> 武裝觸發器。當強度持續超過門檻達 <strong>Start Confirm Time</strong> 後，自動開檔。
+</li>
+</ol>
+<hr>
+<h2 id="6-分頁詳解">6. 分頁詳解</h2>
+<h3 id="61-monitor即時監看">6.1 Monitor（即時監看）</h3>
+<h4 id="611-頂部reset-run">6.1.1 頂部：Reset Run</h4>
+<p><strong>Reset Run</strong>（Operator+）用在「調完參數，想從乾淨的狀態重新開始這一爐」：</p>
+<ul>
+<li>關閉目前的 Intensity CSV 與 Ratio CSV（下一次超過門檻時會開新檔）。
+</li>
+<li>清空 Monitor 強度趨勢圖與 Leak Monitor 的 % 趨勢圖。
+</li>
+<li>重置各比值的即時平滑。
+</li>
+</ul>
+<p><strong>保留不動</strong>：Golden Run 基準線、洩漏率校正、已鎖存的警報（必須由人按 Acknowledge 才清除）、擷取本身持續進行。</p>
+<blockquote><p>若你剛改過<strong>積分時間</strong>或其他會影響絕對強度的設定，Reset Run 不夠 —— 請<strong>重新錄一次 Golden Run</strong>，因為舊基準線是在不同曝光條件下錄的。</p></blockquote>
+<h4 id="612-裝置控制列devicepanel">6.1.2 裝置控制列（DevicePanel）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>按鈕</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td><strong>Connect</strong></td><td>連線光譜儀。找不到硬體時退回測試模式</td></tr>
+<tr><td><strong>Disconnect</strong></td><td>中斷連線</td></tr>
+<tr><td><strong>Start</strong></td><td>開始連續擷取</td></tr>
+<tr><td><strong>Stop</strong></td><td>停止擷取（Ratio Setup / Wavelength Calibration 的暫存修改就是靠 Stop→Start 生效）</td></tr>
+<tr><td><strong>Save CSV</strong></td><td>把目前這張光譜存成 CSV，<strong>同時凍結一條疊圖</strong>在圖上當參考</td></tr>
+<tr><td><strong>Clear Spectrum</strong></td><td>清掉所有由 Save CSV 疊上去的參考光譜</td></tr>
+</tbody></table></div>
+<p>下方狀態列：<strong>Serial</strong>（序號）、<strong>Frame</strong>（每幀點數）、<strong>Last</strong>（最後一幀時間）、<strong>Test Mode</strong>（True/False）。</p>
+<p>圖表操作：滾輪縮放、右鍵選單有 Zoom In / Zoom Out / <strong>Zoom All</strong>（快捷鍵 <code>A</code>）。</p>
+<h4 id="613-強度趨勢圖wavelength-trend">6.1.3 強度趨勢圖（Wavelength Trend）</h4>
+<p>畫面下半部，顯示<strong>時間 vs 強度</strong>，最多 6 條線：</p>
+<ul>
+<li><strong>Trigger 波長</strong>（Configuration 裡設的那個「Selected wavelength」）。
+</li>
+<li><strong>Monitored Wavelengths</strong> 清單的前 <strong>5</strong> 個波長。
+</li>
+</ul>
+<p>每條線取的是該波長 <strong>±0.5 nm 範圍內的峰值</strong> —— 這是「峰值定位」，用來吸收波長漂移，<strong>不是</strong>雜訊濾波。預設畫的是每幀原始計數，刻意不濾波，讓它像示波器一樣誠實。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>控制項</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Smooth</strong></td><td>套用 τ ≈ 3 s 的 EMA 平滑。切換時<strong>連已經畫在螢幕上的歷史也會一起重算</strong></td></tr>
+<tr><td><strong>Normalize</strong></td><td>以「勾選當下」的值為 1.0 做正規化，看各線的相對發散。正規化期間門檻參考線會隱藏</td></tr>
+<tr><td><strong>Zoom All</strong></td><td>縮放回全部資料。放大狀態下時間軸仍會持續跟隨最新資料</td></tr>
+</tbody></table></div>
+<p>虛線是 Save 門檻強度的參考線。資料保留 <strong>30 分鐘</strong>。</p>
+<hr>
+<h3 id="62-configuration設定">6.2 Configuration（設定）</h3>
+<p><strong>需 Engineer 權限。</strong> 分上下兩塊，中間可拖曳分隔。底部是共用的動作列。</p>
+<p>底部三顆按鈕的差別<strong>很重要</strong>：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>按鈕</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td><strong>Apply</strong></td><td>把目前參數<strong>推送到硬體</strong>與記錄器狀態機（立即生效，但<strong>沒有存檔</strong>）</td></tr>
+<tr><td><strong>Save</strong></td><td>把參數<strong>寫入 <code>settings.json</code></strong>（下次開機沿用）</td></tr>
+<tr><td><strong>Load Defaults</strong></td><td>回到出廠值（<strong>不會</strong>自動 Apply，也<strong>不會</strong>自動 Save）</td></tr>
+</tbody></table></div>
+<blockquote><p>改完記得 <strong>Apply → Save</strong> 兩個都按。只按 Apply 的話，下次開機會回到舊值。</p></blockquote>
+<h4 id="621-hardware-parameters硬體參數">6.2.1 Hardware Parameters（硬體參數）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>預設</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Integration Time (ms)</strong></td><td>50</td><td>積分時間，0.001–10000 ms。<strong>接受小數，離開欄位才送出</strong></td></tr>
+<tr><td><strong>Acquire Mode</strong></td><td><code>HardwareAverage</code></td><td>底層擷取方式，見下表</td></tr>
+<tr><td><strong>Average Count</strong></td><td>1</td><td>平均次數，1–1000</td></tr>
+<tr><td><strong>Average Mode</strong></td><td><code>Hardware</code></td><td>平均在硬體或軟體做，見下表</td></tr>
+<tr><td><strong>Boxcar Width</strong></td><td>1</td><td>Boxcar 平滑視窗（1 = 關閉）</td></tr>
+<tr><td><strong>Polling Interval (ms)</strong></td><td>200</td><td>讀取間隔，10–10000 ms</td></tr>
+<tr><td><strong>Max Consecutive Errors</strong></td><td>5</td><td>連續錯誤幾次後自動斷線</td></tr>
+<tr><td><strong>Force Test Mode</strong></td><td>勾選</td><td>強制用模擬器，不碰硬體</td></tr>
+</tbody></table></div>
+<p><strong>Acquire Mode（擷取模式）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>何時用</th></tr></thead>
+<tbody>
+<tr><td><code>HardwareAverage</code></td><td><strong>預設。</strong> 傳統 USB 機種的標準做法</td></tr>
+<tr><td><code>Oneshot</code></td><td>當畫面出現<strong>斷裂／撕裂的光譜幀</strong>時改用這個 —— 常見於 Z5／乙太網路機種在長積分時間下</td></tr>
+<tr><td><code>Standard</code></td><td>一般擷取，前兩者都不合用時再試</td></tr>
+</tbody></table></div>
+<p><strong>Average Mode（平均模式）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>取捨</th></tr></thead>
+<tbody>
+<tr><td><code>Hardware</code></td><td><strong>預設。</strong> 由韌體內部平均，速度快</td></tr>
+<tr><td><code>Software</code></td><td>抓 N 張單幀在軟體逐點平均。<strong>避免某些機種硬體平均造成的峰位偏移／峰形變寬</strong>，代價是耗時約 N 倍</td></tr>
+</tbody></table></div>
+<blockquote><p>這兩項按 <strong>Apply</strong> 即可熱套用，<strong>不需要</strong>重新連線。</p></blockquote>
+<h4 id="622-corrections修正">6.2.2 Corrections（修正）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>選項</th><th>預設</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Background Remove</strong></td><td>開</td><td>硬體暗電流扣除。<strong>注意</strong>：不是每台機器的 ROM 都有背景校正資料，沒有的機種開了會被 SDK 略過</td></tr>
+<tr><td><strong>Straylight Correction</strong></td><td>關</td><td>雜散光補償</td></tr>
+<tr><td><strong>Linearity Correction</strong></td><td>開</td><td>偵測器非線性修正</td></tr>
+</tbody></table></div>
+<h4 id="623-data-logger資料記錄器">6.2.3 Data Logger（資料記錄器）</h4>
+<p>門檻觸發式記錄器：<strong>只有在指定波長的強度高於門檻時才開檔寫入</strong>。</p>
+<p><strong>Trigger Conditions（觸發條件）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Trigger Wavelength (nm)</strong></td><td>用來判斷門檻的波長（取最接近的譜線 bin）。接受小數</td></tr>
+<tr><td><strong>Wavelength Tolerance (nm)</strong></td><td>請求波長與實際 bin 的最大容許差距</td></tr>
+<tr><td><strong>Save Threshold Intensity</strong></td><td>高於這個強度才可能開始存檔</td></tr>
+<tr><td><strong>Start Confirm Time (s)</strong></td><td>需<strong>持續</strong>高於門檻幾秒才真的開檔</td></tr>
+<tr><td><strong>Stop Confirm Time (s)</strong></td><td>需<strong>持續</strong>低於門檻幾秒才收檔</td></tr>
+<tr><td><strong>Min Save Time (s)</strong></td><td>單一 session 的最短長度，避免產生一堆極短的碎檔</td></tr>
+</tbody></table></div>
+<p><strong>Output Files（輸出檔案）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Base Directory</strong></td><td>留空 = <code>%APPDATA%\OES_Leak_Monitor\Data</code>（欄位下方的 *Effective:* 會顯示實際路徑）</td></tr>
+<tr><td><strong>File Prefix</strong></td><td>檔名前綴，例如 <code>P</code></td></tr>
+<tr><td><strong>Monitored Wavelengths</strong></td><td>逗號分隔的波長清單，例如 <code>387, 482.5</code>。關閉全光譜時就是 CSV 的欄位；開啟時用於摘要檔</td></tr>
+<tr><td><strong>Include Full Spectrum</strong></td><td>存下每一個波長欄位（另外產生一個摘要伴隨檔）</td></tr>
+<tr><td><strong>Memory Budget (MB)</strong></td><td>單檔列數上限依此估算，確保單一檔案可以整個載入這麼多 RAM</td></tr>
+</tbody></table></div>
+<p><strong>Start Save / Stop Save</strong></p>
+<ul>
+<li><strong>Start Save</strong> — *武裝*觸發器。並不是立刻開檔，而是等強度條件成立。
+</li>
+<li><strong>Stop Save</strong> — 解除武裝，並<strong>立即</strong>關閉所有開啟中的檔案。
+</li>
+</ul>
+<p><strong>Logger Status</strong> 區塊顯示狀態機目前狀態（<code>Idle</code> / <code>WaitingToStart</code> / <code>Saving</code> / <code>WaitingToStop</code>）與目前檔名。本專案是單一 OES，所以只會看到一列 <strong>"OES #1 file"</strong>。</p>
+<h4 id="624-test-mode-sim測試模式光譜播放">6.2.4 Test-mode sim（測試模式光譜播放）</h4>
+<p>底部動作列右側：</p>
+<ul>
+<li><strong>Choose CSV…</strong> — 選一個已錄製的<strong>全光譜 CSV</strong>（就是記錄器寫出的那種寬格式），在測試模式下當成模擬電漿播放，播完自動循環。路徑會被記住，下次開機自動載入。
+</li>
+<li><strong>Clear</strong> — 回到內建的合成光譜。
+</li>
+</ul>
+<p>用途：不用接硬體就能重現真實製程資料，驗證比值設定、門檻、記錄流程是否正確。</p>
+<blockquote><p>⚠️ 播放受限於測試模式的波長軸（約 200–800 nm、1000 點）。<strong>軸外的波長會被丟棄</strong>（例如 Ar 811.5 nm），細節也會被內插掉。</p></blockquote>
+<hr>
+<h3 id="63-leak-monitor洩漏監控主畫面">6.3 Leak Monitor（洩漏監控主畫面）</h3>
+<p>這是日常監看時盯著的畫面。由上而下四層：</p>
+<h4 id="631-狀態橫幅最上方大色塊">6.3.1 狀態橫幅（最上方大色塊）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>顯示文字</th><th>顏色</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td><code>Idle — waiting for plasma / baseline</code></td><td>灰</td><td>沒電漿、沒基準線，或監控被關閉</td></tr>
+<tr><td><code>OK — within baseline</code></td><td>綠</td><td>在基準線範圍內</td></tr>
+<tr><td><code>WARNING — oxygen ratio rising</code></td><td>橘</td><td>有比值持續超過警告門檻</td></tr>
+<tr><td><code>ALARM — suspected O₂ / air leak</code></td><td>紅</td><td>達警報條件（<strong>鎖存</strong>，必須人工 Acknowledge）</td></tr>
+</tbody></table></div>
+<p>橫幅下方可能出現兩行小字：</p>
+<ul>
+<li><strong>測試模式註記</strong> —— 提醒現在是模擬資料。
+</li>
+<li><strong>LOW SIGNAL 警示</strong> —— 有啟用中的比值低於它的 SNR 下限（見 §6.3.4）。
+</li>
+</ul>
+<p><strong>複合判定規則</strong>：預設 <code>RequireTwoForAlarm = true</code>，也就是<strong>要有兩個以上比值同時進入 Alarm</strong>，整體狀態才會變 ALARM。這是為了避免單一譜線受干擾就跳警報。</p>
+<h4 id="632-洩漏率讀值橫幅正下方">6.3.2 洩漏率讀值（橫幅正下方）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>顯示</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td><code>Leak rate: not calibrated</code></td><td>還沒做洩漏率校正</td></tr>
+<tr><td><code>Leak rate: — (waiting for plasma / baseline)</code></td><td>有校正，但目前沒有有效讀值</td></tr>
+<tr><td><code>Leak rate ≈ 2.3E-4 ± 4E-5 mbar·L/s · 87% confidence</code></td><td>正常估計值</td></tr>
+<tr><td><code>… · extrapolated</code></td><td>超出校正過的漏率範圍，數字僅供參考</td></tr>
+<tr><td><code>Leak rate: calibration "X" needs its baseline — select that Golden Run…</code></td><td>目前的基準線不是這份校正當初綁定的那條，<strong>估算已暫停</strong>（避免給出錯誤數字）</td></tr>
+</tbody></table></div>
+<h4 id="633-工具列">6.3.3 工具列</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>控制項</th><th>權限</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Baseline</strong> 下拉</td><td>—</td><td>切換使用中的 Golden Run。切換時會<strong>自動配對</strong>綁定該基準線的洩漏率校正</td></tr>
+<tr><td><strong>Capture Golden Run</strong></td><td>Engineer+</td><td>錄製新基準線（見 §6.3.5）</td></tr>
+<tr><td><strong>Cancel</strong></td><td>—</td><td>取消進行中的擷取（只在擷取中出現）</td></tr>
+<tr><td><strong>Acknowledge Alarm</strong></td><td>Operator+</td><td>洩漏排除後，清除鎖存的警報</td></tr>
+<tr><td><strong>Zoom All</strong></td><td>—</td><td>趨勢圖縮放回全部資料</td></tr>
+</tbody></table></div>
+<h4 id="634-各比值列">6.3.4 各比值列</h4>
+<p>每一列由左到右：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>欄位</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>圓點</td><td>狀態顏色</td></tr>
+<tr><td><strong>名稱</strong></td><td>例如 <code>O 777 / N₂ 337</code></td></tr>
+<tr><td><strong>smoothed ratio</strong></td><td>EMA 平滑後的比值</td></tr>
+<tr><td><strong>百分比</strong></td><td>相對基準線的 %（100% = 基準線）</td></tr>
+<tr><td><strong>baseline (mean ± σ)</strong></td><td>這條比值的基準線平均值與標準差</td></tr>
+<tr><td><strong>斜率 / SNR</strong></td><td>上升速率，以及目前訊噪比</td></tr>
+<tr><td><strong>狀態</strong></td><td><code>Normal</code> / <code>WARNING</code> / <code>ALARM</code> / <code>No Plasma</code> / <code>Low Signal</code></td></tr>
+</tbody></table></div>
+<p>滑鼠停在該列上會顯示詳細數值（含目前的 warn / alarm 門檻）。</p>
+<p><strong>五種狀態</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>狀態</th><th>顏色</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td><code>Normal</code></td><td>綠</td><td>低於警告門檻</td></tr>
+<tr><td><code>WARNING</code></td><td>橘</td><td>持續超過警告門檻</td></tr>
+<tr><td><code>ALARM</code></td><td>紅</td><td>持續超過警報門檻（鎖存）</td></tr>
+<tr><td><code>No Plasma</code></td><td>—</td><td>參考譜線太弱，判定電漿沒開</td></tr>
+<tr><td><code>Low Signal</code></td><td>藍紫</td><td>電漿有開，但訊號或參考譜線太靠近雜訊底 —— <strong>這條比值被排除在警報判定之外</strong></td></tr>
+</tbody></table></div>
+<blockquote><p>💡 <code>Low Signal</code> 是刻意設計的保護。兩條都接近雜訊的譜線相除，結果再怎麼平滑都沒有意義，硬要判讀只會製造假警報。</p></blockquote>
+<p><strong>門檻怎麼算</strong>：警告門檻取 <code>max(WarnFactor × 基準均值, 基準均值 + SigmaWarn × σ)</code> —— 兩者取大。而且這裡的 σ 會取「Golden Run 的 σ」與「即時 EWMA 的 σ」<strong>較大者</strong>，所以當現場比基準時期更吵時，門檻會自動放寬，不會被自己的抖動觸發。</p>
+<h4 id="635-golden-run-擷取流程">6.3.5 Golden Run 擷取流程</h4>
+<ol>
+<li>確保製程正在跑，而且<strong>確定沒有洩漏</strong>。
+</li>
+<li>按 <strong>Capture Golden Run</strong>。
+</li>
+<li>填入配方／基準線名稱。
+</li>
+<li>勾選確認框（不勾就不能按 Start Capture）。
+</li>
+<li>按 <strong>Start Capture</strong>，預設平均 <strong>60 秒</strong>。
+</li>
+<li>完成後<strong>立即</strong>寫入 <code>settings.json</code>，並自動設為使用中的基準線。
+</li>
+</ol>
+<p>擷取期間的品質把關：</p>
+<ul>
+<li>只有<strong>通過 SNR 下限</strong>的幀才會被納入該比值的基準線（跟即時判定用同一道關卡）。
+</li>
+<li>若某條比值可評估的幀當中，<strong>通過率不到 50%</strong>，這條比值的基準線會被<strong>直接拒絕</strong>，並記進系統日誌。 → 避免弱訊號譜線用「剛好往上跳的那幾筆雜訊」湊出一條假基準線。
+</li>
+<li>同時會記錄 <strong>PlasmaPresentFloor</strong>（＝參考譜線基準均值的 <strong>20%</strong>），之後用來判斷「電漿有沒有開」。
+</li>
+</ul>
+<blockquote><p>⚠️ <strong>什麼時候必須重錄 Golden Run</strong>：改了積分時間或其他影響絕對強度的設定、換了參考譜線、清理過觀察窗、換過光纖、製程配方改變。</p></blockquote>
+<h4 id="636-趨勢圖">6.3.6 趨勢圖</h4>
+<p>畫每個比值的 <strong>% of baseline</strong> 隨時間變化，保留 <strong>30 分鐘</strong>。放大時時間軸仍會跟隨最新資料。</p>
+<hr>
+<h3 id="64-ratio-setup比值設定">6.4 Ratio Setup（比值設定）</h3>
+<p><strong>Engineer+ 才能存檔。</strong></p>
+<blockquote><p>⚠️ <strong>這裡的修改是「暫存」的。</strong> 按 Save 只是寫進 <code>settings.json</code>；要真正生效，必須回 Monitor 分頁 <strong>Stop → Start</strong> 重啟擷取。畫面上方的黃色提示條就是在講這件事。</p></blockquote>
+<h4 id="641-左側比值清單">6.4.1 左側：比值清單</h4>
+<ul>
+<li>勾選框 = 是否納入洩漏監控。
+</li>
+<li><strong>Add</strong> / <strong>Remove</strong> 增刪比值，<strong>最多 10 組</strong>（下方會顯示 <code>N of 10 ratios</code>）。
+</li>
+</ul>
+<h4 id="642-右側選定比值的細節">6.4.2 右側：選定比值的細節</h4>
+<p><strong>基本</strong></p>
+<ul>
+<li><strong>Display name</strong> — 顯示名稱。
+</li>
+<li><strong>Enabled</strong> — 是否納入監控。
+</li>
+</ul>
+<p><strong>Monitoring method（監控方式）</strong> — 這是關鍵選擇：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>模式</th><th>監控的量</th><th>適用情境</th></tr></thead>
+<tbody>
+<tr><td><code>Ratio</code></td><td>訊號 ÷ 參考</td><td><strong>預設。</strong> 標準 actinometry，能抵消電漿條件漂移</td></tr>
+<tr><td><code>AbsoluteIntensity</code></td><td>訊號線的絕對強度（扣背景後）&lt;br&gt;參考線<strong>只用來判斷電漿有沒有開</strong>，不做除法</td><td>訊號線很弱、接近雜訊底時。兩個小數字相除會劇烈擺盪，拿掉除法就少一個雜訊來源</td></tr>
+</tbody></table></div>
+<p><code>AbsoluteIntensity</code> 的代價：<strong>不再抵消電漿條件漂移</strong>（功率／壓力／流量變化會直接反映在讀值上）。因此使用它時必須維持穩定的操作點，並更頻繁地重錄基準線。</p>
+<blockquote><p>絕對強度模式下，% 趨勢的數字是用 σ 正規化過的分數（基準線 = 100，高一個 warn-σ = 120），這樣同一組 100/120/150 的參考線在兩種模式下都讀得通；斜率則以 σ/min 為單位。</p></blockquote>
+<p><strong>Signal line（訊號譜線）／ Reference line（參考譜線）</strong></p>
+<ul>
+<li><strong>Emission line</strong> — 從依元素分組的譜線 catalog 中挑選。若該譜線套用了波長修正，這裡會顯示例如 <code>+0.20 nm → 777.4 nm</code>。
+</li>
+<li><strong>Extraction（擷取方式）</strong>：
+<ul>
+<li><code>PeakHeight</code> — 窄的原子譜線用這個。</li>
+<li><code>Integral</code> — 分子帶頭（如 OH、NO、N₂）用這個。</li>
+</ul>
+</li>
+</ul>
+<blockquote><p>⚠️ <strong>換了參考譜線，原本的 Golden Run 基準線就失效</strong>（基準線綁定當初的參考譜線）。換完必須重錄。</p></blockquote>
+<p><strong>Alarm thresholds（警報門檻）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>預設</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Warn factor (×mean)</strong></td><td>1.2</td><td>基準均值的幾倍觸發警告（1.2 = +20%）</td></tr>
+<tr><td><strong>Alarm factor (×mean)</strong></td><td>1.5</td><td>基準均值的幾倍觸發警報（1.5 = +50%）</td></tr>
+<tr><td><strong>Warn σ (×sigma)</strong></td><td>3.0</td><td>基準均值 + 幾個 σ 觸發警告（與上面<strong>取較高者</strong>）</td></tr>
+<tr><td><strong>Alarm σ (×sigma)</strong></td><td>6.0</td><td>基準均值 + 幾個 σ 觸發警報</td></tr>
+<tr><td><strong>EMA τ (s)</strong></td><td>5.0</td><td>指數移動平均時間常數</td></tr>
+<tr><td><strong>Confirm (s)</strong></td><td>15.0</td><td>必須持續超過門檻幾秒才升級狀態</td></tr>
+<tr><td><strong>Min SNR</strong></td><td>5.0</td><td>兩條譜線都要超過這個訊噪比，比值才被採信。低於此值 → <code>Low Signal</code> 並排除在警報外。<strong>填 0 = 關閉這道保護</strong></td></tr>
+</tbody></table></div>
+<p>底部 <strong>Save</strong>（Engineer+）／ <strong>Revert</strong>（丟棄未存檔的修改）。</p>
+<hr>
+<h3 id="65-wavelength-calibration波長校正">6.5 Wavelength Calibration（波長校正）</h3>
+<p><strong>Engineer+ 才能存檔，同樣是暫存 → Stop/Start 才生效。</strong></p>
+<p>用途：補償光譜儀的<strong>波長軸漂移</strong>。每一列把 catalog 中的一條 <code>(元素, 波長)</code> 譜線加上一個位移量（nm）。</p>
+<p><strong>關鍵特性</strong>：因為 key 是 catalog 的 <code>(元素, 波長)</code>，所以修正一次就會<strong>同時套用到所有用到這條譜線的比值</strong>（不論它當訊號線還是參考線），不必逐一去改。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>欄位</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Element</strong></td><td>元素／物種</td></tr>
+<tr><td><strong>Wavelength (nm)</strong></td><td>catalog 中的原始波長</td></tr>
+<tr><td><strong>Correction (nm)</strong></td><td>加上去的位移量。有效中心 = catalog 波長 + 此值。<strong>上限 ±5 nm</strong></td></tr>
+</tbody></table></div>
+<p>沒有任何列時＝所有譜線都用 catalog 原始波長。</p>
+<p><strong>Add</strong> / <strong>Remove</strong> 增刪，底部 <strong>Save</strong> / <strong>Revert</strong>。存檔時會檢查位移範圍，並拒絕重複的 <code>(元素, 波長)</code> 組合。</p>
+<blockquote><p>💡 <strong>跟 Peak Search 的差別</strong>：每條譜線本來就會在 ±1 nm 內自動重新對準區域峰值。這個修正是給<strong>更大的軸漂移</strong>，或是「±1 nm 搜尋範圍裡剛好卡了另一根錯的峰」的情況用的。</p>
+<p>這裡的修正<strong>只影響量測</strong>，不會寫回 <code>settings.json</code> 裡的原始 catalog 波長。</p></blockquote>
+<hr>
+<h3 id="66-leak-calibration洩漏率校正">6.6 Leak Calibration（洩漏率校正）</h3>
+<p><strong>Engineer+ 才能存檔。</strong> 目的：把「比值上升了多少」換算成「漏了多少 mbar·L/s」。</p>
+<blockquote><p>⚠️⚠️ <strong>標準漏孔必須是空氣</strong>（或就是你要偵測的那種洩漏）。用惰性氣體（如 He）的標準漏孔<strong>完全無效</strong> —— 它不會抬升 O / OH / NO 的訊號。</p></blockquote>
+<h4 id="661-原理">6.6.1 原理</h4>
+<p>對每個比值擬合一條<strong>過原點</strong>的加權最小平方直線：</p>
+<pre><code>x ≈ s · Q</code></pre>
+<ul>
+<li><code>x</code> = 相對基準線的上升量（Ratio 模式是<strong>相對</strong>上升 <code>比值/基準均值 − 1</code>；AbsoluteIntensity 模式是<strong>絕對</strong>上升 <code>Δ = 值 − 基準均值</code>）
+</li>
+<li><code>Q</code> = 已知漏率（mbar·L/s）
+</li>
+<li><code>s</code> = 該比值的靈敏度
+</li>
+</ul>
+<p>即時運算時反過來求 <code>Qᵢ = xᵢ / sᵢ</code>，再把所有比值用<strong>逆變異數加權融合</strong>成一個 <code>Q̂ ± σ_Q</code>，並給出跨比值一致性的信心度。</p>
+<p>「無洩漏」狀態就是原點（Q = 0, x = 0），不需要另外量一個點。</p>
+<h4 id="662-操作步驟">6.6.2 操作步驟</h4>
+<ol>
+<li><strong>選 Baseline (Golden Run)</strong> — 這份校正會綁定到這條基準線。
+</li>
+<li><strong>填 Calibration name</strong> — 例如 <code>Recipe-A-cal-20260804</code>。
+</li>
+<li>掛上第一顆已知漏率的標準漏孔，<strong>打開它</strong>，等電漿穩定。
+</li>
+<li>按 <strong>Capture Point…</strong>
+<ul>
+<li>填 <strong>Known leak rate (mbar·L/s)</strong>，支援科學記號（<code>1.2e-4</code>）。</li>
+<li>填 <strong>Leak element / label</strong>（選填，建議填標準漏孔編號）。</li>
+<li>勾選確認框 → <strong>Start Capture</strong>。預設平均 <strong>30 秒</strong>。</li>
+</ul>
+</li>
+<li>換下一顆不同漏率的標準漏孔，重複步驟 3–4。<strong>至少兩點</strong>，建議三點以上並涵蓋你關心的漏率範圍。
+</li>
+<li>檢查中間的資料表（漏率、標籤、比值數、各比值的 <code>x ± σ</code>）。
+<ul>
+<li>要刪除某一點：選取後按 <strong>Remove Selected</strong>。</li>
+<li>全部重來：<strong>Clear Points</strong>。</li>
+</ul>
+</li>
+<li>按 <strong>Save Calibration</strong>。<strong>Fitted sensitivities</strong> 區塊會顯示各比值擬合出的靈敏度。
+</li>
+</ol>
+<p>存檔後<strong>立即生效</strong>（不像 Ratio Setup 需要重啟擷取），Leak Monitor 分頁的讀值馬上會出現。</p>
+<h4 id="663-有效性把關">6.6.3 有效性把關</h4>
+<p>校正<strong>只在對應的 Golden Run 是使用中基準線時</strong>才會套用：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>狀態</th><th>行為</th></tr></thead>
+<tbody>
+<tr><td><code>NotCalibrated</code></td><td>沒有使用中的校正，只做定性警報</td></tr>
+<tr><td><code>Active</code></td><td>正常估算</td></tr>
+<tr><td><code>BaselineMismatch</code></td><td>基準線換成別條了 → <strong>暫停估算</strong>（而不是給出被錯誤縮放的數字）</td></tr>
+</tbody></table></div>
+<p>切換或重新擷取 Golden Run 時，系統會<strong>自動配對</strong>綁定該基準線的最新校正，所以換配方不會留下過期的 <code>BaselineMismatch</code>。狀態轉換都會寫進系統日誌。</p>
+<p>若某個比值的監控模式（Ratio ↔ AbsoluteIntensity）在校正之後被改過，該比值的擬合會被拒用 —— 因為兩種模式的 <code>x</code> 單位不同。</p>
+<blockquote><p>完整的數學模型與設計文件見 <code>docs/leak-rate-calibration.md</code>。</p></blockquote>
+<hr>
+<h3 id="67-recordings光譜回放">6.7 Recordings（光譜回放）</h3>
+<p>回放記錄器寫出的光譜 CSV。</p>
+<p><strong>工具列</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>按鈕</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Refresh</strong></td><td>重新掃描資料夾</td></tr>
+<tr><td><strong>Open Base</strong></td><td>用檔案總管開啟記錄器的根目錄</td></tr>
+<tr><td><strong>Open Folder</strong></td><td>開啟選定 session 的資料夾</td></tr>
+<tr><td><strong>Open File</strong></td><td>用預設程式開啟該 CSV</td></tr>
+<tr><td><strong>Line</strong> / <strong>Heatmap</strong></td><td>切換檢視模式（目前模式有綠色外框）</td></tr>
+<tr><td><strong>Save PNG</strong> / <strong>Copy Image</strong></td><td>匯出目前圖表</td></tr>
+<tr><td><strong>Clear Compare</strong></td><td>移除比較用的第二個 session</td></tr>
+</tbody></table></div>
+<p><strong>篩選</strong>：Search（日期／時間／檔名關鍵字）、From / To 日期、<strong>Wavelength (nm)</strong>（投影到線圖的波長；按 Enter 或點到別處才套用）。</p>
+<p><strong>版面</strong></p>
+<ul>
+<li>左側：session 清單（Date / Time / Rot / Size）。<strong>可以多選兩個 session 做疊圖比較。</strong>
+</li>
+<li>右上：主圖（線圖或熱圖）。
+</li>
+<li>右下左：單幀光譜 —— 在主圖上點一下就會顯示該時間點的完整光譜。
+</li>
+<li>右下右：<strong>Notes</strong> —— 打字後按 <strong>Save Notes</strong>，會存成 CSV 旁邊的 <code>.notes.txt</code> 伴隨檔。
+</li>
+</ul>
+<hr>
+<h3 id="68-ratio-review比值回放">6.8 Ratio Review（比值回放）</h3>
+<p>回放記錄器寫出的比值 CSV（<code>{prefix}_Ratio_*.csv</code>）。</p>
+<p><strong>三種檢視模式</strong>（同樣以綠框標示目前模式）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>模式</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><strong>% of baseline</strong></td><td>各比值相對基準線的百分比，附 100 / 120 / 150 % 參考線</td></tr>
+<tr><td><strong>Raw ratio</strong></td><td>未正規化的原始比值</td></tr>
+<tr><td><strong>Leak rate</strong></td><td>校正後的 <code>Q̂</code>（mbar·L/s），附半透明 ±1σ 帶</td></tr>
+</tbody></table></div>
+<p>圖表背景會用半透明色帶標出當時的 Warning / Alarm 狀態。</p>
+<blockquote><p>📝 <strong>Leak rate</strong> 模式只有在該 CSV 含有 <code>LeakRate</code> / <code>LeakRateSigma</code> 欄位時才有東西可畫。校正功能上線前錄的舊檔沒有這兩欄，仍然可以正常開啟與檢視前兩種模式。</p></blockquote>
+<p>其餘按鈕（Refresh / Open Base / Open Folder / Open File / Zoom All / Save PNG / Copy Image / Search）用法同 Recordings。</p>
+<hr>
+<h3 id="69-logs系統日誌">6.9 Logs（系統日誌）</h3>
+<p>顯示系統稽核日誌，記錄：</p>
+<ul>
+<li>裝置連線／中斷、擷取啟停
+</li>
+<li>記錄器開檔／收檔／錯誤
+</li>
+<li>登入／登出／自動鎖定／使用者管理
+</li>
+<li><strong>警報狀態轉換</strong>
+</li>
+<li><strong>Golden Run 擷取</strong>（含被拒絕的比值與原因）
+</li>
+<li><strong>洩漏率校正的啟用／暫停／清除</strong>
+</li>
+<li>Ratio CSV 被略過的原因
+</li>
+</ul>
+<p>日誌檔位置：<code>%APPDATA%\OES_Leak_Monitor\Logs\yyMMddHH.csv</code>（每小時一個檔）。</p>
+<blockquote><p>追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方。</p></blockquote>
+<hr>
+<h2 id="7-檔案與資料夾">7. 檔案與資料夾</h2>
+<h3 id="71-位置">7.1 位置</h3>
+<pre><code>%APPDATA%\OES_Leak_Monitor\
+├── settings.json          ← 所有設定（裝置參數、記錄器、比值、Golden Run、校正、波長修正）
+├── Data\                  ← 記錄的 CSV（可在 Configuration 改成別的路徑）
+│   └── 202608\
+│       └── 04\
+│           ├── P_OES1_0804153012.csv        ← 強度／全光譜
+│           ├── P_OES1_0804153012_1.csv      ← 超過記憶體上限時的續檔
+│           ├── P_Ratio_0804153012.csv       ← 對應的比值檔
+│           └── P_0804153012.notes.txt       ← Recordings 分頁存的筆記（檔名不含 tag）
+└── Logs\
+    └── 26080415.csv       ← 系統稽核日誌（每小時一檔）</code></pre>
+<p><code>%APPDATA%</code> 通常是 <code>C:\Users\&lt;你的帳號&gt;\AppData\Roaming</code>。</p>
+<h3 id="72-檔名規則">7.2 檔名規則</h3>
+<pre><code>{prefix}_{tag}_{MMddHHmmss}[_N].csv</code></pre>
+<ul>
+<li><code>prefix</code> — Configuration 裡設的 File Prefix
+</li>
+<li><code>tag</code> — <code>OES1</code>（強度檔）或 <code>Ratio</code>（比值檔）
+</li>
+<li><code>MMddHHmmss</code> — session 起始時間（<strong>年份由上層資料夾還原</strong>）
+</li>
+<li><code>_N</code> — 超過記憶體預算後的續檔序號
+</li>
+</ul>
+<h3 id="73-比值-csv-格式">7.3 比值 CSV 格式</h3>
+<pre><code>Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,LeakRateSigma</code></pre>
+<p>每個比值兩欄（原始值 + % 基準），最後三欄是整體狀態與洩漏率估計。欄位是<strong>依標題名稱</strong>尋址的，所以舊版沒有 <code>LeakRate</code> 欄位的檔案仍可正常解析。</p>
+<p>比值檔與強度檔<strong>同步開關</strong> —— 只有在電漿強度高於觸發門檻時才有資料。</p>
+<h3 id="74-備份建議">7.4 備份建議</h3>
+<p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正與波長修正。</p>
+<hr>
+<h2 id="8-日常操作-sop">8. 日常操作 SOP</h2>
+<h3 id="81-每天開機">8.1 每天開機</h3>
+<ol>
+<li>啟動程式 → <strong>Sign In</strong>。
+</li>
+<li><strong>Monitor</strong> → <strong>Connect</strong> → 確認 <code>Test Mode = False</code>。
+</li>
+<li>按 <strong>Start</strong>。
+</li>
+<li>切到 <strong>Leak Monitor</strong>，確認：
+<ul>
+<li><strong>Baseline</strong> 下拉選的是今天配方對應的基準線。</li>
+<li>狀態橫幅在電漿點著後轉為綠色 <code>OK — within baseline</code>。</li>
+<li>沒有 <code>LOW SIGNAL</code> 警示。</li>
+</ul>
+</li>
+<li><strong>Configuration</strong> → <strong>Start Save</strong> 武裝記錄器（若需要留資料）。
+</li>
+</ol>
+<h3 id="82-換配方">8.2 換配方</h3>
+<ol>
+<li><strong>Leak Monitor</strong> → <strong>Baseline</strong> 下拉切到新配方的基準線。
+<ul>
+<li>洩漏率校正會<strong>自動跟著切換</strong>。</li>
+<li>若新配方還沒有基準線 → 跑一段良品製程後 <strong>Capture Golden Run</strong>。</li>
+</ul>
+</li>
+<li>按 <strong>Reset Run</strong> 開新的記錄檔並清空趨勢。
+</li>
+</ol>
+<h3 id="83-警報發生時">8.3 警報發生時</h3>
+<ol>
+<li>記下狀態橫幅的時間與 <strong>Leak rate</strong> 讀值。
+</li>
+<li>看<strong>哪幾條比值</strong>進了 ALARM：
+<ul>
+<li>O / OH / NO 一起上升 → 典型的<strong>空氣洩漏</strong>。</li>
+<li>只有單一條上升 → 可能是該譜線受干擾，或有其他製程變化。</li>
+</ul>
+</li>
+<li>到 <strong>Ratio Review</strong> 回放這段時間，確認是<strong>持續上升</strong>還是短暫尖峰。
+</li>
+<li>實體檢查（O-ring、法蘭、視窗、閥件）。
+</li>
+<li>排除後 → <strong>Acknowledge Alarm</strong> 清除鎖存。
+</li>
+</ol>
+<h3 id="84-定期維護">8.4 定期維護</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>週期</th><th>動作</th></tr></thead>
+<tbody>
+<tr><td>每次清潔觀察窗／換光纖後</td><td><strong>重錄 Golden Run</strong></td></tr>
+<tr><td>每次更動積分時間等曝光參數後</td><td><strong>重錄 Golden Run</strong></td></tr>
+<tr><td>定期（依機台穩定度）</td><td>檢查波長是否漂移，必要時用 Wavelength Calibration 修正</td></tr>
+<tr><td>定期</td><td>用標準漏孔重驗洩漏率校正是否仍準確</td></tr>
+<tr><td>定期</td><td>清理舊的 <code>Data\</code> 資料夾（程式不會自動刪檔）</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="9-疑難排解">9. 疑難排解</h2>
+<h3 id="91-按-connect-後掉進測試模式明明接了硬體">9.1 按 Connect 後掉進測試模式（明明接了硬體）</h3>
+<p>最常見原因：<strong>原生 DLL 不在 <code>.exe</code> 旁邊</strong>。</p>
+<p>檢查程式資料夾裡有沒有 <code>UserApplication.dll</code>、<code>SiUSBXp.dll</code>、<code>libsodium.dll</code>。SDK 的 DLL 解析器<strong>只會在程式所在目錄找</strong>，放到子資料夾沒有用。</p>
+<p>其他要檢查的：</p>
+<ul>
+<li>Configuration 分頁的 <strong>Force Test Mode</strong> 是不是被勾起來了。
+</li>
+<li>USB 線／驅動、裝置管理員裡有沒有看到裝置。
+</li>
+<li>乙太網路機種：0.4.6 已修正預設 device type（改為 Z5，並會自動改試另一種），若仍連不上請確認 IP 設定。
+</li>
+</ul>
+<h3 id="92-光譜幀出現斷裂撕裂">9.2 光譜幀出現斷裂／撕裂</h3>
+<p>Configuration → <strong>Acquire Mode</strong> 改成 <code>Oneshot</code> → <strong>Apply</strong>。常見於 Z5／乙太網路機種在長積分時間下。</p>
+<h3 id="93-峰形變寬峰位偏移">9.3 峰形變寬、峰位偏移</h3>
+<p>Configuration → <strong>Average Mode</strong> 改成 <code>Software</code> → <strong>Apply</strong>。某些機種的硬體平均器在多次讀取時會錯位。代價是速度變慢約 N 倍（N = Average Count）。</p>
+<h3 id="94-一直顯示-low-signal">9.4 一直顯示 Low Signal</h3>
+<p>代表訊號或參考譜線太靠近雜訊底。依序嘗試：</p>
+<ol>
+<li><strong>拉長積分時間</strong>（Configuration → Integration Time → Apply）。
+</li>
+<li><strong>提高 Average Count</strong>（配合 <code>Software</code> 平均模式）。
+</li>
+<li>檢查<strong>光纖對位</strong>與<strong>觀察窗是否髒污</strong>。
+</li>
+<li>該譜線在你的機台上本來就很弱 → 到 Ratio Setup 把它的 <strong>Monitoring method</strong> 改成 <code>AbsoluteIntensity</code>。
+</li>
+<li>最後手段：調低該比值的 <strong>Min SNR</strong>。<strong>不建議</strong>設為 0 —— 那等於關掉假警報保護。
+</li>
+</ol>
+<h3 id="95-golden-run-錄完後某條比值沒有基準線">9.5 Golden Run 錄完後某條比值沒有基準線</h3>
+<p>系統日誌會有 <code>GoldenRunRatioLowSnr</code> 記錄。原因是該比值可評估的幀當中，通過 SNR 下限的<strong>不到一半</strong>，基準線被主動拒絕了。</p>
+<p>處理方式同 §9.4 —— 先把訊號救起來，再重錄。</p>
+<h3 id="96-進不了-configuration-分頁">9.6 進不了 Configuration 分頁</h3>
+<p>正常行為 —— 該分頁需要 <strong>Engineer</strong> 以上。點進去會跳出登入視窗，取消就退回原本的分頁。請用 Engineer 或 Admin 帳號登入。</p>
+<p>若登入後角色又掉回 Engineer 以下（例如閒置自動鎖定），畫面會自動跳回 Monitor 分頁。</p>
+<blockquote><p>📌 <strong>歷史問題（已修正）</strong>：舊版用硬編的分頁索引做這道檢查，在插入 Wavelength Calibration 分頁後指到了錯誤的分頁，導致 Configuration 一度<strong>完全沒有權限保護</strong>。現已改為以分頁名稱（<code>x:Name</code>）比對，插入新分頁不會再讓權限檢查失準。若你手上的版本早於此修正，請升級。</p></blockquote>
+<h3 id="97-改了-ratio-setup-但沒反應">9.7 改了 Ratio Setup 但沒反應</h3>
+<p>Ratio Setup 與 Wavelength Calibration 的修改是<strong>暫存</strong>的。按完 <strong>Save</strong> 之後，必須到 Monitor 分頁 <strong>Stop → Start</strong> 重啟擷取才會生效。</p>
+<p>（Leak Calibration 例外 —— 它存檔後立即生效。）</p>
+<h3 id="98-沒有產生-ratio-csv">9.8 沒有產生 Ratio CSV</h3>
+<p>依序確認：</p>
+<ol>
+<li>記錄器有沒有真的在存檔（Logger Status 應為 <code>Saving</code>）—— 強度必須<strong>高於觸發門檻</strong>才會開檔。
+</li>
+<li><code>settings.json</code> 裡 <code>RatioCsvEnabled</code> 是否為 <code>true</code>（預設是）。
+</li>
+<li>看 <strong>Logs</strong> 分頁有沒有 <code>RatioCsvSkipped</code> 記錄，裡面會寫原因。
+</li>
+</ol>
+<h3 id="99-測試模式下警報不會跳">9.9 測試模式下警報不會跳</h3>
+<p>這是預期行為（<code>SuppressAlarmsInTestMode</code> 預設為 <code>true</code>）。若要在測試模式下演練警報，需要改這個設定，或改用真實／異常資料。</p>
+<h3 id="910-guest-關不掉程式">9.10 Guest 關不掉程式</h3>
+<p>這也是刻意設計 —— 必須先 <strong>Sign In</strong>（任何非 Guest 角色都可以）才能關閉視窗。X 鈕、Alt+F4、系統選單都會被擋。</p>
+<hr>
+<h2 id="10-附錄參數預設值">10. 附錄：參數預設值</h2>
+<h3 id="101-硬體參數">10.1 硬體參數</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>預設值</th></tr></thead>
+<tbody>
+<tr><td>Integration Time</td><td>50 ms</td></tr>
+<tr><td>Acquire Mode</td><td><code>HardwareAverage</code></td></tr>
+<tr><td>Average Count</td><td>1</td></tr>
+<tr><td>Average Mode</td><td><code>Hardware</code></td></tr>
+<tr><td>Boxcar Width</td><td>1（關閉）</td></tr>
+<tr><td>Polling Interval</td><td>200 ms</td></tr>
+<tr><td>Max Consecutive Errors</td><td>5</td></tr>
+<tr><td>Force Test Mode</td><td>開</td></tr>
+<tr><td>Background Remove</td><td>開</td></tr>
+<tr><td>Straylight Correction</td><td>關</td></tr>
+<tr><td>Linearity Correction</td><td>開</td></tr>
+</tbody></table></div>
+<h3 id="102-比值門檻每組比值各自可調">10.2 比值門檻（每組比值各自可調）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>預設值</th></tr></thead>
+<tbody>
+<tr><td>Warn factor</td><td>1.2（基準線 +20%）</td></tr>
+<tr><td>Alarm factor</td><td>1.5（基準線 +50%）</td></tr>
+<tr><td>Warn σ</td><td>3.0</td></tr>
+<tr><td>Alarm σ</td><td>6.0</td></tr>
+<tr><td>EMA τ</td><td>5.0 s</td></tr>
+<tr><td>Confirm time</td><td>15.0 s</td></tr>
+<tr><td>Min SNR</td><td>5.0</td></tr>
+<tr><td>Monitoring method</td><td><code>Ratio</code></td></tr>
+</tbody></table></div>
+<h3 id="103-洩漏監控全域設定">10.3 洩漏監控全域設定</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>預設值</th></tr></thead>
+<tbody>
+<tr><td>Golden Run 擷取時間</td><td>60 s</td></tr>
+<tr><td>校正點擷取時間</td><td>30 s</td></tr>
+<tr><td>需要兩條比值才報 Alarm</td><td>是</td></tr>
+<tr><td>測試模式抑制警報</td><td>是</td></tr>
+<tr><td>寫出 Ratio CSV</td><td>是</td></tr>
+<tr><td>基準線接受門檻</td><td>可評估幀中至少 50% 通過 SNR</td></tr>
+<tr><td>電漿存在判定</td><td>參考譜線基準均值的 20%</td></tr>
+<tr><td>比值數量上限</td><td>10</td></tr>
+<tr><td>波長修正上限</td><td>±5 nm</td></tr>
+</tbody></table></div>
+<h3 id="104-出廠預設比值">10.4 出廠預設比值</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Key</th><th>名稱</th><th>訊號線</th><th>擷取方式</th><th>參考線</th></tr></thead>
+<tbody>
+<tr><td><code>R_O</code></td><td>O 777 / N₂ 337</td><td>O 777.2 nm</td><td>PeakHeight</td><td>N₂ 337.1 nm</td></tr>
+<tr><td><code>R_OH</code></td><td>OH 309 / N₂ 337</td><td>OH 308.9 nm</td><td>Integral</td><td>N₂ 337.1 nm</td></tr>
+<tr><td><code>R_NO</code></td><td>NO 237 / N₂ 337</td><td>NO 237.0 nm</td><td>Integral</td><td>N₂ 337.1 nm</td></tr>
+<tr><td><code>R_Ar</code></td><td>Ar 750 / N₂ 337</td><td>Ar 750.4 nm</td><td>PeakHeight</td><td>N₂ 337.1 nm</td></tr>
+</tbody></table></div>
+<h3 id="105-可選參考譜線">10.5 可選參考譜線</h3>
+<p><code>N₂ 337.1</code>、<code>N₂ 662.4</code>、<code>Hα 656.3</code>、<code>Ar 750.4</code>、<code>Ar 811.5</code></p>
+<h3 id="106-趨勢圖">10.6 趨勢圖</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>Monitor 強度趨勢保留</td><td>30 分鐘</td></tr>
+<tr><td>Leak Monitor % 趨勢保留</td><td>30 分鐘</td></tr>
+<tr><td>強度趨勢峰值搜尋範圍</td><td>±0.5 nm</td></tr>
+<tr><td>Smooth 的 EMA τ</td><td>3 s</td></tr>
+<tr><td>強度趨勢最多線數</td><td>1 條 trigger + 5 條 monitored</td></tr>
+</tbody></table></div>
+<h3 id="107-帳號">10.7 帳號</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>預設帳號</td><td><code>admin</code> / <code>admin</code> ← <strong>請立即更改</strong></td></tr>
+<tr><td>閒置自動鎖定</td><td>5 分鐘</td></tr>
+<tr><td>角色等級</td><td>Guest(0) &lt; Operator(1) &lt; Engineer(2) &lt; Admin(3)</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="名詞對照">名詞對照</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>中文</th><th>英文</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>光學發射光譜</td><td>OES (Optical Emission Spectroscopy)</td><td>分析電漿自身發光的技術</td></tr>
+<tr><td>比值法</td><td>Actinometry</td><td>用參考譜線相除以消除電漿條件漂移</td></tr>
+<tr><td>基準線</td><td>Golden Run / Baseline</td><td>無洩漏狀態下錄的參考值</td></tr>
+<tr><td>訊噪比</td><td>SNR</td><td>譜線強度相對本地雜訊的比值</td></tr>
+<tr><td>積分時間</td><td>Integration Time</td><td>偵測器單次曝光時間</td></tr>
+<tr><td>鎖存</td><td>Latched</td><td>警報一旦觸發就保持，需人工清除</td></tr>
+<tr><td>標準漏孔</td><td>Calibrated Leak</td><td>已知漏率的校正件</td></tr>
+<tr><td>漏率</td><td>Leak Rate (mbar·L/s)</td><td>單位時間洩漏的氣體量</td></tr>
+</tbody></table></div>
+</main>
+</div>
+</body>
+</html>
