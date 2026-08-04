@@ -24,7 +24,7 @@ There is no automated test suite, so changes are validated by running the app. W
 
 `Properties/PublishProfiles/SelfContained-win-x64.pubxml` produces a single self-contained `.exe` (the .NET 8 runtime is bundled in). Three ways to run it: double-click `publish.cmd` in the repo root; `dotnet publish src/OES_Leak_Monitor/OES_Leak_Monitor.csproj -p:PublishProfile=SelfContained-win-x64`; or in Visual Studio right-click the project → Publish → that profile. The `/publish` Claude slash command does the same. Output: `src/OES_Leak_Monitor/bin/Publish/win-x64/`.
 
-The `.exe` bundles all managed code plus the .NET 8 runtime, but native DLLs are not embedded — the output folder also holds the WPF native DLLs (`wpfgfx_cor3.dll`, `PresentationNative_cor3.dll`, `D3DCompiler_47_cor3.dll`, `PenImc_cor3.dll`, `vcruntime140_cor3.dll`) and the OES native DLLs (`UserApplication.dll`, `SiUSBXp.dll`). Ship the whole folder together — those DLLs are loose next to the `.exe` on purpose (the `DllResolver` only searches the app base directory; see the native-DLL note below). Do not enable `IncludeNativeLibrariesForSelfExtract` — it would bundle the OES DLLs into the exe and break hardware connect.
+The `.exe` bundles all managed code plus the .NET 8 runtime, but native DLLs are not embedded — the output folder also holds the WPF native DLLs (`wpfgfx_cor3.dll`, `PresentationNative_cor3.dll`, `D3DCompiler_47_cor3.dll`, `PenImc_cor3.dll`, `vcruntime140_cor3.dll`) and the OES native DLLs (`UserApplication.dll`, `SiUSBXp.dll`, `libsodium.dll`). Ship the whole folder together — those DLLs are loose next to the `.exe` on purpose (the `DllResolver` only searches the app base directory; see the native-DLL note below). Do not enable `IncludeNativeLibrariesForSelfExtract` — it would bundle the OES DLLs into the exe and break hardware connect.
 
 ### NuGet feed prerequisite
 
@@ -32,7 +32,7 @@ The `.exe` bundles all managed code plus the .NET 8 runtime, but native DLLs are
 
 ### Native DLL flattening (do not remove)
 
-`Aqst.OesSpectrometer` ships `UserApplication.dll` and `SiUSBXp.dll` under `runtimes\win-x64\native\`, but the package's `DllResolver` only searches the app base directory. The `FlattenOesNativeDlls` MSBuild target in `OES_Leak_Monitor.csproj` copies those two DLLs into `$(OutDir)` (and `$(PublishDir)`) after Build/Publish. If hardware connect silently falls back to test mode, check that those files reached the output root.
+`Aqst.OesSpectrometer` ships `UserApplication.dll`, `SiUSBXp.dll` and `libsodium.dll` under `runtimes\win-x64\native\`, but the package's `DllResolver` only searches the app base directory. The `FlattenOesNativeDlls` MSBuild target in `OES_Leak_Monitor.csproj` copies those three DLLs into `$(OutDir)` (and `$(PublishDir)`) after Build/Publish. If hardware connect silently falls back to test mode, check that those files reached the output root.
 
 ## Architecture
 
@@ -44,6 +44,7 @@ This is a **single-OES** leak-monitoring fork of a previously dual-OES codebase.
 - `AccessControlService`, `UserRole` (Guest < Operator < Engineer < Admin), `LoginDialog`, `UserManagementDialog`, `AccessControlConfig`
 - `OesAppPaths` — resolves per-user AppData subfolders (`Config`, `Log`, `Data`) under the app folder name
 - `RelayCommand`, `DeviceSettings`, `LoggerSettings`, `LogSeverity`
+  - `DeviceSettings.AcquireMode` (`HardwareAverage` / `Oneshot` / `Standard`) and `DeviceSettings.AverageMode` (`Hardware` / `Software`) are exposed as combo boxes in the Configuration tab and hot-applied by Apply (`UpdateParametersAsync`). `Oneshot` is the fix for segmented / torn frames on Z5 / Ethernet modules; `Software` averaging trades N× wall-clock for avoiding the peak shift / broadening some hardware averagers introduce. Both round-trip through `settings.json` as strings (`SettingsService` registers `JsonStringEnumConverter`), so pre-existing files without the keys just keep the defaults.
 - WPF user controls bound in `MainWindow.xaml`: `DevicePanel`, `ConfigurationPanel`, `LoggerPanel`, `LogViewerPanel`
 - Global `using Aqst.OesApp.Core;` and `using Aqst.OesApp.Wpf;` are injected via the csproj, so these types appear unqualified throughout.
 
