@@ -45,7 +45,7 @@
 
         <TabControl Grid.Row="1" Margin="0" x:Name="MainTabControl"
                     SelectionChanged="MainTabControl_SelectionChanged">
-            <TabItem Header="Monitor">
+            <TabItem Header="Monitor" x:Name="MonitorTab">
                 <!-- A fixed header row (always visible) carries the Reset Run action; below it
                      the spectrum panel at its natural size and the selected-wavelength trend
                      chart stacked at a fixed readable height. The lower part scrolls if the
@@ -99,7 +99,7 @@
                 <local:LeakCalibrationPanel DataContext="{Binding LeakCalibration}"/>
             </TabItem>
 
-            <TabItem Header="Configuration">
+            <TabItem Header="Configuration" x:Name="ConfigurationTab">
                 <Grid Background="#F4F6FA">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>

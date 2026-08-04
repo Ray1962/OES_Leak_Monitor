@@ -79,7 +79,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <Button Content="Add"    Command="{Binding AddRatioCommand}"
                                         Padding="10,4" MinWidth="64" Margin="0,0,4,0"
-                                        ToolTip="Add a new species ratio (up to 5)."/>
+                                        ToolTip="Add a new species ratio (up to 10)."/>
                                 <Button Content="Remove" Command="{Binding RemoveRatioCommand}"
                                         Padding="10,4" MinWidth="64"
                                         ToolTip="Remove the selected ratio."/>

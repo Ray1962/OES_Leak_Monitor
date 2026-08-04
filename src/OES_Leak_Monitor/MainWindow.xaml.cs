@@ -5,11 +5,11 @@ namespace OES_Leak_Monitor;
 
 public partial class MainWindow : Window
 {
-    private const int MonitorTabIndex       = 0;
-    // Tab order: Monitor(0), Leak Monitor(1), Ratio Setup(2), Leak Calibration(3),
-    // Configuration(4), Recordings(5), Ratio Review(6), Logs(7). Keep this in sync with
-    // MainWindow.xaml.
-    private const int ConfigurationTabIndex = 4;
+    // The gated tabs are referenced by their x:Name from MainWindow.xaml, not by index.
+    // Hard-coded indices silently pointed at the wrong tab every time a tab was inserted
+    // ahead of them — which is exactly how the Configuration gate came to be checking the
+    // Leak Calibration tab instead. A name is resolved by the XAML compiler, so inserting
+    // tabs can no longer move the gate off its target.
 
     private int  _previousTabIndex;
     private bool _suppressTabChange;
@@ -72,11 +72,11 @@ public partial class MainWindow : Window
         // If the role just dropped below Engineer while on the Configuration tab,
         // snap back to Monitor so the user can't keep editing parameters.
         if (role < UserRole.Engineer
-            && MainTabControl.SelectedIndex == ConfigurationTabIndex)
+            && ReferenceEquals(MainTabControl.SelectedItem, ConfigurationTab))
         {
             _suppressTabChange = true;
-            MainTabControl.SelectedIndex = MonitorTabIndex;
-            _previousTabIndex = MonitorTabIndex;
+            MainTabControl.SelectedItem = MonitorTab;
+            _previousTabIndex = MainTabControl.Items.IndexOf(MonitorTab);
             _suppressTabChange = false;
         }
     }
@@ -120,7 +120,7 @@ public partial class MainWindow : Window
 
         var newIndex = MainTabControl.SelectedIndex;
 
-        if (newIndex == ConfigurationTabIndex
+        if (ReferenceEquals(MainTabControl.SelectedItem, ConfigurationTab)
             && Vm.AccessControl.CurrentRole < UserRole.Engineer)
         {
             if (!TryRequireEngineer())
