@@ -28,7 +28,12 @@ The `.exe` bundles all managed code plus the .NET 8 runtime, but native DLLs are
 
 The `CopyOperatorManual` target also drops `docs/user-manual-zh-TW.html` into the publish folder (publish only, not build), so a delivery folder carries its own manual. It warns rather than fails when the HTML is missing — regenerate it first (see [Documentation](#documentation)).
 
-> ⚠️ **Always publish into an empty folder.** Running `dotnet publish` twice with no intervening change silently strips every loose native DLL from `bin/Publish/win-x64/`, leaving only the `.exe` — a folder that launches fine and then falls back to test mode on the production PC, which is the hardest failure mode to diagnose. Delete `bin/Publish/win-x64/` before publishing, and check the folder holds **10** files afterwards. (`publish.cmd` does not do this for you.)
+Two guards exist because a publish can "succeed" and still produce an unshippable folder. Left alone, an incremental `dotnet publish` (nothing changed since the last one) keeps the `.exe` but strips every loose native DLL — a folder that launches fine and then falls back to test mode on the production PC, the hardest failure mode this app has:
+
+- `EmptyPublishDirBeforePublish` (csproj) empties `$(PublishDir)` first, so every publish is a full copy. It hooks **`PrepareForPublish`, not `Publish`** — the pipeline copies its files inside targets that `Publish` depends on, so `BeforeTargets="Publish"` runs *after* the copy and would delete exactly what it was meant to protect. It only ever cleans a folder under the project's own `bin\`; a `-o` path outside it is warned about, not deleted.
+- `publish.cmd` re-checks all 10 expected files afterwards and refuses with a non-zero exit if any are missing.
+
+> ⚠️ **Never `set` an MSBuild property name as an environment variable in `publish.cmd`.** Environment variables become global MSBuild properties, so a helper called `OUTDIR` silently becomes `OutDir`, redirects the *build* output into the publish folder, and single-file bundling then dies with `Unable to access file during bundling` / a missing `runtimeconfig.json`. The folder-path helper is deliberately named `PUBFOLDER`. The same trap applies to `CONFIGURATION`, `PLATFORM`, `OUTPUTPATH`, `TARGETFRAMEWORK`.
 
 ### NuGet feed prerequisite
 

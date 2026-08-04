@@ -46,6 +46,37 @@
   </Target>
 
   <!--
+    Publish into an empty folder, always.
+
+    An incremental `dotnet publish` (nothing changed since the last one) leaves
+    the .exe but strips every loose native DLL from the publish folder. The
+    result still launches and looks healthy, then silently falls back to test
+    mode on the target PC because DllResolver finds no UserApplication.dll —
+    the worst failure mode this app has. Emptying the folder first forces the
+    full copy every time; the few seconds it costs are worth not shipping that.
+
+    Only ever cleans a folder under the project's own bin\. A `dotnet publish
+    -o <somewhere>` pointing outside it is left alone and warned about, since
+    that path may be a real directory with other content in it.
+  -->
+  <!-- PrepareForPublish, not Publish: the publish pipeline copies its files inside
+       targets that Publish depends on, so BeforeTargets="Publish" runs *after* the
+       copy and would wipe the folder it was meant to protect. -->
+  <Target Name="EmptyPublishDirBeforePublish" BeforeTargets="PrepareForPublish" Condition="'$(PublishDir)' != ''">
+    <PropertyGroup>
+      <_PubFull>$([System.IO.Path]::GetFullPath('$(PublishDir)'))</_PubFull>
+      <_BinFull>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\bin'))</_BinFull>
+      <_PubLower>$(_PubFull.ToLowerInvariant())</_PubLower>
+      <_BinLower>$(_BinFull.ToLowerInvariant())</_BinLower>
+      <_PubUnderBin>$(_PubLower.StartsWith('$(_BinLower)'))</_PubUnderBin>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_PubFull)"
+               Condition="'$(_PubUnderBin)' == 'true' And Exists('$(_PubFull)')" />
+    <Warning Text="Publish folder $(_PubFull) is outside the project's bin\, so it was not emptied. Publishing into a folder that already holds a previous publish can silently drop the loose native DLLs — empty it yourself first."
+             Condition="'$(_PubUnderBin)' != 'true'" />
+  </Target>
+
+  <!--
     The publish folder is what actually gets handed to a production PC, so the
     operator manual ships inside it rather than living only in the repo. Publish
     only, not Build — a dev output folder doesn't need it.
