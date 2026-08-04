@@ -45,4 +45,23 @@
     <Copy SourceFiles="@(_OesNativePub)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="Exists('%(_OesNativePub.FullPath)')" />
   </Target>
 
+  <!--
+    The publish folder is what actually gets handed to a production PC, so the
+    operator manual ships inside it rather than living only in the repo. Publish
+    only, not Build — a dev output folder doesn't need it.
+
+    Warn rather than fail if it is missing: an absent doc should not block a
+    build, but it must not pass silently either, or a delivery folder quietly
+    goes out with no manual in it.
+  -->
+  <Target Name="CopyOperatorManual" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <PropertyGroup>
+      <_ManualPath>$(MSBuildProjectDirectory)\..\..\docs\user-manual-zh-TW.html</_ManualPath>
+    </PropertyGroup>
+    <Warning Text="Operator manual not found at $(_ManualPath) — the publish folder will ship without it. Regenerate it with: python3 tools/md2html.py docs/user-manual-zh-TW.md docs/user-manual-zh-TW.html &quot;OES Leak Monitor 操作手冊&quot;"
+             Condition="!Exists('$(_ManualPath)')" />
+    <Copy SourceFiles="$(_ManualPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true"
+          Condition="Exists('$(_ManualPath)')" />
+  </Target>
+
 </Project>

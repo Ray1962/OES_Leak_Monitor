@@ -26,6 +26,10 @@ There is no automated test suite, so changes are validated by running the app. W
 
 The `.exe` bundles all managed code plus the .NET 8 runtime, but native DLLs are not embedded — the output folder also holds the WPF native DLLs (`wpfgfx_cor3.dll`, `PresentationNative_cor3.dll`, `D3DCompiler_47_cor3.dll`, `PenImc_cor3.dll`, `vcruntime140_cor3.dll`) and the OES native DLLs (`UserApplication.dll`, `SiUSBXp.dll`, `libsodium.dll`). Ship the whole folder together — those DLLs are loose next to the `.exe` on purpose (the `DllResolver` only searches the app base directory; see the native-DLL note below). Do not enable `IncludeNativeLibrariesForSelfExtract` — it would bundle the OES DLLs into the exe and break hardware connect.
 
+The `CopyOperatorManual` target also drops `docs/user-manual-zh-TW.html` into the publish folder (publish only, not build), so a delivery folder carries its own manual. It warns rather than fails when the HTML is missing — regenerate it first (see [Documentation](#documentation)).
+
+> ⚠️ **Always publish into an empty folder.** Running `dotnet publish` twice with no intervening change silently strips every loose native DLL from `bin/Publish/win-x64/`, leaving only the `.exe` — a folder that launches fine and then falls back to test mode on the production PC, which is the hardest failure mode to diagnose. Delete `bin/Publish/win-x64/` before publishing, and check the folder holds **10** files afterwards. (`publish.cmd` does not do this for you.)
+
 ### NuGet feed prerequisite
 
 `nuget.config` pins a local feed at `C:\Users\infor\source\repos\Ray1962\LocalPackages` and clears default sources before adding nuget.org. Restore will fail if the three `Aqst.*` nupkgs (`Aqst.OesApp.Core`, `Aqst.OesApp.Wpf`, `Aqst.OesSpectrometer`) are not present there. Those packages are produced by the sibling repo `Ray1962/DualOes_PlasmaMonitor`; rebuild and re-pack there if you bump versions.
