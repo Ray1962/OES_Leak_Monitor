@@ -101,6 +101,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _intensityLogger.StateChanged   += OnIntensityStateChanged;
         _intensityLogger.ErrorOccurred  += OnIntensityError;
         _intensityLogger.FilesChanged   += OnIntensityFilesChanged;
+        _intensityLogger.FileRolled     += OnIntensityFileRolled;
 
         // Devices exist now, so the persisted per-device parameters can be applied. (The
         // settings themselves were loaded above, before the review tabs were built.)
@@ -617,6 +618,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _intensityLogger.StateChanged   -= OnIntensityStateChanged;
         _intensityLogger.ErrorOccurred  -= OnIntensityError;
         _intensityLogger.FilesChanged   -= OnIntensityFilesChanged;
+        _intensityLogger.FileRolled     -= OnIntensityFileRolled;
         _leakMonitorEngine.AlarmStateChanged -= OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured -= OnGoldenRunCaptured;
         _leakMonitorEngine.ConfigurationChanged -= OnLeakConfigChanged;
@@ -650,6 +652,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _systemLogger.LogIntensityLogger("Error", e.Message,
             value: e.Exception is null ? "" : $"Exception={e.Exception.GetType().Name}",
             severity: LogSeverity.Error);
+
+    /// <summary>
+    /// A writer continued into a new file without the save session ending. Logged with the
+    /// reason because the two causes need different reactions: hitting the row cap is
+    /// routine, while an axis change means an acquisition parameter was reapplied mid-save —
+    /// the run's spectra are then split across files with different wavelength axes, and any
+    /// Golden Run captured under the old exposure no longer applies.
+    /// </summary>
+    private void OnIntensityFileRolled(object? sender, LoggerFileRolledEventArgs e)
+    {
+        var axis = e.Reason == FileRollReason.SpectrumAxisChanged;
+        _systemLogger.LogIntensityLogger(
+            axis ? "SpectrumAxisChanged" : "FileRotated",
+            axis
+                ? "Wavelength axis changed mid-save — continued into a new CSV with the new axis. " +
+                  "If this followed a parameter change, re-capture the Golden Run."
+                : "Row limit reached — continued into a new CSV.",
+            related: $"Device={(e.DeviceIndex < DeviceProfiles.Length ? DeviceProfiles[e.DeviceIndex].Tag : $"OES{e.DeviceIndex + 1}")}",
+            value: e.NewPath,
+            severity: axis ? LogSeverity.Warning : LogSeverity.Information);
+    }
 
     private void OnIntensityFilesChanged(object? sender, EventArgs e)
     {

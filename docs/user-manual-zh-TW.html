@@ -810,9 +810,10 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li><code>MMddHHmmss</code> — session 起始時間（<strong>年份由上層資料夾還原</strong>）
 </li>
-<li><code>_N</code> — 超過記憶體預算後的續檔序號
+<li><code>_N</code> — 續檔序號。兩種情況會產生：<strong>(a)</strong> 單檔超過記憶體預算；<strong>(b)</strong> 存檔途中<strong>光譜波長軸改變</strong>（重新套用擷取參數、裝置重連），此時舊檔關閉、以新的波長軸開新檔，Logs 分頁會留下一筆 <code>SpectrumAxisChanged</code> 警告
 </li>
 </ul>
+<blockquote><p>⚠️ 看到 <code>SpectrumAxisChanged</code> 就代表這一爐的資料被切成<strong>兩段不同波長軸</strong>的檔案。若它是因為你改了曝光相關參數而產生，<strong>請重錄 Golden Run</strong> —— 舊基準線是在舊曝光條件下錄的。</p></blockquote>
 <h3 id="73-比值-csv-格式">7.3 比值 CSV 格式</h3>
 <pre><code>Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,LeakRateSigma</code></pre>
 <p>每個比值兩欄（原始值 + % 基準），最後三欄是整體狀態與洩漏率估計。欄位是<strong>依標題名稱</strong>尋址的，所以舊版沒有 <code>LeakRate</code> 欄位的檔案仍可正常解析。</p>
