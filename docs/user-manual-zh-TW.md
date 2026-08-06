@@ -1,6 +1,6 @@
 # OES Leak Monitor 操作手冊
 
-> 版本對應：`Aqst.OesSpectrometer 0.4.6` / `Aqst.OesApp.Core 0.1.5` / `Aqst.OesApp.Wpf 0.1.9`
+> 版本對應：`Aqst.OesSpectrometer 0.4.6` / `Aqst.OesApp.Core 0.1.6` / `Aqst.OesApp.Wpf 0.1.10`
 > 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）
 
 ---
@@ -308,18 +308,34 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 #### 6.2.3 Data Logger（資料記錄器）
 
-門檻觸發式記錄器：**只有在指定波長的強度高於門檻時才開檔寫入**。
+門檻觸發式記錄器：**只有在觸發量高於門檻時才開檔寫入**（觸發量是什麼由 Trigger Mode 決定）。
 
 **Trigger Conditions（觸發條件）**
 
 | 參數 | 說明 |
 |---|---|
-| **Trigger Wavelength (nm)** | 用來判斷門檻的波長（取最接近的譜線 bin）。接受小數 |
+| **Trigger Mode** | 門檻要拿**什麼**來比。三選一，見下方說明 |
+| **pct** | `SpectrumPercentile` 模式使用的分位數（0–100，預設 99） |
+| **Trigger Wavelength (nm)** | `Wavelength` 模式用來判斷門檻的波長（取最接近的譜線 bin）。接受小數 |
 | **Wavelength Tolerance (nm)** | 請求波長與實際 bin 的最大容許差距 |
 | **Save Threshold Intensity** | 高於這個強度才可能開始存檔 |
 | **Start Confirm Time (s)** | 需**持續**高於門檻幾秒才真的開檔 |
 | **Stop Confirm Time (s)** | 需**持續**低於門檻幾秒才收檔 |
 | **Min Save Time (s)** | 單一 session 的最短長度，避免產生一堆極短的碎檔 |
+
+**三種 Trigger Mode 怎麼選**
+
+| 模式 | 量的是什麼 | 什麼時候用 |
+|---|---|---|
+| `Wavelength`（預設） | 單一波長的強度 | 有一條**從點火到熄火都穩定存在**的譜線時最單純 |
+| `SpectrumPercentile` | 整張光譜的第 N 分位（預設 99） | **電漿點著後才通入某氣體**、或該氣體只在部分步驟通入時 —— 它跟的是「電漿亮不亮」，與氣體種類無關 |
+| `AnyMonitoredWavelength` | Monitored Wavelengths 中**最亮的一條** | 多步驟配方，但希望保留譜線專一性（例如同時盯載氣 Ar 與製程線），避免室內光誤觸發 |
+
+> 💡 **為什麼是分位數而不是「最大值」**：單一壞點或宇宙射線尖峰就能把最大值永久釘在高位，記錄器會一直誤以為電漿開著。實測把一個像素灌到 60000 counts，p99 只從 14813 變成 14831（＋0.1%），而最大值會直接讀成 60000。
+
+> ⚠️ **換模式一定要重設 Save Threshold Intensity**。同一張光譜下，單一譜線可能讀 124、p99 讀 14813、最亮監測線讀 52639 —— 量級差很多。門檻欄位下方的綠色小字會顯示**目前的實際讀值**（`now 14813 · threshold 100`），照著它設就不會猜錯。
+
+> 若觸發量根本無法計算（例如波長超出光譜儀量程），**Logs 分頁會出現一筆錯誤說明原因**，而不是像舊版那樣安靜地什麼都不做。
 
 **Output Files（輸出檔案）**
 

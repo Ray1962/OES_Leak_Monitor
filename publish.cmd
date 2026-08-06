@@ -6,7 +6,7 @@ rem  Publish OES Leak Monitor as a standalone single-file self-contained .exe.
 rem  The target PC needs NO .NET install.
 rem
 rem  Just double-click this file (or run it from a command prompt).
-rem  Prerequisite: Aqst.OesApp.Core 0.1.5 / Aqst.OesApp.Wpf 0.1.9 (or newer)
+rem  Prerequisite: Aqst.OesApp.Core 0.1.6 / Aqst.OesApp.Wpf 0.1.10 (or newer)
 rem  must already be in ..\LocalPackages - pack them from the
 rem  DualOes_PlasmaMonitor repo first.
 rem ===========================================================================
@@ -42,7 +42,7 @@ if errorlevel 1 (
     echo.
     echo  *** PUBLISH FAILED - see the messages above. ***
     echo.
-    echo  Most common cause: Aqst.OesApp.Core 0.1.5 / Aqst.OesApp.Wpf 0.1.9 are
+    echo  Most common cause: Aqst.OesApp.Core 0.1.6 / Aqst.OesApp.Wpf 0.1.10 are
     echo  missing from ..\LocalPackages. Pack them from the DualOes_PlasmaMonitor
     echo  repo, then run this script again.
     echo.

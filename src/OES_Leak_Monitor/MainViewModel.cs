@@ -131,7 +131,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // seeded here and re-pointed by ApplyAll whenever it is applied.
         var loggerSettings = Logger.ToSettings();
         WavelengthTrend = new WavelengthTrendViewModel(
-            loggerSettings.TriggerWavelength, loggerSettings.SaveStartThresholdIntensity,
+            loggerSettings.TriggerWavelength, TrendThresholdFor(loggerSettings),
             loggerSettings.MonitoredWavelengths?.Select(w => (double)w));
 
         // Actinometry leak monitor: build from persisted config, feed it the same
@@ -336,7 +336,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 "Logger output folder changed — Recordings / Ratio Review rescanned",
                 value: dataDir);
         }
-        WavelengthTrend.Configure(ls.TriggerWavelength, ls.SaveStartThresholdIntensity,
+        WavelengthTrend.Configure(ls.TriggerWavelength, TrendThresholdFor(ls),
             ls.MonitoredWavelengths?.Select(w => (double)w));
         StatusMessage = "Apply: parameters pushed to connected devices and logger.";
         _systemLogger.LogSystemEvent(LogSeverity.Information, "ApplyAll",
@@ -561,16 +561,34 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             case nameof(LoggerViewModel.CurrentFile1):
             case nameof(LoggerViewModel.TriggerWavelength):
             case nameof(LoggerViewModel.SaveStartThresholdIntensity):
+            case nameof(LoggerViewModel.TriggerMode):
+            case nameof(LoggerViewModel.TriggerPercentile):
                 UpdateRecorderStatus();
                 break;
         }
     }
 
+    /// <summary>
+    /// The dashed threshold line on the Monitor trend marks the save threshold against the
+    /// trigger wavelength's trace. That reading is only the trigger in Wavelength mode — in
+    /// the whole-frame modes the threshold applies to a different quantity entirely, so the
+    /// line would sit at a meaningless height. Zero hides it.
+    /// </summary>
+    private static double TrendThresholdFor(LoggerSettings s) =>
+        s.TriggerMode == TriggerMode.Wavelength ? s.SaveStartThresholdIntensity : 0;
+
     private void UpdateRecorderStatus()
     {
         var file = Logger.CurrentFile1;
         var hasFile = !string.IsNullOrWhiteSpace(file);
-        var trigger = $"{Logger.TriggerWavelength:0.#} nm above {Logger.SaveStartThresholdIntensity:0.#}";
+        var trigger = Logger.TriggerMode switch
+        {
+            TriggerMode.SpectrumPercentile =>
+                $"the frame's {Logger.TriggerPercentile:0.#}th percentile above {Logger.SaveStartThresholdIntensity:0.#}",
+            TriggerMode.AnyMonitoredWavelength =>
+                $"any monitored wavelength above {Logger.SaveStartThresholdIntensity:0.#}",
+            _ => $"{Logger.TriggerWavelength:0.#} nm above {Logger.SaveStartThresholdIntensity:0.#}",
+        };
 
         if (!Logger.Enabled)
         {
