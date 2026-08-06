@@ -143,6 +143,9 @@ public sealed class LeakRateEstimator
         var fits = new List<RatioSensitivity>();
         foreach (var (key, samples) in byKey)
         {
+            // The caller supplies an empty label for a ratio that doesn't use its reference line
+            // (absolute-intensity mode), which is what keeps a later reference swap from
+            // invalidating a calibration that never depended on it.
             string refLabel = referenceLabels != null && referenceLabels.TryGetValue(key, out var r) ? r : "";
             bool absolute = monitorModes != null && monitorModes.TryGetValue(key, out var a) && a;
             fits.Add(FitRatio(key, samples, refLabel, absolute));
@@ -186,6 +189,10 @@ public sealed class LeakRateEstimator
             if (fit is null) skip = "no calibration fit";
             else if (Math.Abs(fit.Slope) <= MinUsableSlope) skip = "ratio insensitive to leak";
             else if (double.IsNaN(r.X)) skip = "no reading";
+            // A fit recorded with no reference label was made against the monitored line alone
+            // (absolute-intensity mode), so a reference swap cannot invalidate it — the empty
+            // check below covers that. A change of *unit* still does invalidate it (next case):
+            // that changes what the slope means.
             else if (currentReferenceLabels != null &&
                      currentReferenceLabels.TryGetValue(r.Key, out var curRef) &&
                      !string.IsNullOrEmpty(fit.ReferenceLabel) &&

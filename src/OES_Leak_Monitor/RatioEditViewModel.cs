@@ -96,7 +96,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     public string Key { get; }
 
     public IReadOnlyList<LineExtractMode> ModeOptions { get; } =
-        new[] { LineExtractMode.PeakHeight, LineExtractMode.Integral };
+        new[] { LineExtractMode.PeakHeight, LineExtractMode.Integral, LineExtractMode.RawMean };
 
     public IReadOnlyList<MonitorMode> MonitorModeOptions { get; } =
         new[] { MonitorMode.Ratio, MonitorMode.AbsoluteIntensity };
@@ -112,6 +112,8 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
             if (!Set(ref _monitorMode, value)) return;
             RenameIfAuto();
             OnPropertyChanged(nameof(IsAbsolute));
+            OnPropertyChanged(nameof(IsRatioMode));
+            OnPropertyChanged(nameof(ValueHasPedestal));
             OnPropertyChanged(nameof(SignalLineHeader));
             OnPropertyChanged(nameof(ReferenceLineHeader));
         }
@@ -120,15 +122,19 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     /// <summary>True in absolute-intensity mode — drives the field-role hints in the UI.</summary>
     public bool IsAbsolute => _monitorMode == MonitorMode.AbsoluteIntensity;
 
+    /// <summary>True in ratio mode — the reference line picker only exists there. In absolute
+    /// mode the reference is not divided in and no longer gates plasma-present (that comes from
+    /// the logger's save trigger), so showing a picker would invite the operator to pick a line
+    /// that silently decides nothing — or, worse, one that isn't there at all.</summary>
+    public bool IsRatioMode => !IsAbsolute;
+
     /// <summary>Header for the first line picker — the monitored line in both modes.</summary>
     public string SignalLineHeader => IsAbsolute
         ? "Monitored line (absolute intensity)"
         : "Signal line (numerator)";
 
-    /// <summary>Header for the second line picker — divided in (ratio) or plasma gate (absolute).</summary>
-    public string ReferenceLineHeader => IsAbsolute
-        ? "Plasma-present reference (gate only, not divided)"
-        : "Reference line (denominator / baseline species)";
+    /// <summary>Header for the second line picker — ratio mode only.</summary>
+    public string ReferenceLineHeader => "Reference line (denominator / baseline species)";
 
     private string _displayName;
     public string DisplayName { get => _displayName; set => Set(ref _displayName, value?.Trim() ?? ""); }
@@ -146,7 +152,26 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     }
 
     private LineExtractMode _signalMode;
-    public LineExtractMode SignalMode { get => _signalMode; set => Set(ref _signalMode, value); }
+    public LineExtractMode SignalMode
+    {
+        get => _signalMode;
+        set
+        {
+            if (!Set(ref _signalMode, value)) return;
+            OnPropertyChanged(nameof(SignalIsRaw));
+            OnPropertyChanged(nameof(ValueHasPedestal));
+        }
+    }
+
+    /// <summary>True when the monitored line is read raw — drives the hint about what changes.</summary>
+    public bool SignalIsRaw => _signalMode == LineExtractMode.RawMean;
+
+    /// <summary>
+    /// Raw extraction in absolute mode: the reading carries the continuum pedestal, so the
+    /// Warn/Alarm <em>factors</em> stop being used (σ terms only), the trend becomes a σ-score,
+    /// and SNR is not measurable. Shown in the editor so none of that is a surprise.
+    /// </summary>
+    public bool ValueHasPedestal => IsAbsolute && SignalIsRaw;
 
     // --- reference (denominator) line ----------------------------------------
 
@@ -230,8 +255,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         MinSnr = MinSnr,
     };
 
-    /// <summary>True if the signal and reference are the same line (a meaningless ratio).</summary>
+    /// <summary>True if the signal and reference are the same line (a meaningless ratio).
+    /// Not a problem in absolute mode, where the reference takes no part in the measurement.</summary>
     public bool SignalEqualsReference =>
+        IsRatioMode &&
         _signalLine.Species == _referenceLine.Species &&
         Math.Abs(_signalLine.WavelengthNm - _referenceLine.WavelengthNm) < 1e-6;
 
@@ -246,7 +273,9 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     }
 
     // A peak-height line is a narrow atomic transition; an integral line is a broader
-    // molecular band head, so it gets a wider signal window.
+    // molecular band head, so it gets a wider signal window. A raw reading averages a narrow
+    // window (a few pixels — enough to damp pixel noise without pulling in a neighbour) and
+    // pins the window: peak-searching a position with no peak is what it exists to avoid.
     private static LineRegion BuildRegion(SpectralLine line, LineExtractMode mode) => new()
     {
         Label = $"{line.Species} {line.WavelengthNm:0.###}",
@@ -255,7 +284,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         HalfWidthNm = mode == LineExtractMode.Integral ? 1.0 : 0.5,
         BaselineGapNm = 1.0,
         BaselineWidthNm = 1.0,
-        PeakSearchHalfWidthNm = 1.0,
+        PeakSearchHalfWidthNm = mode == LineExtractMode.RawMean ? 0.0 : 1.0,
     };
 
     // The region's label carries the species it was built from, so prefer the nearest line of

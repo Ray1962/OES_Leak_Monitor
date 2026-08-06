@@ -43,7 +43,11 @@ public readonly record struct RatioSnapshot(
     double RatioNoiseSigma,
     double NumeratorSnr,
     double DenominatorSnr,
-    MonitorMode Mode);
+    MonitorMode Mode,
+    /// <summary>The reading carries a continuum pedestal, so <see cref="PercentOfBaseline"/> is
+    /// a σ-score rather than a percentage and the slope reads in σ/min — see
+    /// <see cref="RatioDefinition.ValueHasPedestal"/>.</summary>
+    bool HasPedestal);
 
 /// <summary>
 /// Runtime monitor for one actinometric ratio: EMA smoothing, two-level threshold
@@ -163,12 +167,25 @@ public sealed class RatioMonitor
     /// whichever noise estimate is currently worse.</summary>
     private double EffectiveSigma => Math.Max(_baseSigma, LiveSigma);
 
+    /// <summary>
+    /// Warn level. Normally the higher of the multiplicative and the σ form, so neither a
+    /// proportionally small rise nor one inside the noise can trip it. When the value carries a
+    /// continuum pedestal (<see cref="RatioDefinition.ValueHasPedestal"/>) the multiplicative
+    /// form is dropped: 1.2 × a pedestal of a few thousand counts is tens of σ away, and
+    /// <c>Math.Max</c> would pick exactly that branch and bury the σ term — an alarm that can
+    /// never fire, which is worse than no alarm because it looks armed.
+    /// </summary>
     public double WarnThreshold => _hasBaseline
-        ? Math.Max(_def.WarnFactor * _baseMean, _baseMean + _def.SigmaWarn * EffectiveSigma)
+        ? (_def.ValueHasPedestal
+            ? _baseMean + _def.SigmaWarn * EffectiveSigma
+            : Math.Max(_def.WarnFactor * _baseMean, _baseMean + _def.SigmaWarn * EffectiveSigma))
         : double.NaN;
 
+    /// <summary>Alarm level — same rule as <see cref="WarnThreshold"/>.</summary>
     public double AlarmThreshold => _hasBaseline
-        ? Math.Max(_def.AlarmFactor * _baseMean, _baseMean + _def.SigmaAlarm * EffectiveSigma)
+        ? (_def.ValueHasPedestal
+            ? _baseMean + _def.SigmaAlarm * EffectiveSigma
+            : Math.Max(_def.AlarmFactor * _baseMean, _baseMean + _def.SigmaAlarm * EffectiveSigma))
         : double.NaN;
 
     /// <summary>Feeds one frame's extracted line measurements into the state machine.</summary>
@@ -247,10 +264,15 @@ public sealed class RatioMonitor
         // The trend is still plotted (above); we only hold the ratio out of the Warn/Alarm
         // decision so near-noise jitter can't trip an alarm — and the engine drops LowSignal
         // ratios from the leak-rate fit.
+        //
+        // In absolute mode only the monitored line is judged. The reference is not divided in
+        // and no longer gates plasma either, so letting its SNR force LowSignal would defeat the
+        // whole point of the mode: a weak monitored line paired with a reference that barely
+        // registers would read "low signal" for ever, however strong the monitored line got.
         double minSnr = _def.MinSnr;
         bool lowSignal = minSnr > 0 &&
             ((!double.IsNaN(_numSnr) && _numSnr < minSnr) ||
-             (!double.IsNaN(_denSnr) && _denSnr < minSnr));
+             (!absolute && !double.IsNaN(_denSnr) && _denSnr < minSnr));
         if (lowSignal)
         {
             // Grace: hold an active display briefly so a single frame at the SNR floor doesn't
@@ -320,19 +342,22 @@ public sealed class RatioMonitor
 
     /// <summary>
     /// The value plotted on the % -of-baseline trend and shown in the row's percent column.
-    /// <para>Ratio mode: the honest <c>ema / baseMean · 100</c>.</para>
-    /// <para>Absolute-intensity mode: <c>baseMean</c> sits near the noise floor, so dividing by
-    /// it makes that percentage swing wildly on ordinary noise (σ/baseMean is large). Instead we
-    /// normalize the excess above baseline by the <em>noise σ</em> (a z-score) and rescale it onto
-    /// the same axis — baseline stays at 100, and one warning-σ above baseline lands at 120 — so
-    /// the curve is readable and the shared 100/120/150 guide lines still mean what they say.
-    /// The state machine and the leak-rate fit use their own stable quantities (additive σ
-    /// thresholds and the absolute rise Δ), not this display value.</para>
+    /// <para>Normally the honest <c>ema / baseMean · 100</c> — for a ratio, and for an absolute
+    /// reading of a baseline-subtracted line, the baseline mean <em>is</em> the signal, so a
+    /// percentage of it says what it appears to say.</para>
+    /// <para>When the value carries a continuum pedestal
+    /// (<see cref="RatioDefinition.ValueHasPedestal"/>) that percentage is compressed to
+    /// uselessness — a real excursion moves a 3757 ± 19 reading by a fraction of a percent, and
+    /// the 100/120/150 guide lines would sit tens of σ away. There we normalize the excess above
+    /// baseline by the <em>noise σ</em> (a z-score) and rescale onto the same axis — baseline
+    /// stays at 100, one warning-σ above lands at 120 — so the guide lines keep meaning what
+    /// they say. The state machine and the leak-rate fit use their own stable quantities
+    /// (additive σ thresholds and the absolute rise Δ), not this display value.</para>
     /// </summary>
     private double PercentOfBaselineDisplay()
     {
         if (!_hasBaseline || !_hasEma) return double.NaN;
-        if (_def.MonitorMode != MonitorMode.AbsoluteIntensity)
+        if (!_def.ValueHasPedestal)
             return _ema / _baseMean * 100.0;
 
         double sigma = EffectiveSigma;
@@ -362,5 +387,6 @@ public sealed class RatioMonitor
         _hasEma && _emaVar > 0 ? Math.Sqrt(_emaVar) : double.NaN,
         _numSnr,
         _denSnr,
-        _def.MonitorMode);
+        _def.MonitorMode,
+        _def.ValueHasPedestal);
 }

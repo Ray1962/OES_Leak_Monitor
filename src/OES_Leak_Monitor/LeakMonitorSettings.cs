@@ -61,6 +61,23 @@ public sealed class RatioDefinition
     /// </summary>
     public double MinSnr { get; set; } = 5.0;
 
+    /// <summary>
+    /// True when the monitored value carries the continuum pedestal — absolute-intensity mode
+    /// reading a <see cref="LineExtractMode.RawMean"/> line. Everything that divides by the
+    /// baseline mean has to know: with a mean of a few thousand counts and a σ of twenty, a
+    /// real signal moves the ratio-to-baseline by fractions of a percent, so
+    /// <list type="bullet">
+    /// <item>the Warn/Alarm <em>factors</em> are meaningless (1.2× is tens of σ, never reached)
+    /// and only the σ terms are used;</item>
+    /// <item>the % -of-baseline display is σ-normalized rather than <c>value/mean·100</c>;</item>
+    /// <item>the leak-rate calibration fits the absolute rise Δ, not the fractional one.</item>
+    /// </list>
+    /// A ratio, or an absolute reading of a baseline-subtracted line, has no pedestal: its mean
+    /// <em>is</em> the signal, so the ordinary multiplicative forms apply.
+    /// </summary>
+    public bool ValueHasPedestal =>
+        MonitorMode == MonitorMode.AbsoluteIntensity && Numerator.Mode == LineExtractMode.RawMean;
+
     public RatioDefinition Clone() => new()
     {
         Key = Key, DisplayName = DisplayName, Enabled = Enabled,
@@ -81,9 +98,94 @@ public sealed class GoldenRunRatioBaseline
     public double Sigma { get; set; }
     public int SampleCount { get; set; }
 
-    /// <summary>Reference (denominator) line this baseline was captured against. A baseline
-    /// only applies while the ratio's current reference still matches this label.</summary>
+    /// <summary>
+    /// Reference (denominator) line this baseline was captured against. A ratio-mode baseline
+    /// only applies while the ratio's current reference still matches this label. Empty for an
+    /// absolute-intensity baseline, which doesn't involve the reference line at all.
+    /// </summary>
     public string ReferenceLabel { get; set; } = "";
+
+    /// <summary>
+    /// Monitor mode the baseline was captured under. The mean is a mean of the monitored
+    /// quantity, and a ratio and an absolute line intensity are not the same quantity — so a
+    /// baseline only applies while the mode still matches. Defaults to
+    /// <see cref="MonitorMode.Ratio"/> so a settings.json written before this field existed
+    /// keeps its ratio-mode baselines; an absolute-mode baseline from such a file is rejected
+    /// (with a log line) and must be re-captured.
+    /// </summary>
+    public MonitorMode Mode { get; set; } = MonitorMode.Ratio;
+
+    /// <summary>
+    /// Revision of the extraction maths the baseline was measured with. Bumped when a change
+    /// alters the <em>units or scale</em> of an extracted value rather than just its accuracy —
+    /// revision 1 made <see cref="LineExtractMode.Integral"/> an integral in counts·nm with
+    /// fractional-pixel window edges, where it had been a plain pixel sum. A stored mean from an
+    /// older revision is a number in a different unit, so it is rejected (with a log line) for
+    /// any ratio whose reading involves an integral; <see cref="LineExtractMode.PeakHeight"/> and
+    /// <see cref="LineExtractMode.RawMean"/> readings are unaffected and keep their baselines.
+    /// </summary>
+    public int ExtractionRevision { get; set; }
+}
+
+/// <summary>
+/// The acquisition conditions a Golden Run was captured under. An absolute-intensity baseline is
+/// a count, and counts scale with integration time, averaging and everything else in this list —
+/// so a baseline captured at 50 ms means nothing at 100 ms, and the failure is silent: every
+/// ratio simply reads high (or low) for ever. Recorded at capture and compared each frame; a
+/// mismatch is reported rather than quietly tolerated. A ratio-mode baseline is far less
+/// sensitive (most of this cancels in the division), but the warning is worth having there too.
+/// </summary>
+public sealed class AcquisitionFingerprint
+{
+    public double IntegrationTimeMs { get; set; }
+    public long AverageCount { get; set; }
+    public long BoxcarWidth { get; set; }
+    public string AcquireMode { get; set; } = "";
+    public string AverageMode { get; set; } = "";
+    public bool BackgroundRemove { get; set; }
+    public bool StraylightCorrection { get; set; }
+    public bool LinearityCorrection { get; set; }
+
+    /// <summary>Number of points on the wavelength axis the capture ran on (0 = not recorded).</summary>
+    public int AxisLength { get; set; }
+    public double AxisStartNm { get; set; }
+    public double AxisEndNm { get; set; }
+
+    public AcquisitionFingerprint Clone() => (AcquisitionFingerprint)MemberwiseClone();
+
+    /// <summary>
+    /// Lists the fields that differ from <paramref name="other"/>, or an empty string when they
+    /// agree. The axis bounds are compared loosely (0.05 nm) — the SDK reports them as floats and
+    /// a last-digit wobble is not a configuration change.
+    /// </summary>
+    public string Differences(AcquisitionFingerprint? other)
+    {
+        if (other is null) return "";
+        var diffs = new List<string>();
+        void Cmp(string name, object a, object b)
+        {
+            if (!Equals(a, b)) diffs.Add($"{name} {b} → {a}");
+        }
+        Cmp("integration", IntegrationTimeMs, other.IntegrationTimeMs);
+        Cmp("average", AverageCount, other.AverageCount);
+        Cmp("boxcar", BoxcarWidth, other.BoxcarWidth);
+        Cmp("acquire mode", AcquireMode, other.AcquireMode);
+        Cmp("average mode", AverageMode, other.AverageMode);
+        Cmp("background removal", BackgroundRemove, other.BackgroundRemove);
+        Cmp("stray-light correction", StraylightCorrection, other.StraylightCorrection);
+        Cmp("linearity correction", LinearityCorrection, other.LinearityCorrection);
+        // Axis fields are 0 on a fingerprint recorded before a frame was seen — don't report
+        // "0 → 1891" as a change the operator made.
+        if (AxisLength > 0 && other.AxisLength > 0)
+        {
+            Cmp("axis points", AxisLength, other.AxisLength);
+            if (Math.Abs(AxisStartNm - other.AxisStartNm) > 0.05 ||
+                Math.Abs(AxisEndNm - other.AxisEndNm) > 0.05)
+                diffs.Add($"axis {other.AxisStartNm:0.#}–{other.AxisEndNm:0.#} → " +
+                          $"{AxisStartNm:0.#}–{AxisEndNm:0.#} nm");
+        }
+        return string.Join(", ", diffs);
+    }
 }
 
 /// <summary>
@@ -96,8 +198,17 @@ public sealed class GoldenRun
     public DateTime CapturedUtc { get; set; }
     public double DurationSeconds { get; set; }
 
-    /// <summary>Minimum denominator (N2) intensity for the plasma-present gate.</summary>
+    /// <summary>Minimum denominator (N2) intensity for the plasma-present gate. Ratio-mode
+    /// entries only — absolute-intensity ratios gate on the logger trigger (see
+    /// <see cref="PlasmaGate"/>), so their reference never contributed to this floor.</summary>
     public double PlasmaPresentFloor { get; set; }
+
+    /// <summary>
+    /// Acquisition conditions at capture time, so a baseline taken at a different integration
+    /// time / averaging / axis can be flagged instead of silently mis-scaling every reading.
+    /// Null for a Golden Run captured before this was recorded — comparison is then skipped.
+    /// </summary>
+    public AcquisitionFingerprint? Acquisition { get; set; }
 
     public List<GoldenRunRatioBaseline> Baselines { get; set; } = new();
 

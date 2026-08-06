@@ -347,9 +347,12 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
                 int idx = 0;
                 foreach (var key in d.RatioKeys)
                 {
+                    // A σ-score series shares the 100/120/150 scale but is not a percentage of
+                    // the baseline — say so in the legend rather than let the two look alike.
+                    bool sigmaScore = pct && d.PctIsSigmaScore.TryGetValue(key, out var s) && s;
                     var series = new LineSeries
                     {
-                        Title = FriendlyName(key),
+                        Title = sigmaScore ? FriendlyName(key) + " (σ-score)" : FriendlyName(key),
                         Color = Palette[idx % Palette.Length],
                         StrokeThickness = 1.5,
                         CanTrackerInterpolatePoints = false,

@@ -608,10 +608,14 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li>若某條比值可評估的幀當中，<strong>通過率不到 50%</strong>，這條比值的基準線會被<strong>直接拒絕</strong>，並記進系統日誌。 → 避免弱訊號譜線用「剛好往上跳的那幾筆雜訊」湊出一條假基準線。
 </li>
-<li>同時會記錄 <strong>PlasmaPresentFloor</strong>（＝參考譜線基準均值的 <strong>20%</strong>），之後用來判斷「電漿有沒有開」。
+<li>同時會記錄 <strong>PlasmaPresentFloor</strong>（＝參考譜線基準均值的 <strong>20%</strong>），之後用來判斷「電漿有沒有開」（僅 <code>Ratio</code> 模式使用）。
+</li>
+<li><strong>基準均值必須明顯離開 0</strong>：若均值 ≤ 0，或均值不到自身 σ 的 <strong>10 倍</strong>，該比值的基準線會被拒絕並寫進日誌。門檻、% 顯示、洩漏率全都要除以這個均值，一個「−25 ± 95」的基準線會讓三者都變成擲硬幣。日誌訊息會建議改用 <code>RawMean</code> 擷取（該波長若本來就沒有峰）。
+</li>
+<li><strong>同時記錄擷取當時的取得參數</strong>（積分時間、平均次數、boxcar、acquire / average mode、背景移除等開關、波長軸長度與範圍）。之後只要現況與基準線不符，Leak Monitor 上方會出現警示條，系統日誌也會記一筆 <code>LeakMonitorAcquisitionMismatch</code>。
 </li>
 </ul>
-<blockquote><p>⚠️ <strong>什麼時候必須重錄 Golden Run</strong>：改了積分時間或其他影響絕對強度的設定、換了參考譜線、清理過觀察窗、換過光纖、製程配方改變。</p></blockquote>
+<blockquote><p>⚠️ <strong>什麼時候必須重錄 Golden Run</strong>：改了積分時間或其他影響絕對強度的設定、換了參考譜線（<code>Ratio</code> 模式）、改了監控方式或擷取方式、清理過觀察窗、換過光纖、製程配方改變。前三項程式會自動偵測並停用舊基準線；其餘的只有你知道。</p></blockquote>
 <h4 id="636-趨勢圖">6.3.6 趨勢圖</h4>
 <p>畫每個比值的 <strong>% of baseline</strong> 隨時間變化，保留 <strong>30 分鐘</strong>。放大時時間軸仍會跟隨最新資料。</p>
 <hr>
@@ -638,22 +642,30 @@ vcruntime140_cor3.dll</code></pre>
 <thead><tr><th>模式</th><th>監控的量</th><th>適用情境</th></tr></thead>
 <tbody>
 <tr><td><code>Ratio</code></td><td>訊號 ÷ 參考</td><td><strong>預設。</strong> 標準 actinometry，能抵消電漿條件漂移</td></tr>
-<tr><td><code>AbsoluteIntensity</code></td><td>訊號線的絕對強度（扣背景後）&lt;br&gt;參考線<strong>只用來判斷電漿有沒有開</strong>，不做除法</td><td>訊號線很弱、接近雜訊底時。兩個小數字相除會劇烈擺盪，拿掉除法就少一個雜訊來源</td></tr>
+<tr><td><code>AbsoluteIntensity</code></td><td>訊號線的絕對強度（扣背景後）&lt;br&gt;<strong>完全不使用參考線</strong></td><td>訊號線很弱、接近雜訊底時。兩個小數字相除會劇烈擺盪，拿掉除法就少一個雜訊來源</td></tr>
 </tbody></table></div>
 <p><code>AbsoluteIntensity</code> 的代價：<strong>不再抵消電漿條件漂移</strong>（功率／壓力／流量變化會直接反映在讀值上）。因此使用它時必須維持穩定的操作點，並更頻繁地重錄基準線。</p>
-<blockquote><p>絕對強度模式下，% 趨勢的數字是用 σ 正規化過的分數（基準線 = 100，高一個 warn-σ = 120），這樣同一組 100/120/150 的參考線在兩種模式下都讀得通；斜率則以 σ/min 為單位。</p></blockquote>
-<p><strong>Signal line（訊號譜線）／ Reference line（參考譜線）</strong></p>
+<blockquote><p><strong>絕對強度模式的「電漿存在」判定來自記錄器的儲存觸發</strong>（Configuration 分頁的 trigger 波長與 save-start 門檻），不再看參考譜線 —— 選了這個模式，右側就不會出現 Reference line 欄位。</p>
+<p>這樣改的原因：絕對強度模式本來就不對參考線做除法，所以那條線根本不必存在；而一條不存在的譜線扣完背景後只剩在 0 附近正負跳動的雜訊，於是「參考線 &gt; 0」變成一枚硬幣，決定這一幀要不要計算。更糟的是，若參考線落在彎曲的連續光上（兩側基準視窗拉出的直線會高於凸型連續光），扣出來會<strong>系統性為負</strong>，該比值就一幀也不會被評估 —— CSV 欄位整片空白，畫面永遠停在 No Plasma。同理，參考線的 SNR 也不再影響 <code>Low Signal</code> 判定，只看被監控的那條線。</p></blockquote>
+<blockquote><p><strong>% 趨勢的單位由「擷取方式」決定，不是由監控方式決定</strong>：只有 <code>AbsoluteIntensity</code> + <code>RawMean</code>（讀值帶連續光基座）才改用 σ 正規化分數（基準線 = 100、高一個 warn-σ = 120，斜率以 σ/min 計）。<code>AbsoluteIntensity</code> 搭配 <code>PeakHeight</code> / <code>Integral</code> 時，讀值已經扣掉背景，基準均值本身就是訊號，所以照常用 <code>值 ÷ 基準均值 × 100</code>（斜率 %/min）。</p></blockquote>
+<p><strong>Signal line（訊號譜線）／ Reference line（參考譜線）</strong>（Reference line 只在 <code>Ratio</code> 模式出現）</p>
 <ul>
 <li><strong>Emission line</strong> — 從依元素分組的譜線 catalog 中挑選。若該譜線套用了波長修正，這裡會顯示例如 <code>+0.20 nm → 777.4 nm</code>。
 </li>
 <li><strong>Extraction（擷取方式）</strong>：
-<ul>
-<li><code>PeakHeight</code> — 窄的原子譜線用這個。</li>
-<li><code>Integral</code> — 分子帶頭（如 OH、NO、N₂）用這個。</li>
-</ul>
 </li>
 </ul>
-<blockquote><p>⚠️ <strong>換了參考譜線，原本的 Golden Run 基準線就失效</strong>（基準線綁定當初的參考譜線）。換完必須重錄。</p></blockquote>
+<div class="tablewrap"><table>
+<thead><tr><th>擷取方式</th><th>量什麼</th><th>什麼時候用</th></tr></thead>
+<tbody>
+<tr><td><code>PeakHeight</code></td><td>視窗內扣背景後的最大值</td><td>窄的原子譜線</td></tr>
+<tr><td><code>Integral</code></td><td>視窗內扣背景後的積分，單位 <strong>counts·nm</strong></td><td>分子帶頭（OH、NO、N₂）</td></tr>
+<tr><td><code>RawMean</code></td><td><strong>原始強度</strong>（不扣背景、不找峰）</td><td><strong>該波長根本沒有峰</strong>的時候</td></tr>
+</tbody></table></div>
+<p>前兩種都會把「兩側基準視窗拉出的一條直線」當作連續光扣掉。在有峰的地方這是小修正；<strong>在沒有峰的地方，那條直線就是讀值的全部</strong> —— 連續光通常是凸的，直線會高於中間，扣出來系統性為負；而 peak search 在單調斜坡上等於「往上坡走到底」，每一幀都把視窗釘在搜尋範圍的邊緣。實測（440.7 nm）：<code>Integral</code> 讀值 −11.7、<strong>63% 的幀為負</strong>；<code>RawMean</code> 讀值 3745 ± 19、<strong>0% 為負</strong>，而且雜訊還更低（不必付出估計背景本身的雜訊）。</p>
+<p><code>RawMean</code> 的代價是讀值帶著連續光基座，所以它也會跟著窗口髒污、雜散光、曝光時間變化 —— 這時<strong>改由 Golden Run 均值扮演背景</strong>：一個在可信時刻量到的基準，而不是每幀猜出來的。<code>HalfWidthNm</code> 在這個模式下是平均寬度，設 0 表示「在中心波長做線性內插取值」。</p>
+<p>&gt; ⚠️ <code>RawMean</code> 搭配 <strong><code>AbsoluteIntensity</code></strong> 使用時（建議的組合），三件事會自動改變： &gt; 1. <strong>Warn / Alarm factor 被忽略</strong>，只用 σ 門檻 —— 基座的 1.2 倍是好幾十個 σ，那種警報永遠不會響，而且看起來像是有在戒備。 &gt; 2. <strong>% 趨勢改為 σ 分數</strong>（基準線 = 100，高一個 warn-σ = 120），CSV 欄位也會改叫 <code>_sigmaScore</code>。 &gt; 3. <strong>Min SNR 不適用</strong> —— 原始強度除以連續光雜訊會得到幾百的「SNR」，那是基座不是譜線，所以乾脆不給 SNR（顯示 <code>—</code>）。</p>
+<blockquote><p>⚠️ <strong>換了參考譜線，原本的 Golden Run 基準線就失效</strong>（<code>Ratio</code> 模式的基準線綁定當初的參考譜線）。換完必須重錄。絕對強度模式的基準線不綁參考線，但<strong>改變監控方式</strong>（<code>Ratio</code> ↔ <code>AbsoluteIntensity</code>）一定會讓舊基準線失效 —— 兩種模式量的根本不是同一個東西。</p></blockquote>
 <p><strong>Alarm thresholds（警報門檻）</strong></p>
 <div class="tablewrap"><table>
 <thead><tr><th>參數</th><th>預設</th><th>說明</th></tr></thead>
@@ -691,7 +703,7 @@ vcruntime140_cor3.dll</code></pre>
 <p>對每個比值擬合一條<strong>過原點</strong>的加權最小平方直線：</p>
 <pre><code>x ≈ s · Q</code></pre>
 <ul>
-<li><code>x</code> = 相對基準線的上升量（Ratio 模式是<strong>相對</strong>上升 <code>比值/基準均值 − 1</code>；AbsoluteIntensity 模式是<strong>絕對</strong>上升 <code>Δ = 值 − 基準均值</code>）
+<li><code>x</code> = 相對基準線的上升量。單位由讀值有沒有帶連續光基座決定：<code>AbsoluteIntensity</code> + <code>RawMean</code> 用<strong>絕對</strong>上升 <code>Δ = 值 − 基準均值</code>（相對上升會被基座壓縮到零點幾個百分點）；其餘一律用<strong>相對</strong>上升 <code>值/基準均值 − 1</code>（它對純比例縮放免疫，條件較好）
 </li>
 <li><code>Q</code> = 已知漏率（mbar·L/s）
 </li>
@@ -737,7 +749,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><code>BaselineMismatch</code></td><td>基準線換成別條了 → <strong>暫停估算</strong>（而不是給出被錯誤縮放的數字）</td></tr>
 </tbody></table></div>
 <p>切換或重新擷取 Golden Run 時，系統會<strong>自動配對</strong>綁定該基準線的最新校正，所以換配方不會留下過期的 <code>BaselineMismatch</code>。狀態轉換都會寫進系統日誌。</p>
-<p>若某個比值的監控模式（Ratio ↔ AbsoluteIntensity）在校正之後被改過，該比值的擬合會被拒用 —— 因為兩種模式的 <code>x</code> 單位不同。</p>
+<p>若某個比值的 <code>x</code> 單位在校正之後被改過（改了監控方式或擷取方式，使讀值從「帶基座」變成「不帶基座」或反之），該比值的擬合會被拒用 —— 兩種單位的斜率不能互相套用。這也代表<strong>升級到本版之後，絕對強度比值的舊校正一律要重做</strong>。</p>
 <blockquote><p>完整的數學模型與設計文件見 <code>docs/leak-rate-calibration.md</code>。</p></blockquote>
 <hr>
 <h3 id="67-recordings光譜回放">6.7 Recordings（光譜回放）</h3>
@@ -832,6 +844,7 @@ vcruntime140_cor3.dll</code></pre>
 <h3 id="73-比值-csv-格式">7.3 比值 CSV 格式</h3>
 <pre><code>Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,LeakRateSigma</code></pre>
 <p>每個比值兩欄（原始值 + % 基準），最後三欄是整體狀態與洩漏率估計。欄位是<strong>依標題名稱</strong>尋址的，所以舊版沒有 <code>LeakRate</code> 欄位的檔案仍可正常解析。</p>
+<blockquote><p>第二欄的名稱會說明它裝的是什麼：一般是 <code>R_x_pctBaseline</code>（% 基準）；若該比值採 <code>AbsoluteIntensity</code> + <code>RawMean</code>，就會是 <strong><code>R_x_sigmaScore</code></strong>（σ 分數）。兩者都畫在同一組 100/120/150 標尺上，但<strong>不是同一個量</strong>，所以 Ratio Review 會在圖例標上 <code>(σ-score)</code>。</p></blockquote>
 <p><strong>比值檔與強度檔是各自獨立的記錄器</strong>，只共用同一個輸出資料夾與檔名前綴：</p>
 <div class="tablewrap"><table>
 <thead><tr><th></th><th>強度 CSV（<code>_OES1_</code>）</th><th>比值 CSV（<code>_Ratio_</code>）</th></tr></thead>
@@ -961,11 +974,15 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li>該譜線在你的機台上本來就很弱 → 到 Ratio Setup 把它的 <strong>Monitoring method</strong> 改成 <code>AbsoluteIntensity</code>。
 </li>
+<li>先到 Recordings 看一眼<strong>那個波長到底有沒有峰</strong>。若只是一段平滑的連續光，再怎麼調 SNR 都沒有用 —— 把 <strong>Extraction</strong> 改成 <code>RawMean</code>（見 §6.4.2），或換一條真的存在的譜線。
+</li>
 <li>最後手段：調低該比值的 <strong>Min SNR</strong>。<strong>不建議</strong>設為 0 —— 那等於關掉假警報保護。
 </li>
 </ol>
 <h3 id="95-golden-run-錄完後某條比值沒有基準線">9.5 Golden Run 錄完後某條比值沒有基準線</h3>
 <p>系統日誌會有 <code>GoldenRunRatioLowSnr</code> 記錄。原因是該比值可評估的幀當中，通過 SNR 下限的<strong>不到一半</strong>，基準線被主動拒絕了。</p>
+<p>若日誌寫的是 <strong><code>GoldenRunRatioUnstableBaseline</code></strong>，原因不同：基準均值本身不夠遠離 0（例如 <code>−25 ± 95</code>）。這代表該波長沒有峰，扣背景後只剩雜訊 —— 把 <strong>Extraction</strong> 改成 <code>RawMean</code> 再錄一次。</p>
+<p>若日誌寫的是 <strong><code>LeakMonitorBaselineMismatch</code></strong>，基準線是好的，但你之後改了某個讓它失效的設定（參考譜線、監控方式、擷取方式、或升級後積分單位改變）—— 重錄即可。</p>
 <p>處理方式同 §9.4 —— 先把訊號救起來，再重錄。</p>
 <h3 id="96-進不了-configuration-分頁">9.6 進不了 Configuration 分頁</h3>
 <p>正常行為 —— 該分頁需要 <strong>Engineer</strong> 以上。點進去會跳出登入視窗，取消就退回原本的分頁。請用 Engineer 或 Admin 帳號登入。</p>
@@ -1032,7 +1049,9 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>測試模式抑制警報</td><td>是</td></tr>
 <tr><td>寫出 Ratio CSV</td><td>是</td></tr>
 <tr><td>基準線接受門檻</td><td>可評估幀中至少 50% 通過 SNR</td></tr>
-<tr><td>電漿存在判定</td><td>參考譜線基準均值的 20%</td></tr>
+<tr><td>基準均值穩定度門檻</td><td>均值 &gt; 10 σ 且 &gt; 0</td></tr>
+<tr><td>電漿存在判定（<code>Ratio</code> 模式）</td><td>參考譜線基準均值的 20%</td></tr>
+<tr><td>電漿存在判定（<code>AbsoluteIntensity</code> 模式）</td><td>記錄器的儲存觸發量 &gt; save-start 門檻</td></tr>
 <tr><td>比值數量上限</td><td>10</td></tr>
 <tr><td>波長修正上限</td><td>±5 nm</td></tr>
 </tbody></table></div>

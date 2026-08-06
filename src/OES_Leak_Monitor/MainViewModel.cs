@@ -138,6 +138,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // spectrum stream the intensity logger sees, and bridge its lifecycle into
         // the system log. Golden Run captures are persisted as they happen.
         _leakMonitorEngine = new LeakMonitorEngine(settings.LeakMonitor, _systemLogger);
+        // Absolute-intensity ratios take their plasma-present gate from the logger's save
+        // trigger (same quantity, same threshold), so the engine has to be told what that is —
+        // here and again on every ApplyAll. Ratio-mode entries still gate on their reference.
+        _leakMonitorEngine.ConfigureTrigger(loggerSettings);
+        // Golden Runs record the acquisition conditions they were captured under, so a later
+        // exposure / averaging change is reported instead of silently re-scaling every
+        // absolute-intensity reading against a baseline that no longer applies.
+        _leakMonitorEngine.ConfigureAcquisition(_devices[0].ToSettings());
         LeakMonitor = new LeakMonitorViewModel(_leakMonitorEngine, _systemLogger);
 
         // Single fan-out: each device frame is mapped through the Test-mode simulation
@@ -324,6 +332,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // The ratio CSV shares the intensity logger's folder and prefix — an edited path
         // takes effect on its next session, not mid-file.
         _ratioCsvLogger.Configure(ls);
+        // The absolute-intensity plasma gate follows the same trigger the logger just took, so
+        // the gate and the recorder can't disagree for the rest of the run. Hot-applied on
+        // purpose: it is a logger setting, not part of the staged ratio configuration.
+        _leakMonitorEngine.ConfigureTrigger(ls);
+        // Device parameters were just pushed above — refresh the fingerprint Golden Runs are
+        // stamped with and compared against.
+        _leakMonitorEngine.ConfigureAcquisition(_devices[0].ToSettings());
         // Repointed output folder → the review tabs are now listing the wrong tree. Rescan
         // only on an actual change; a scan walks every day folder under the base directory.
         var dataDir = LoggerSettings.ResolveBaseDirectory(ls.BaseDirectory, _paths.DataDirectory);

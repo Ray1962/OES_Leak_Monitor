@@ -335,10 +335,16 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
             }
         }
 
-        _pendingSignalWarning = lowSignal.Count == 0
-            ? ""
-            : $"LOW SIGNAL — {string.Join(", ", lowSignal)} near the noise floor; " +
-              "leak detection unreliable. Raise plasma intensity / exposure or recapture the baseline.";
+        var warnings = new List<string>();
+        if (lowSignal.Count > 0)
+            warnings.Add($"LOW SIGNAL — {string.Join(", ", lowSignal)} near the noise floor; " +
+                         "leak detection unreliable. Raise plasma intensity / exposure or " +
+                         "recapture the baseline.");
+        // The baseline was captured under different acquisition settings — absolute-intensity
+        // readings scale with those, so this belongs next to the alarm, not only in the log.
+        if (!string.IsNullOrEmpty(snap.AcquisitionWarning))
+            warnings.Add(snap.AcquisitionWarning + " — capture a new Golden Run.");
+        _pendingSignalWarning = string.Join("\n", warnings);
 
         // Flush the banner immediately on alarm escalation (never delay a worsening leak);
         // otherwise mark it dirty and let the throttle timer flush at BannerMinHold so the

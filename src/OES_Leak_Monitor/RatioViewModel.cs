@@ -94,15 +94,16 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         DetailText =
             (s.Mode == MonitorMode.AbsoluteIntensity
                 ? $"intensity {Fmt(s.NumeratorIntensity)} (SNR {FmtSnr(s.NumeratorSnr)})  ·  " +
-                  $"plasma-ref {Fmt(s.DenominatorIntensity)} (SNR {FmtSnr(s.DenominatorSnr)}, gate only)"
+                  "plasma gate: logger save trigger"
                 : $"signal {Fmt(s.NumeratorIntensity)} (SNR {FmtSnr(s.NumeratorSnr)})  ÷  " +
                   $"reference {Fmt(s.DenominatorIntensity)} (SNR {FmtSnr(s.DenominatorSnr)})") +
             "\n" +
             (s.HasBaseline
                 ? $"warn {s.WarnThreshold:G4}  ·  alarm {s.AlarmThreshold:G4}"
                 : "no baseline — capture a Golden Run") +
-            (s.Mode == MonitorMode.AbsoluteIntensity
-                ? "\n% is σ-normalized (100 = baseline, +20 ≈ one warn-σ above) — not raw intensity ÷ baseline."
+            (s.HasPedestal
+                ? "\nRaw intensity (no baseline subtraction): % is σ-normalized (100 = baseline, " +
+                  "+20 ≈ one warn-σ above), thresholds are σ-based, SNR not applicable."
                 : "") +
             (s.State == RatioState.LowSignal
                 ? "\nLow signal — emission near the noise floor; not trusted."
@@ -114,12 +115,16 @@ public sealed class RatioViewModel : INotifyPropertyChanged
 
     private static string FmtSnr(double snr) => double.IsNaN(snr) ? "—" : snr.ToString("F1");
 
-    /// <summary>The worse of the two line SNRs — that's what limits the ratio.</summary>
+    /// <summary>
+    /// The worse of the two line SNRs — that's what limits the ratio. In absolute-intensity mode
+    /// only the monitored line is measured, so only its SNR is shown; folding in a reference that
+    /// takes no part in the reading would report a healthy line as near-noise.
+    /// </summary>
     private static string FormatSnr(RatioSnapshot s)
     {
         double worst = double.NaN;
         if (!double.IsNaN(s.NumeratorSnr)) worst = s.NumeratorSnr;
-        if (!double.IsNaN(s.DenominatorSnr))
+        if (s.Mode != MonitorMode.AbsoluteIntensity && !double.IsNaN(s.DenominatorSnr))
             worst = double.IsNaN(worst) ? s.DenominatorSnr : Math.Min(worst, s.DenominatorSnr);
         return double.IsNaN(worst) ? "—" : $"SNR {worst:F1}";
     }
@@ -129,10 +134,10 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         if (!s.HasBaseline || s.BaselineMean <= 0 || double.IsNaN(s.SlopePerMinute))
             return "—";
 
-        // Absolute-intensity mode: baseMean is near the noise floor, so a %/min against it is
-        // as jumpy as the %-of-baseline it mirrors. Report the trend in noise σ per minute
-        // instead — the same σ-normalized frame the trend chart uses.
-        if (s.Mode == MonitorMode.AbsoluteIntensity)
+        // A value carrying a continuum pedestal compresses %/min to nothing (and one near the
+        // noise floor makes it jump), so report the trend in noise σ per minute instead — the
+        // same σ-normalized frame that ratio's trend chart uses.
+        if (s.HasPedestal)
         {
             double sigma = Math.Max(s.BaselineSigma, double.IsNaN(s.RatioNoiseSigma) ? 0 : s.RatioNoiseSigma);
             if (!(sigma > 0)) return "—";

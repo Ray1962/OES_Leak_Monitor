@@ -58,6 +58,8 @@ public sealed class RatioCsvLogger : IDisposable
     // Re-derived at the start of every session so a Ratio Setup edit applied between
     // sessions is reflected in the next file's columns.
     private string[] _ratioKeys = Array.Empty<string>();
+    // Aligned with _ratioKeys: whether that ratio's percent column is a σ-score (see the header).
+    private bool[] _pedestal = Array.Empty<bool>();
 
     private StreamWriter? _writer;
     private string _currentPath = "";
@@ -186,15 +188,23 @@ public sealed class RatioCsvLogger : IDisposable
 
             _currentPath = UniquePath(folder,
                 $"{_filePrefix}_Ratio_{sessionStart.ToString("MMddHHmmss", Inv)}");
-            _ratioKeys = _engine.MonitoredRatios.Select(r => r.Key).ToArray();
+            var monitored = _engine.MonitoredRatios;
+            _ratioKeys = monitored.Select(r => r.Key).ToArray();
+            _pedestal = monitored.Select(r => r.ValueHasPedestal).ToArray();
             _writer = new StreamWriter(_currentPath, append: false, Utf8Bom) { AutoFlush = true };
             _sessionDate = sessionStart.Date;
             _writeErrorLogged = false;
             _disabledLogged = false;
 
+            // The second column per ratio is named for what it actually holds: a percentage of
+            // the baseline, or — where the value carries a continuum pedestal — a σ-score on the
+            // same 100/120/150 scale. Both are plotted the same way, but they are not the same
+            // number, and a file that doesn't say which is a file nobody can re-read in a year.
             var header = new StringBuilder("Timestamp");
-            foreach (var key in _ratioKeys)
-                header.Append(',').Append(key).Append(',').Append(key).Append("_pctBaseline");
+            for (int i = 0; i < _ratioKeys.Length; i++)
+                header.Append(',').Append(_ratioKeys[i])
+                      .Append(',').Append(_ratioKeys[i])
+                      .Append(_pedestal[i] ? "_sigmaScore" : "_pctBaseline");
             header.Append(",OverallState,LeakRate,LeakRateSigma");
             _writer.WriteLine(header.ToString());
 

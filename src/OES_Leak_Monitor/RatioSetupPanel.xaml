@@ -161,7 +161,7 @@
                             <ComboBox ItemsSource="{Binding MonitorModeOptions}"
                                       SelectedItem="{Binding MonitorMode}"
                                       HorizontalAlignment="Left" MinWidth="220"
-                                      ToolTip="Ratio: signal ÷ reference (normalizes out plasma drift). Absolute intensity: track the signal line's intensity directly — for weak/near-noise lines where the ratio swings wildly; the reference line then only gates plasma-present (it is not divided in). Absolute mode needs a stable plasma operating point."/>
+                                      ToolTip="Ratio: signal ÷ reference (normalizes out plasma drift). Absolute intensity: track the monitored line's intensity directly — for weak/near-noise lines where the ratio swings wildly. No reference line is involved; plasma-present comes from the logger's save trigger instead. Absolute mode needs a stable plasma operating point."/>
                             <TextBlock FontSize="11" Foreground="#888" TextWrapping="Wrap" Margin="0,3,0,0"
                                        Text="Absolute intensity drops the reference division (one less noise source) but no longer cancels plasma-condition drift — keep the operating point steady and re-baseline more often."
                                        Visibility="{Binding IsAbsolute, Converter={StaticResource BoolToVis}}"/>
@@ -203,15 +203,34 @@
                                             <TextBlock Text="Extraction" Style="{StaticResource FieldLabel}"/>
                                             <ComboBox ItemsSource="{Binding ModeOptions}"
                                                       SelectedItem="{Binding SignalMode}"
-                                                      ToolTip="Peak height for narrow atomic lines; Integral for molecular band heads."/>
+                                                      ToolTip="PeakHeight for narrow atomic lines; Integral for molecular band heads; RawMean for a wavelength with no peak — the raw intensity, with no continuum subtraction and no peak search."/>
                                         </StackPanel>
                                     </Grid>
+                                    <TextBlock FontSize="11" Foreground="#B36B00" TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="Raw: no continuum subtraction and no peak search — unbiased where there is no peak to find, but the reading carries the continuum pedestal, so it also follows window fogging and exposure changes. Re-capture the Golden Run whenever those change."
+                                               Visibility="{Binding SignalIsRaw, Converter={StaticResource BoolToVis}}"/>
+                                    <TextBlock FontSize="11" Foreground="#7A5A00" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="In this combination the Warn/Alarm factors below are ignored (σ thresholds only), the trend is plotted as a σ-score on the same 100/120/150 scale, and Min SNR does not apply."
+                                               Visibility="{Binding ValueHasPedestal, Converter={StaticResource BoolToVis}}"/>
                                 </StackPanel>
                             </Border>
 
-                            <!-- Reference line -->
+                            <!-- Plasma gate note (absolute mode has no reference line at all) -->
+                            <Border Background="#FFF8E8" BorderBrush="#E8D9AE" BorderThickness="1"
+                                    CornerRadius="4" Padding="10" Margin="0,10,0,0"
+                                    Visibility="{Binding IsAbsolute, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Plasma-present gate" FontWeight="SemiBold"
+                                               Foreground="#7A5A00" Margin="0,0,0,4"/>
+                                    <TextBlock FontSize="11" Foreground="#6B5A2E" TextWrapping="Wrap"
+                                               Text="No reference line is used in this mode. The ratio is evaluated whenever the intensity logger's save trigger is above its threshold — set the trigger wavelength and save-start threshold in the Configuration tab."/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Reference line (ratio mode only) -->
                             <Border Background="#F7F9FC" BorderBrush="#E3E8F0" BorderThickness="1"
-                                    CornerRadius="4" Padding="10" Margin="0,10,0,0">
+                                    CornerRadius="4" Padding="10" Margin="0,10,0,0"
+                                    Visibility="{Binding IsRatioMode, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
                                     <TextBlock Text="{Binding ReferenceLineHeader}"
                                                FontWeight="SemiBold" Foreground="#1F3A66" Margin="0,0,0,6"/>

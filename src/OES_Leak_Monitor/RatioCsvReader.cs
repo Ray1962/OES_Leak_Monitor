@@ -20,6 +20,15 @@ public sealed class RatioTrendData
     public IReadOnlyDictionary<string, double[]> Raw { get; init; } = new Dictionary<string, double[]>();
     public IReadOnlyDictionary<string, double[]> Pct { get; init; } = new Dictionary<string, double[]>();
 
+    /// <summary>
+    /// Per ratio: true when its <see cref="Pct"/> series is a σ-score (header column
+    /// <c>key_sigmaScore</c>) rather than a percentage of the baseline (<c>key_pctBaseline</c>).
+    /// Both are drawn on the same 100/120/150 scale by construction, but they are different
+    /// quantities, so the plot says which. Absent keys are percentages — files written before
+    /// the distinction existed only ever held percentages.
+    /// </summary>
+    public IReadOnlyDictionary<string, bool> PctIsSigmaScore { get; init; } = new Dictionary<string, bool>();
+
     /// <summary>Composite leak state per row ("Idle" / "Normal" / "Warning" / "Alarm").</summary>
     public IReadOnlyList<string> States { get; init; } = Array.Empty<string>();
 
@@ -110,10 +119,13 @@ public static class RatioCsvReader
 
         var rawDict = new Dictionary<string, double[]>(ratioCount);
         var pctDict = new Dictionary<string, double[]>(ratioCount);
+        var kindDict = new Dictionary<string, bool>(ratioCount);
         for (int i = 0; i < ratioCount; i++)
         {
             rawDict[keys[i]] = raw[i].ToArray();
             pctDict[keys[i]] = pct[i].ToArray();
+            kindDict[keys[i]] = Field(cols, 2 + 2 * i)?.Trim()
+                .EndsWith("_sigmaScore", StringComparison.OrdinalIgnoreCase) ?? false;
         }
 
         return new RatioTrendData
@@ -122,6 +134,7 @@ public static class RatioCsvReader
             Timestamps = timestamps,
             Raw = rawDict,
             Pct = pctDict,
+            PctIsSigmaScore = kindDict,
             States = states,
             LeakRate = rate.ToArray(),
             LeakRateSigma = sigma.ToArray(),

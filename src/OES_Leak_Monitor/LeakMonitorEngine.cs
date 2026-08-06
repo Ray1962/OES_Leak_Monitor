@@ -56,6 +56,13 @@ public sealed class LeakMonitorSnapshot
 
     /// <summary>Whether the selected calibration is valid for the current baseline.</summary>
     public CalibrationStatus CalibrationStatus { get; init; }
+
+    /// <summary>
+    /// Non-empty when the live acquisition parameters differ from the ones the active Golden Run
+    /// was captured under — absolute-intensity readings scale with those, so the baseline no
+    /// longer applies. Empty when they agree, or when the run predates the recording of them.
+    /// </summary>
+    public string AcquisitionWarning { get; init; } = "";
 }
 
 public sealed class LeakAlarmEventArgs : EventArgs
@@ -80,6 +87,17 @@ public sealed class LeakMonitorEngine : IDisposable
     // from a biased sliver of upward noise excursions when the line hovers around noise.
     private const double MinBaselineAcceptFraction = 0.5;
 
+    // A baseline mean must stand this many σ clear of zero to be usable. Everything downstream
+    // divides by it — thresholds, the % display, the leak-rate fit — and a mean of −25 with a σ
+    // of 95 (a real capture of a wavelength with no line on it) turns each of those into a
+    // number whose sign is decided by noise. Rejecting it and saying so beats a monitor that
+    // appears configured and reports nonsense.
+    private const double MinBaselineMeanToSigma = 10.0;
+
+    // Bumped when a change alters the units/scale of an extracted value; stamped onto every
+    // captured baseline. See GoldenRunRatioBaseline.ExtractionRevision.
+    private const int CurrentExtractionRevision = 1;
+
     private readonly object _gate = new();
     private readonly LeakMonitorSettings _settings;
     private readonly SystemLogger? _log;
@@ -87,6 +105,16 @@ public sealed class LeakMonitorEngine : IDisposable
     private readonly Dictionary<string, RatioDefinition> _defs = new();
 
     private GoldenRun? _activeRun;
+    // Plasma-present gate for absolute-intensity ratios, mirroring the intensity logger's save
+    // trigger. Null until ConfigureTrigger is called (the host does so at start-up and on Apply).
+    private PlasmaGate? _plasmaGate;
+    private bool _gateWarned;                // "gate unusable" is logged once, not per frame
+    // Live acquisition conditions, for stamping onto a Golden Run and for detecting that the
+    // active baseline was captured under different ones. Device half comes from the host via
+    // ConfigureAcquisition; the axis half is read off each frame.
+    private AcquisitionFingerprint? _acquisition;
+    private string _acquisitionWarning = "";  // "" when the active baseline still applies
+    private string _acquisitionWarned = "";   // last warning logged, so it is logged once
     private LeakRateEstimator? _estimator;   // built from the active calibration, or null
     private CalibrationStatus _calStatus = CalibrationStatus.NotCalibrated;
     private LeakAlarmLevel _overall = LeakAlarmLevel.Idle;
@@ -129,6 +157,56 @@ public sealed class LeakMonitorEngine : IDisposable
             _monitors.Add(new RatioMonitor(corrected));
         }
         ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // also builds the estimator
+    }
+
+    /// <summary>
+    /// Points the absolute-intensity plasma gate at the intensity logger's save trigger — same
+    /// quantity, same threshold, so the gate is open exactly while the logger would be recording.
+    /// Call at start-up and on every Apply; the gate is hot-applied (unlike a ratio-set edit,
+    /// which is staged until acquisition restarts) because it is a logger setting, and the two
+    /// would otherwise disagree for the rest of the run.
+    /// <para>Ratio-mode entries are unaffected — they keep gating on their reference line, which
+    /// they divide by anyway.</para>
+    /// </summary>
+    public void ConfigureTrigger(LoggerSettings? settings)
+    {
+        string? before, after;
+        lock (_gate)
+        {
+            before = _plasmaGate?.Description;
+            _plasmaGate = settings is null ? null : new PlasmaGate(settings);
+            after = _plasmaGate?.Description;
+            _gateWarned = false;
+        }
+        if (before != after)
+            _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorPlasmaGate",
+                "Absolute-intensity ratios gate on the logger save trigger",
+                value: after ?? "(none)");
+    }
+
+    /// <summary>
+    /// Tells the engine what acquisition parameters the spectra are being taken with, so a
+    /// Golden Run can record them and a later mismatch can be reported. Call at start-up and
+    /// whenever device parameters are applied. An absolute-intensity baseline is a count, and
+    /// counts scale with integration time and averaging — without this, changing the exposure
+    /// silently re-scales every reading against a baseline that no longer applies.
+    /// </summary>
+    public void ConfigureAcquisition(DeviceSettings? settings)
+    {
+        lock (_gate)
+        {
+            _acquisition = settings is null ? null : new AcquisitionFingerprint
+            {
+                IntegrationTimeMs = settings.IntegrationTimeMs,
+                AverageCount = settings.AverageCount,
+                BoxcarWidth = settings.BoxcarWidth,
+                AcquireMode = settings.AcquireMode.ToString(),
+                AverageMode = settings.AverageMode.ToString(),
+                BackgroundRemove = settings.EnableBackgroundRemove,
+                StraylightCorrection = settings.EnableStraylightCorrection,
+                LinearityCorrection = settings.EnableLinearityCorrection,
+            };
+        }
     }
 
     /// <summary>Raised for every processed frame. Fires on the acquisition thread.</summary>
@@ -175,11 +253,22 @@ public sealed class LeakMonitorEngine : IDisposable
             var wl = sample.Wavelengths;
             var inten = sample.Intensities;
 
+            // Keep the live acquisition fingerprint current and check the active baseline
+            // against it — an exposure change mid-campaign re-scales every absolute reading.
+            UpdateAcquisitionStatus(wl);
+
             // During a Golden Run capture the plasma gate ignores the inherited floor —
             // that floor came from a previous run and could otherwise block capturing a
             // fresh baseline (e.g. after a peak shift or a lower-power recipe). The new
             // floor is derived from the capture itself in FinalizeCapture().
             double floor = _capturing ? 0.0 : (_activeRun?.PlasmaPresentFloor ?? 0.0);
+
+            // Absolute-intensity ratios gate on the logger's trigger metric, not on their
+            // reference line — they never divide by it, so requiring it to extract positive only
+            // let the reference's own noise (or a systematically negative extraction on a curved
+            // continuum) decide whether the frame was evaluated at all. Measured once per frame
+            // and shared by every absolute ratio; null = the gate could not be evaluated.
+            bool? triggerPlasma = _plasmaGate?.IsPlasmaPresent(wl, inten);
 
             foreach (var mon in _monitors)
             {
@@ -195,12 +284,24 @@ public sealed class LeakMonitorEngine : IDisposable
                 var denM = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
                 double num = numM.Value, den = denM.Value;
 
-                bool plasma = !double.IsNaN(den) && den > 0 && den > floor;
+                bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
+                bool plasma;
+                if (absolute)
+                {
+                    // An unusable / unmeasurable gate leaves the ratio ungated rather than dark:
+                    // "we can't tell" is not "plasma off", and a silently dead ratio is the
+                    // failure mode this change exists to remove. Said once in the log.
+                    plasma = triggerPlasma ?? true;
+                    if (triggerPlasma is null) WarnGateUnusableOnce();
+                }
+                else
+                {
+                    plasma = !double.IsNaN(den) && den > 0 && den > floor;
+                }
                 mon.Update(numM, denM, sample.Timestamp, plasma);
 
                 // The monitored quantity: the signal/reference ratio, or — in absolute mode —
-                // the signal line's intensity (the reference only gates plasma-present above).
-                bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
+                // the signal line's intensity (the reference is not involved at all).
                 double value = absolute ? num : (den != 0 ? num / den : double.NaN);
 
                 if (_capturing)
@@ -210,16 +311,18 @@ public sealed class LeakMonitorEngine : IDisposable
                     var diag = GetDiag(mon.Key);
                     diag.Frames++;
                     if (double.IsNaN(num)) diag.NumeratorMissing++;
-                    if (double.IsNaN(den) || den <= 0) diag.ReferenceMissing++;
-                    if (plasma && den != 0 && !double.IsNaN(value))
+                    if (!absolute && (double.IsNaN(den) || den <= 0)) diag.ReferenceMissing++;
+                    if (plasma && (absolute || den != 0) && !double.IsNaN(value))
                     {
                         // Mirror the runtime LowSignal gate: only frames whose lines clear the
                         // SNR floor feed the baseline, so a near-noise capture doesn't produce
                         // an unreliable mean/σ. MinSnr 0 disables the gate (legacy behaviour).
+                        // In absolute mode only the monitored line is judged — the reference is
+                        // not part of the measurement, so its SNR must not veto the baseline.
                         double minSnr = def.MinSnr;
                         bool lowSnr = minSnr > 0 &&
                             ((!double.IsNaN(numM.Snr) && numM.Snr < minSnr) ||
-                             (!double.IsNaN(denM.Snr) && denM.Snr < minSnr));
+                             (!absolute && !double.IsNaN(denM.Snr) && denM.Snr < minSnr));
                         if (lowSnr)
                         {
                             diag.LowSnr++;
@@ -228,21 +331,26 @@ public sealed class LeakMonitorEngine : IDisposable
                         {
                             diag.Accepted++;
                             GetAccum(mon.Key).Add(value);
-                            _captureDenom.Add(den);
+                            // Only reference lines that are actually used contribute to the
+                            // recipe's plasma floor; an absolute ratio's reference is inert.
+                            if (!absolute) _captureDenom.Add(den);
                         }
                     }
                 }
 
                 // Calibration point: average the rise relative to the active baseline. Needs a
-                // baseline (x is defined against it) and live plasma. In absolute-intensity mode
-                // the baseline mean sits near the noise floor, so record the *absolute* rise
-                // Δ = value − baseMean (matching the runtime reading and dodging a division by a
-                // near-zero mean) rather than the fractional rise; the fit's Absolute flag records
-                // which unit was used.
+                // baseline (x is defined against it) and live plasma. Where the value carries a
+                // continuum pedestal, record the *absolute* rise Δ = value − baseMean: the
+                // fractional rise would compress a real response into a fraction of a percent of
+                // the pedestal. Everywhere else the fractional rise is the better-conditioned
+                // quantity (it is immune to a pure re-scaling). The fit's Absolute flag records
+                // which unit was used, and refuses a reading in the other one.
                 if (_calCapturing && mon.HasBaseline && plasma &&
-                    mon.BaselineMean > 0 && den != 0 && !double.IsNaN(value))
+                    mon.BaselineMean > 0 && (absolute || den != 0) && !double.IsNaN(value))
                 {
-                    double x = absolute ? value - mon.BaselineMean : value / mon.BaselineMean - 1.0;
+                    double x = def.ValueHasPedestal
+                        ? value - mon.BaselineMean
+                        : value / mon.BaselineMean - 1.0;
                     GetCalAccum(mon.Key).Add(x);
                 }
             }
@@ -340,22 +448,30 @@ public sealed class LeakMonitorEngine : IDisposable
         lock (_gate) _calCapturing = false;
     }
 
-    /// <summary>Current reference (denominator) line label per monitored ratio — used to stamp
-    /// a fitted calibration so a later reference swap invalidates it.</summary>
+    /// <summary>
+    /// Current reference (denominator) line label per monitored ratio — used to stamp a fitted
+    /// calibration so a later reference swap invalidates it. Empty for an absolute-intensity
+    /// ratio, which doesn't use the reference at all: swapping a line that takes no part in the
+    /// measurement must not throw away a calibration. Same rule as the Golden Run baselines.
+    /// </summary>
     public IReadOnlyDictionary<string, string> CurrentReferenceLabels()
     {
         lock (_gate)
-            return _defs.ToDictionary(kv => kv.Key, kv => kv.Value.Denominator.Label);
+            return _defs.ToDictionary(kv => kv.Key,
+                kv => kv.Value.MonitorMode == MonitorMode.AbsoluteIntensity
+                    ? "" : kv.Value.Denominator.Label);
     }
 
-    /// <summary>Current monitor mode per ratio (true = absolute-intensity) — used to stamp a
-    /// fitted calibration with the unit it was made in, and to reject it later if the ratio's
-    /// mode changed (a fractional fit can't score an absolute reading, or vice versa).</summary>
-    public IReadOnlyDictionary<string, bool> CurrentMonitorModes()
+    /// <summary>
+    /// Unit each ratio's rise is expressed in — true = the absolute rise Δ (a value carrying a
+    /// continuum pedestal), false = the fractional rise. Used to stamp a fitted calibration with
+    /// the unit it was made in and to reject it later if that changed: a fractional fit cannot
+    /// score an absolute reading, or vice versa. See <see cref="RatioDefinition.ValueHasPedestal"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, bool> CurrentValueUnits()
     {
         lock (_gate)
-            return _defs.ToDictionary(kv => kv.Key,
-                kv => kv.Value.MonitorMode == MonitorMode.AbsoluteIntensity);
+            return _defs.ToDictionary(kv => kv.Key, kv => kv.Value.ValueHasPedestal);
     }
 
     /// <summary>Clears every latched alarm.</summary>
@@ -577,6 +693,7 @@ public sealed class LeakMonitorEngine : IDisposable
             CapturedUtc = DateTime.UtcNow,
             DurationSeconds = (_captureLast - _captureStart).TotalSeconds,
             PlasmaPresentFloor = 0.2 * denomMean,
+            Acquisition = _acquisition?.Clone(),
         };
         foreach (var mon in _monitors)
         {
@@ -607,13 +724,37 @@ public sealed class LeakMonitorEngine : IDisposable
                 continue;
             }
 
+            var baselineDef = _defs[mon.Key];
+
+            // Everything downstream divides by this mean. A mean that isn't clear of zero
+            // compared with its own scatter makes thresholds, the % display and the leak-rate
+            // fit into sign-of-the-noise arithmetic — reject it and name the number, rather
+            // than ship a monitor that looks configured and reports nonsense.
+            double mean = acc!.Mean, sd = acc.StdDev;
+            if (mean <= 0 || (sd > 0 && mean < MinBaselineMeanToSigma * sd))
+            {
+                _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunRatioUnstableBaseline",
+                    $"Ratio {baselineDef.DisplayName} baseline rejected — mean {mean:G4} ± {sd:G3} " +
+                    $"is not clear of zero (needs mean > {MinBaselineMeanToSigma:0} σ). The line is " +
+                    "at or below the local continuum estimate, so every derived quantity would be " +
+                    "noise. Use a stronger line, or switch the extraction to Raw (no baseline " +
+                    "subtraction) if there is no peak at this wavelength.",
+                    related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+                continue;
+            }
+
             run.Baselines.Add(new GoldenRunRatioBaseline
             {
                 Key = mon.Key,
-                Mean = acc!.Mean,
-                Sigma = acc.StdDev,
+                Mean = mean,
+                Sigma = sd,
                 SampleCount = acc.Count,
-                ReferenceLabel = _defs[mon.Key].Denominator.Label,
+                ExtractionRevision = CurrentExtractionRevision,
+                Mode = baselineDef.MonitorMode,
+                // Absolute-intensity baselines don't involve the reference line, so they don't
+                // record one — a later reference swap must not invalidate them.
+                ReferenceLabel = baselineDef.MonitorMode == MonitorMode.AbsoluteIntensity
+                    ? "" : baselineDef.Denominator.Label,
             });
         }
 
@@ -664,10 +805,22 @@ public sealed class LeakMonitorEngine : IDisposable
         {
             var b = run?.Find(mon.Key);
             var def = _defs[mon.Key];
-            // A baseline applies only if it was captured against the ratio's current
-            // reference line — switching the reference invalidates the old baseline.
-            bool labelMatches = b is not null && b.ReferenceLabel == def.Denominator.Label;
-            bool usable = b is not null && b.Mean > 0 && labelMatches;
+            bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
+            // The baseline is a mean of the monitored quantity, so it only applies while that
+            // quantity is still defined the same way: same monitor mode, and — in ratio mode —
+            // the same reference line it was divided by. An absolute baseline is a plain line
+            // intensity, so swapping the (inert) reference must not invalidate it; but switching
+            // between the two modes must, because the numbers aren't comparable.
+            bool modeMatches = b is not null && b.Mode == def.MonitorMode;
+            bool labelMatches = b is not null && (absolute || b.ReferenceLabel == def.Denominator.Label);
+            // An older extraction revision only matters where the units actually changed —
+            // integrals became counts·nm. Peak-height and raw baselines are unaffected and keep
+            // working, so an upgrade doesn't invalidate more than it has to.
+            bool involvesIntegral = def.Numerator.Mode == LineExtractMode.Integral ||
+                                    (!absolute && def.Denominator.Mode == LineExtractMode.Integral);
+            bool revisionOk = b is not null &&
+                              (!involvesIntegral || b.ExtractionRevision >= CurrentExtractionRevision);
+            bool usable = b is not null && b.Mean > 0 && modeMatches && labelMatches && revisionOk;
             if (usable)
             {
                 mon.SetBaseline(b!.Mean, b.Sigma);
@@ -675,13 +828,26 @@ public sealed class LeakMonitorEngine : IDisposable
             else
             {
                 mon.ClearBaseline();
-                // A baseline exists but is being rejected purely on a reference-line
+                // A baseline exists but is being rejected purely on a mode / reference-line
                 // mismatch — surface it so it doesn't look like the capture failed.
-                if (b is not null && b.Mean > 0 && !labelMatches)
+                if (b is not null && b.Mean > 0 && !modeMatches)
+                    _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorBaselineMismatch",
+                        $"Golden Run “{run!.Name}” has a baseline for {def.DisplayName}, but it was " +
+                        $"captured in {b.Mode} mode and the ratio is now in {def.MonitorMode} mode — " +
+                        "the two measure different quantities, so capture a new Golden Run.",
+                        related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+                else if (b is not null && b.Mean > 0 && !labelMatches)
                     _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorBaselineMismatch",
                         $"Golden Run “{run!.Name}” has a baseline for {def.DisplayName}, " +
                         $"but it was captured against reference {b.ReferenceLabel}, not the current " +
                         $"{def.Denominator.Label} — capture a new Golden Run for this reference.",
+                        related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+                else if (b is not null && b.Mean > 0 && !revisionOk)
+                    _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorBaselineMismatch",
+                        $"Golden Run “{run!.Name}” has a baseline for {def.DisplayName} measured " +
+                        "with the previous integral extraction (a plain pixel sum). Integrals are " +
+                        "now in counts·nm with fractional-pixel window edges, so the stored mean is " +
+                        "in a different unit — capture a new Golden Run.",
                         related: $"GoldenRun={run.Name},Ratio={mon.Key}");
             }
         }
@@ -689,18 +855,78 @@ public sealed class LeakMonitorEngine : IDisposable
         BuildEstimator();
     }
 
+    /// <summary>
+    /// Stamps the current frame's axis onto the live acquisition fingerprint and compares it
+    /// with the one the active Golden Run was captured under. The result is surfaced on every
+    /// snapshot (so the panel can show it) and logged once per distinct difference — a
+    /// per-frame log would bury everything else, and staying silent is how a re-exposed
+    /// spectrometer quietly invalidates a month of baselines. Caller holds the lock.
+    /// </summary>
+    private void UpdateAcquisitionStatus(float[]? wl)
+    {
+        if (_acquisition is not null && wl is { Length: > 1 })
+        {
+            _acquisition.AxisLength = wl.Length;
+            _acquisition.AxisStartNm = wl[0];
+            _acquisition.AxisEndNm = wl[wl.Length - 1];
+        }
+
+        var captured = _activeRun?.Acquisition;
+        string diff = captured is null || _acquisition is null
+            ? ""                              // nothing to compare against — say nothing
+            : _acquisition.Differences(captured);
+        _acquisitionWarning = diff.Length == 0
+            ? ""
+            : $"Acquisition differs from Golden Run “{_activeRun!.Name}”: {diff}";
+
+        if (_acquisitionWarning == _acquisitionWarned) return;
+        _acquisitionWarned = _acquisitionWarning;
+        if (_acquisitionWarning.Length > 0)
+            _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorAcquisitionMismatch",
+                _acquisitionWarning + ". Absolute-intensity readings scale with these settings, " +
+                "so the baseline no longer applies — capture a new Golden Run.",
+                related: $"GoldenRun={_activeRun!.Name}", value: diff);
+    }
+
+    /// <summary>
+    /// Says once — not once per frame — that the absolute-intensity plasma gate could not be
+    /// evaluated, so those ratios are running ungated. Silence here is what made a mistyped
+    /// trigger wavelength look like a dead leak monitor. Reset by <see cref="ConfigureTrigger"/>,
+    /// so a corrected setting reports again if it is still wrong.
+    /// </summary>
+    private void WarnGateUnusableOnce()
+    {
+        if (_gateWarned) return;
+        _gateWarned = true;
+        string why = _plasmaGate is null
+            ? "no logger trigger has been configured"
+            : !_plasmaGate.IsUsable
+                ? $"the trigger is not usable as a gate ({_plasmaGate.Description})"
+                : $"the trigger could not be measured on this frame ({_plasmaGate.Description}) — " +
+                  "the wavelength is outside the spectrometer axis or its tolerance";
+        _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorPlasmaGateUnavailable",
+            $"Absolute-intensity ratios are running without a plasma-present gate: {why}. " +
+            "Set the logger's trigger wavelength and save-start threshold in the Configuration tab.",
+            value: _plasmaGate?.Description ?? "(none)");
+    }
+
     /// <summary>Logs why a ratio ended a Golden Run capture with no usable baseline.</summary>
     private void LogDroppedRatio(string key, string runName)
     {
         var def = _defs[key];
+        bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
         _captureDiag.TryGetValue(key, out var d);
         string reason;
         if (d is { Disabled: false, Frames: > 0 })
         {
             if (d.NumeratorMissing == d.Frames)
-                reason = $"the numerator line {def.Numerator.Label} ({def.Numerator.CenterNm:0.#} nm) " +
+                reason = $"the monitored line {def.Numerator.Label} ({def.Numerator.CenterNm:0.#} nm) " +
                          "fell outside the spectrometer wavelength range in every frame";
-            else if (d.ReferenceMissing == d.Frames)
+            else if (absolute && d.LowSnr == 0)
+                reason = "no frame passed the plasma-present gate — check the logger's trigger " +
+                         "wavelength / save-start threshold, which is what gates absolute-intensity " +
+                         "ratios, and that the plasma was on during the capture";
+            else if (!absolute && d.ReferenceMissing == d.Frames)
                 reason = $"the reference line {def.Denominator.Label} ({def.Denominator.CenterNm:0.#} nm) " +
                          "never registered — the plasma was off, or the line is outside the spectrum";
             else if (d.LowSnr > 0)
@@ -775,6 +1001,7 @@ public sealed class LeakMonitorEngine : IDisposable
             LeakRate = estimate,
             ActiveCalibration = _settings.ActiveCalibration,
             CalibrationStatus = _calStatus,
+            AcquisitionWarning = _acquisitionWarning,
         };
     }
 
@@ -803,7 +1030,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 x = double.NaN;
                 sigX = 0.0;
             }
-            else if (r.Mode == MonitorMode.AbsoluteIntensity)
+            else if (r.HasPedestal)
             {
                 // Absolute rise Δ and its raw σ (both in intensity units).
                 x = r.SmoothedRatio - r.BaselineMean;
@@ -817,10 +1044,7 @@ public sealed class LeakMonitorEngine : IDisposable
             readings.Add(new LeakRateEstimator.RatioReading(r.Key, x, sigX));
         }
 
-        var refLabels = _defs.ToDictionary(kv => kv.Key, kv => kv.Value.Denominator.Label);
-        var modes = _defs.ToDictionary(kv => kv.Key,
-            kv => kv.Value.MonitorMode == MonitorMode.AbsoluteIntensity);
-        return _estimator.Estimate(readings, refLabels, modes);
+        return _estimator.Estimate(readings, CurrentReferenceLabels(), CurrentValueUnits());
     }
 
     private Accum GetAccum(string key)

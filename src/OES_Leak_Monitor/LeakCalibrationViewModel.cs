@@ -297,7 +297,7 @@ public sealed class LeakCalibrationViewModel : INotifyPropertyChanged, IDisposab
         }
 
         var refLabels = _engine.CurrentReferenceLabels();
-        var modes = _engine.CurrentMonitorModes();
+        var modes = _engine.CurrentValueUnits();
         var fits = LeakRateEstimator.FitAll(pts, refLabels, modes);
 
         var cal = new LeakCalibration
