@@ -852,7 +852,7 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 </ul>
 <blockquote><p>⚠️ <strong>已壓縮的日期不會出現在 Recordings / Ratio Review 的清單裡</strong>，要回放必須先把該 <code>DD.zip</code> 解壓縮回 <code>DD\</code> 資料夾。這是使用壓縮功能前要先知道的代價。</p></blockquote>
-<p><strong>磁碟警告</strong>（不論壓縮功能是否開啟都會發出）：程式<strong>開啟時與關閉時</strong>各檢查一次，餘量低於 <strong>10%</strong> 或資料夾超過容量上限就跳出提示，低於 <strong>5%</strong> 視為嚴重。沒問題時完全不跳 —— 每次都跳的視窗沒有人會讀。</p>
+<p><strong>磁碟警告</strong>（不論壓縮功能是否開啟都會發出）：程式<strong>開啟時與關閉時</strong>各檢查一次，<strong>只有在真的有磁碟問題時才會跳視窗</strong> —— 餘量低於 <strong>10%</strong>，或資料夾超過容量上限；低於 <strong>5%</strong> 視為嚴重。單純「沒開啟自動壓縮」不會跳提示（否則每次開關程式都要按一次確定，久了就沒人看了），該狀態在 Configuration 分頁本來就看得到。</p>
 <h3 id="75-備份建議">7.5 備份建議</h3>
 <p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正、波長修正與資料保存設定。</p>
 <hr>

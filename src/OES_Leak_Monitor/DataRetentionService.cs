@@ -125,8 +125,11 @@ public static class DataRetentionService
                                "restored by moving archives off this machine."
                              : " — automatic compression is switched off in Configuration."));
 
-        if (!settings.Enabled && dayFolders > 0)
-            warnings.Add("Automatic compression is switched off, so the data folder will keep growing.");
+        // Deliberately NOT a warning: compression is off by default, so "compression is off"
+        // would pop a dialog on every open and every close of a perfectly healthy machine —
+        // the nagging that trains people to dismiss this dialog without reading it. Only a
+        // real disk condition (low free space, over the size limit) is worth interrupting
+        // for; the switch's state is visible in the Configuration tab where it is set.
 
         return new DataFolderState
         {
