@@ -167,7 +167,7 @@ td code{white-space:nowrap;}
 </nav>
 <main>
 <h1 id="oes-leak-monitor-操作手冊">OES Leak Monitor 操作手冊</h1>
-<blockquote><p>版本對應：<code>Aqst.OesSpectrometer 0.4.6</code> / <code>Aqst.OesApp.Core 0.1.4</code> / <code>Aqst.OesApp.Wpf 0.1.8</code> 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）</p></blockquote>
+<blockquote><p>版本對應：<code>Aqst.OesSpectrometer 0.4.6</code> / <code>Aqst.OesApp.Core 0.1.5</code> / <code>Aqst.OesApp.Wpf 0.1.9</code> 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）</p></blockquote>
 <hr>
 <h2 id="目錄">目錄</h2>
 <ol>
@@ -728,12 +728,12 @@ vcruntime140_cor3.dll</code></pre>
 <blockquote><p>完整的數學模型與設計文件見 <code>docs/leak-rate-calibration.md</code>。</p></blockquote>
 <hr>
 <h3 id="67-recordings光譜回放">6.7 Recordings（光譜回放）</h3>
-<p>回放記錄器寫出的光譜 CSV。</p>
+<p>回放記錄器寫出的光譜 CSV。<strong>已被壓縮的日期也會列出</strong>（標示 <code>zip</code>），選取時直接從壓縮檔讀取，不必先解壓縮（見 §7.4）。</p>
 <p><strong>工具列</strong></p>
 <div class="tablewrap"><table>
 <thead><tr><th>按鈕</th><th>說明</th></tr></thead>
 <tbody>
-<tr><td><strong>Refresh</strong></td><td>重新掃描資料夾。啟動時與 Configuration 改過資料夾按 Apply 後都會自動掃一次，所以平常只有在<strong>程式外部</strong>新增／刪除檔案時才需要手動按</td></tr>
+<tr><td><strong>Refresh</strong></td><td>重新掃描資料夾（含 <code>DD.zip</code> 壓縮檔內容）。啟動時與 Configuration 改過資料夾按 Apply 後都會自動掃一次，所以平常只有在<strong>程式外部</strong>新增／刪除檔案時才需要手動按</td></tr>
 <tr><td><strong>Open Base</strong></td><td>用檔案總管開啟記錄器的根目錄</td></tr>
 <tr><td><strong>Open Folder</strong></td><td>開啟選定 session 的資料夾</td></tr>
 <tr><td><strong>Open File</strong></td><td>用預設程式開啟該 CSV</td></tr>
@@ -755,7 +755,7 @@ vcruntime140_cor3.dll</code></pre>
 </ul>
 <hr>
 <h3 id="68-ratio-review比值回放">6.8 Ratio Review（比值回放）</h3>
-<p>回放記錄器寫出的比值 CSV（<code>{prefix}_Ratio_*.csv</code>）。</p>
+<p>回放記錄器寫出的比值 CSV（<code>{prefix}_Ratio_*.csv</code>）。<strong>已被壓縮的日期一併列出</strong>（標示 <code>zip</code>），直接從壓縮檔讀取。</p>
 <p><strong>三種檢視模式</strong>（同樣以綠框標示目前模式）：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>模式</th><th>內容</th></tr></thead>
@@ -851,7 +851,8 @@ vcruntime140_cor3.dll</code></pre>
 <li>每一個動作都寫進 <strong>Logs</strong> 分頁（<code>DataArchived</code> / <code>DataArchiveSkipped</code> / <code>DataArchiveFailed</code>）。
 </li>
 </ul>
-<blockquote><p>⚠️ <strong>已壓縮的日期不會出現在 Recordings / Ratio Review 的清單裡</strong>，要回放必須先把該 <code>DD.zip</code> 解壓縮回 <code>DD\</code> 資料夾。這是使用壓縮功能前要先知道的代價。</p></blockquote>
+<blockquote><p>✅ <strong>已壓縮的資料照樣可以回放。</strong> Recordings 與 Ratio Review 會一併列出 <code>DD.zip</code> 裡的檔案，選取時直接從壓縮檔讀取，<strong>不需要先解壓縮</strong>。清單上會標示 <code>zip</code>，狀態列也會註明來源檔（例如 <code>(from 23.zip)</code>）。</p>
+<p>唯一的差別是讀取時要即時解壓縮，比未壓縮的檔案略慢（實測 30 MB 全譜檔約 0.35 秒），而 Recordings 的日期範圍預設只看最近 7 天 —— 要看更早的資料記得把 <strong>From</strong> 日期往前調。</p></blockquote>
 <p><strong>磁碟警告</strong>（不論壓縮功能是否開啟都會發出）：程式<strong>開啟時與關閉時</strong>各檢查一次，<strong>只有在真的有磁碟問題時才會跳視窗</strong> —— 餘量低於 <strong>10%</strong>，或資料夾超過容量上限；低於 <strong>5%</strong> 視為嚴重。單純「沒開啟自動壓縮」不會跳提示（否則每次開關程式都要按一次確定，久了就沒人看了），該狀態在 Configuration 分頁本來就看得到。</p>
 <h3 id="75-備份建議">7.5 備份建議</h3>
 <p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正、波長修正與資料保存設定。</p>

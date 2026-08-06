@@ -1,6 +1,6 @@
 # OES Leak Monitor 操作手冊
 
-> 版本對應：`Aqst.OesSpectrometer 0.4.6` / `Aqst.OesApp.Core 0.1.4` / `Aqst.OesApp.Wpf 0.1.8`
+> 版本對應：`Aqst.OesSpectrometer 0.4.6` / `Aqst.OesApp.Core 0.1.5` / `Aqst.OesApp.Wpf 0.1.9`
 > 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）
 
 ---
@@ -580,13 +580,13 @@ x ≈ s · Q
 
 ### 6.7 Recordings（光譜回放）
 
-回放記錄器寫出的光譜 CSV。
+回放記錄器寫出的光譜 CSV。**已被壓縮的日期也會列出**（標示 `zip`），選取時直接從壓縮檔讀取，不必先解壓縮（見 §7.4）。
 
 **工具列**
 
 | 按鈕 | 說明 |
 |---|---|
-| **Refresh** | 重新掃描資料夾。啟動時與 Configuration 改過資料夾按 Apply 後都會自動掃一次，所以平常只有在**程式外部**新增／刪除檔案時才需要手動按 |
+| **Refresh** | 重新掃描資料夾（含 `DD.zip` 壓縮檔內容）。啟動時與 Configuration 改過資料夾按 Apply 後都會自動掃一次，所以平常只有在**程式外部**新增／刪除檔案時才需要手動按 |
 | **Open Base** | 用檔案總管開啟記錄器的根目錄 |
 | **Open Folder** | 開啟選定 session 的資料夾 |
 | **Open File** | 用預設程式開啟該 CSV |
@@ -606,7 +606,7 @@ x ≈ s · Q
 
 ### 6.8 Ratio Review（比值回放）
 
-回放記錄器寫出的比值 CSV（`{prefix}_Ratio_*.csv`）。
+回放記錄器寫出的比值 CSV（`{prefix}_Ratio_*.csv`）。**已被壓縮的日期一併列出**（標示 `zip`），直接從壓縮檔讀取。
 
 **三種檢視模式**（同樣以綠框標示目前模式）：
 
@@ -715,7 +715,9 @@ Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,Le
 - 先建立壓縮檔並**逐一核對內容清單無誤**，才刪除原始檔。中途任何失敗都保持原狀。
 - 每一個動作都寫進 **Logs** 分頁（`DataArchived` / `DataArchiveSkipped` / `DataArchiveFailed`）。
 
-> ⚠️ **已壓縮的日期不會出現在 Recordings / Ratio Review 的清單裡**，要回放必須先把該 `DD.zip` 解壓縮回 `DD\` 資料夾。這是使用壓縮功能前要先知道的代價。
+> ✅ **已壓縮的資料照樣可以回放。** Recordings 與 Ratio Review 會一併列出 `DD.zip` 裡的檔案，選取時直接從壓縮檔讀取，**不需要先解壓縮**。清單上會標示 `zip`，狀態列也會註明來源檔（例如 `(from 23.zip)`）。
+>
+> 唯一的差別是讀取時要即時解壓縮，比未壓縮的檔案略慢（實測 30 MB 全譜檔約 0.35 秒），而 Recordings 的日期範圍預設只看最近 7 天 —— 要看更早的資料記得把 **From** 日期往前調。
 
 **磁碟警告**（不論壓縮功能是否開啟都會發出）：程式**開啟時與關閉時**各檢查一次，**只有在真的有磁碟問題時才會跳視窗** —— 餘量低於 **10%**，或資料夾超過容量上限；低於 **5%** 視為嚴重。單純「沒開啟自動壓縮」不會跳提示（否則每次開關程式都要按一次確定，久了就沒人看了），該狀態在 Configuration 分頁本來就看得到。
 

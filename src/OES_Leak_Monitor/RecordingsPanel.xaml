@@ -148,6 +148,8 @@
                         <DataGridTextColumn Header="Time" Binding="{Binding TimeText}"     Width="80"/>
                         <DataGridTextColumn Header="Rot"  Binding="{Binding RotationText}" Width="40"/>
                         <DataGridTextColumn Header="Size" Binding="{Binding SizeText}"     Width="*"/>
+                        <DataGridTextColumn Header="" Binding="{Binding ArchivedText}" Width="34"
+                                            ToolTipService.ToolTip="'zip' = read straight out of a compressed day folder"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>

@@ -180,6 +180,17 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
                             _allFiles.Add(rec);
                     }
                 }
+
+                // Day folders compressed by the housekeeping pass live on as DD.zip beside
+                // them. Listing their contents keeps archived days reviewable — the leak
+                // history is the reason this tab exists, and it is the oldest data that is
+                // archived first.
+                foreach (var zipPath in Directory.EnumerateFiles(monthDir, "*.zip"))
+                {
+                    foreach (var rec in Recording.FromArchive(zipPath))
+                        if (rec.DeviceTag.Equals("Ratio", StringComparison.OrdinalIgnoreCase))
+                            _allFiles.Add(rec);
+                }
             }
         }
         catch (Exception ex)
@@ -229,17 +240,23 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var path = _selectedFile.FilePath;
-        StatusText = "Loading…";
+        var file = _selectedFile;
+        StatusText = file.IsArchived ? "Loading from archive…" : "Loading…";
         try
         {
-            var data = await Task.Run(() => RatioCsvReader.Read(path, token), token).ConfigureAwait(true);
+            // OpenText hides where the CSV lives: a loose file or an entry inside DD.zip.
+            var data = await Task.Run(() =>
+            {
+                using var reader = file.OpenText();
+                return RatioCsvReader.Read(reader, token);
+            }, token).ConfigureAwait(true);
             if (token.IsCancellationRequested) return;
             _data = data;
             RebuildPlot();
-            StatusText = data.RowCount > 0
+            StatusText = (data.RowCount > 0
                 ? $"Loaded {data.RowCount} row(s), {data.RatioKeys.Count} ratio(s)."
-                : "File has no data rows.";
+                : "File has no data rows.")
+                + (file.IsArchived ? $"  (from {Path.GetFileName(file.ArchivePath)})" : "");
         }
         catch (OperationCanceledException)
         {

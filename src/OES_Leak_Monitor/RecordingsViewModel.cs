@@ -349,6 +349,30 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
                         grp.Oes1 = rec;
                     }
                 }
+
+                // Archived day folders (DD.zip) list their contents too, so compressing old
+                // data doesn't make it vanish from this tab — the CSVs are read straight out
+                // of the archive when one is selected.
+                foreach (var zipPath in Directory.EnumerateFiles(monthDir, "*.zip"))
+                {
+                    foreach (var rec in Recording.FromArchive(zipPath))
+                    {
+                        if (!rec.DeviceTag.Equals("OES1", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (rec.SessionStart.Date < StartDate.Date || rec.SessionStart.Date > EndDate.Date) continue;
+                        fileCount++;
+                        if (!groups.TryGetValue(rec.GroupKey, out var grp))
+                        {
+                            grp = new RecordingGroup
+                            {
+                                Prefix        = rec.Prefix,
+                                SessionStart  = rec.SessionStart,
+                                RotationIndex = rec.RotationIndex,
+                            };
+                            groups[rec.GroupKey] = grp;
+                        }
+                        grp.Oes1 = rec;
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -403,8 +427,8 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
 
         try
         {
-            var p1 = ParseAsync(Primary.Oes1?.FilePath, token);
-            var c1 = ParseAsync(Compare?.Oes1?.FilePath, token);
+            var p1 = ParseAsync(Primary.Oes1, token);
+            var c1 = ParseAsync(Compare?.Oes1, token);
 
             _primaryOes1 = await p1.ConfigureAwait(true);
             _compareOes1 = await c1.ConfigureAwait(true);
@@ -424,10 +448,20 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private static Task<FullRecording?> ParseAsync(string? path, CancellationToken token) =>
-        path is null
+    /// <summary>
+    /// Parse one recording off the UI thread. <see cref="Recording.OpenText"/> hides whether
+    /// the CSV is a loose file or an entry inside an archived DD.zip — an archived one is
+    /// decompressed as it is read rather than unpacked to temporary storage first, which
+    /// matters when a single full-spectrum file can be several hundred megabytes.
+    /// </summary>
+    private static Task<FullRecording?> ParseAsync(Recording? rec, CancellationToken token) =>
+        rec is null
             ? Task.FromResult<FullRecording?>(null)
-            : Task.Run(() => RecordingCsvParser.ReadFull(path, token), token);
+            : Task.Run(() =>
+            {
+                using var reader = rec.OpenText();
+                return RecordingCsvParser.ReadFull(reader, token);
+            }, token);
 
     /// <summary>
     /// Re-project the in-memory recordings onto the active plot. Called whenever

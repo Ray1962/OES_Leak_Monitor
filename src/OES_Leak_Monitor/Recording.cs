@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
@@ -21,6 +22,44 @@ public sealed class Recording
     public DateTime SessionStart  { get; init; }
     public int      RotationIndex { get; init; }
 
+    /// <summary>
+    /// Archive this CSV lives inside (<c>{baseDir}\YYYYMM\DD.zip</c>), or empty for a loose
+    /// file. Data-folder housekeeping compresses expired day folders, and a recording that
+    /// disappeared from the list the moment it was archived would be a poor trade — so the
+    /// review tabs list archived CSVs too and read them straight out of the zip.
+    /// </summary>
+    public string ArchivePath { get; init; } = "";
+
+    /// <summary>Entry name within <see cref="ArchivePath"/>; empty for a loose file.</summary>
+    public string EntryName { get; init; } = "";
+
+    public bool IsArchived => ArchivePath.Length > 0;
+
+    /// <summary>Opens the CSV for reading, whether it is loose on disk or inside an archive.</summary>
+    public StreamReader OpenText()
+    {
+        if (!IsArchived) return new StreamReader(FilePath);
+
+        // The ZipArchive owns the entry stream, so the reader has to keep both alive; wrap
+        // them in one reader whose Dispose closes the chain.
+        var archive = System.IO.Compression.ZipFile.OpenRead(ArchivePath);
+        var entry = archive.GetEntry(EntryName)
+                    ?? throw new FileNotFoundException($"{EntryName} is no longer inside {ArchivePath}.");
+        return new ArchiveEntryReader(archive, entry.Open());
+    }
+
+    /// <summary>A <see cref="StreamReader"/> that also disposes the archive it came from.</summary>
+    private sealed class ArchiveEntryReader : StreamReader
+    {
+        private readonly IDisposable _archive;
+        public ArchiveEntryReader(IDisposable archive, Stream stream) : base(stream) => _archive = archive;
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing) _archive.Dispose();
+        }
+    }
+
     /// <summary>Strips the device tag from the key. In this single-OES app every group
     /// holds at most one Recording, but the key shape is preserved for forward / backward
     /// compatibility with the dual-OES file layout.</summary>
@@ -30,6 +69,9 @@ public sealed class Recording
     public string TimeText => SessionStart.ToString("HH:mm:ss");
 
     public string FileSizeText => FormatSize(FileSizeBytes);
+
+    /// <summary>"zip" when this CSV is read out of a compressed day folder, else empty.</summary>
+    public string ArchivedText => IsArchived ? "zip" : "";
 
     private static string FormatSize(long bytes)
     {
@@ -50,12 +92,55 @@ public sealed class Recording
             var info = new FileInfo(fullPath);
             if (!info.Exists) return null;
 
-            var stem = Path.GetFileNameWithoutExtension(info.Name);
-            if (stem.EndsWith(".summary", StringComparison.OrdinalIgnoreCase)) return null;
-
             var dayFolder   = info.Directory?.Name;
             var monthFolder = info.Directory?.Parent?.Name;
             if (dayFolder is null || monthFolder is null) return null;
+
+            return TryParseName(info.Name, monthFolder, dayFolder, info.Length, fullPath, "", "");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parse a Recording for one entry inside an archived day folder
+    /// (<c>{baseDir}\YYYYMM\DD[_n].zip</c>). The month comes from the parent folder as
+    /// usual; the day comes from the archive's own name, since the <c>DD</c> folder it
+    /// replaced no longer exists.
+    /// </summary>
+    public static Recording? TryParseArchived(string archivePath, string entryName, long uncompressedLength)
+    {
+        try
+        {
+            var monthFolder = new FileInfo(archivePath).Directory?.Name;
+            if (monthFolder is null) return null;
+            // "08.zip" -> "08"; "08_1.zip" -> "08" (a re-archived day gets a suffix).
+            var dayFolder = Path.GetFileNameWithoutExtension(archivePath).Split('_')[0];
+
+            return TryParseName(entryName, monthFolder, dayFolder, uncompressedLength,
+                                filePath: archivePath, archivePath: archivePath, entryName: entryName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Shared filename logic for both loose files and archive entries: the name must match
+    /// <c>{prefix}_{tag}_{MMddHHmmss}[_N].csv</c> and its embedded month/day must agree with
+    /// the folder it was found under.
+    /// </summary>
+    private static Recording? TryParseName(string fileName, string monthFolder, string dayFolder,
+        long sizeBytes, string filePath, string archivePath, string entryName)
+    {
+        try
+        {
+            var stem = Path.GetFileNameWithoutExtension(fileName);
+            if (stem.EndsWith(".summary", StringComparison.OrdinalIgnoreCase)) return null;
+
             if (monthFolder.Length != 6 || !int.TryParse(monthFolder, NumberStyles.Integer, Inv, out _)) return null;
             if (dayFolder.Length   != 2 || !int.TryParse(dayFolder,   NumberStyles.Integer, Inv, out _)) return null;
 
@@ -84,19 +169,42 @@ public sealed class Recording
 
             return new Recording
             {
-                FilePath      = fullPath,
-                FileName      = info.Name,
-                FileSizeBytes = info.Length,
+                FilePath      = filePath,
+                FileName      = fileName,
+                FileSizeBytes = sizeBytes,
                 Prefix        = prefix,
                 DeviceTag     = tag,
                 SessionStart  = start,
                 RotationIndex = rot,
+                ArchivePath   = archivePath,
+                EntryName     = entryName,
             };
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Every CSV inside one day archive, as Recordings. Only the zip's central directory is
+    /// read, so listing an archive costs about as much as listing a folder.
+    /// </summary>
+    public static IEnumerable<Recording> FromArchive(string archivePath)
+    {
+        List<Recording> found = new();
+        try
+        {
+            using var zip = System.IO.Compression.ZipFile.OpenRead(archivePath);
+            foreach (var entry in zip.Entries)
+            {
+                if (!entry.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) continue;
+                var rec = TryParseArchived(archivePath, entry.FullName, entry.Length);
+                if (rec is not null) found.Add(rec);
+            }
+        }
+        catch { /* unreadable or half-written archive — treat as holding nothing */ }
+        return found;
     }
 }
 
@@ -118,6 +226,13 @@ public sealed class RecordingGroup
     public string DateText     => SessionStart.ToString("yyyy-MM-dd");
     public string TimeText     => SessionStart.ToString("HH:mm:ss");
     public string RotationText => RotationIndex == 0 ? "" : $"#{RotationIndex}";
+
+    /// <summary>
+    /// Marks a session whose CSV now lives inside a compressed day folder. Shown in the list
+    /// so "why is this one slower to open" has a visible answer — it is decompressed on the
+    /// way in — and so the archive is discoverable at all.
+    /// </summary>
+    public string ArchivedText => Oes1?.IsArchived == true ? "zip" : "";
     public long   TotalBytes   => Oes1?.FileSizeBytes ?? 0;
     public string SizeText
     {

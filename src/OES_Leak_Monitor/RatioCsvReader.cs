@@ -48,7 +48,16 @@ public static class RatioCsvReader
     public static RatioTrendData Read(string path, CancellationToken token = default)
     {
         using var reader = new StreamReader(path);
+        return Read(reader, token);
+    }
 
+    /// <summary>
+    /// Read from an already-open reader, so the caller can hand over a stream with no path
+    /// of its own — Ratio Review reads archived CSVs straight out of a <c>DD.zip</c> this
+    /// way instead of unpacking them first. Forward-only, so a decompression stream is fine.
+    /// </summary>
+    public static RatioTrendData Read(TextReader reader, CancellationToken token = default)
+    {
         var header = reader.ReadLine();
         if (header is null) return new RatioTrendData();
 

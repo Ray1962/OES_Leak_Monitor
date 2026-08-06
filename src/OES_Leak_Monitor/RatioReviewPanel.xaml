@@ -147,6 +147,8 @@
                         <DataGridTextColumn Header="Date" Binding="{Binding DateText}"     Width="90"/>
                         <DataGridTextColumn Header="Time" Binding="{Binding TimeText}"     Width="80"/>
                         <DataGridTextColumn Header="Size" Binding="{Binding FileSizeText}" Width="*"/>
+                        <DataGridTextColumn Header="" Binding="{Binding ArchivedText}" Width="34"
+                                            ToolTipService.ToolTip="'zip' = read straight out of a compressed day folder"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>
