@@ -165,6 +165,36 @@
                             BorderBrush="#CCC"
                             BorderThickness="0,1,0,0"
                             Padding="10,8">
+                      <StackPanel>
+                        <!-- Data-folder housekeeping. Compression, never deletion: an expired
+                             day folder becomes a sibling DD.zip, so nothing measured is lost
+                             and the retention decision stays with whoever owns the data. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Data folder:" VerticalAlignment="Center"
+                                       Margin="0,0,8,0" FontWeight="SemiBold"/>
+                            <CheckBox Content="Compress old data"
+                                      IsChecked="{Binding RetentionEnabled}"
+                                      VerticalAlignment="Center" Margin="0,0,12,0"
+                                      ToolTip="Compress day folders once they age out into a sibling DD.zip. Nothing is ever deleted — the CSVs stay readable with any unzip tool. Note that archived days no longer appear in the Recordings / Ratio Review lists until they are unzipped."/>
+                            <TextBlock Text="after" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox Text="{Binding RetentionArchiveAfterDays, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="46" VerticalAlignment="Center" TextAlignment="Right"
+                                     ToolTip="Age in days at which a day folder is compressed. 0 turns the age rule off."/>
+                            <TextBlock Text="days · cap" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                            <TextBox Text="{Binding RetentionMaxTotalSizeGB, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="52" VerticalAlignment="Center" TextAlignment="Right"
+                                     ToolTip="Total size of the data tree above which compression continues into newer folders, oldest first. 0 turns the size rule off. The newest 2 days are never touched."/>
+                            <TextBlock Text="GB" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                            <Button Content="Compress now"
+                                    Command="{Binding ArchiveNowCommand}"
+                                    Padding="10,3" MinWidth="110" Margin="0,0,12,0"
+                                    ToolTip="Run one housekeeping pass immediately, in the background."/>
+                            <TextBlock Text="{Binding DataFolderStatusText}"
+                                       VerticalAlignment="Center" Foreground="#445"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="420"
+                                       ToolTip="{Binding DataFolderStatusText}"/>
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply"
                                     Command="{Binding ApplyAllCommand}"
@@ -195,6 +225,7 @@
                                        TextTrimming="CharacterEllipsis" MaxWidth="320"
                                        ToolTip="{Binding SimulationFileText}"/>
                         </StackPanel>
+                      </StackPanel>
                     </Border>
                 </Grid>
             </TabItem>

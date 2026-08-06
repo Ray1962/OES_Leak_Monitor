@@ -32,6 +32,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Ratio Setup configuration. Single-device app, so one flag suffices.
     private bool _wasAcquiring;
 
+    // Data-folder housekeeping: compress expired day folders (never delete) and warn about
+    // free space. Runs off the UI thread on a slow timer; the results are surfaced in the
+    // Configuration tab and in the start-up / shutdown warning.
+    private readonly System.Windows.Threading.Dispatcher _dispatcher =
+        System.Windows.Threading.Dispatcher.CurrentDispatcher;
+    private DataRetentionSettings _retention = new();
+    private System.Threading.Timer? _retentionTimer;
+    private int _retentionRunning;   // 0/1 guard so a slow pass can't overlap the next tick
+
     // Data directory the Recordings / Ratio Review tabs last scanned. They resolve it from
     // the logger and scan once, so an Apply that repoints the output folder has to tell them
     // to rescan — otherwise both tabs keep listing the old folder's files until someone
@@ -73,6 +82,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // 337 nm instead of the configured trigger wavelength.
         var settings = _settingsService.Load();
         Logger.LoadFrom(settings.Logger);
+        _retention = settings.DataRetention ?? new DataRetentionSettings();
         _persistedLoggerEnabled = settings.Logger.Enabled;
         // The Monitor tab mirrors the logger's armed flag / state / open file read-only, so
         // an Operator — who cannot open the Engineer-gated Configuration tab where the
@@ -195,6 +205,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         SaveAllCommand         = new RelayCommand(SaveSettings,    () => IsEngineerOrHigher);
         LoadDefaultsAllCommand = new RelayCommand(LoadDefaultsAll, () => IsEngineerOrHigher);
         ResetExperimentCommand = new RelayCommand(ResetExperiment, () => IsOperatorOrHigher);
+        ArchiveNowCommand      = new RelayCommand(() => StartRetentionPass(manual: true),
+                                                  () => IsEngineerOrHigher && _retentionRunning == 0);
         ChooseSimulationFileCommand = new RelayCommand(ChooseSimulationFile, () => IsEngineerOrHigher);
         ClearSimulationFileCommand  = new RelayCommand(ClearSimulationFile,
             () => IsEngineerOrHigher && _simulation.IsLoaded);
@@ -208,6 +220,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         LeakCalibration.SetRole(IsEngineerOrHigher);
 
         UpdateRecorderStatus();
+
+        // First housekeeping pass shortly after start-up (off the UI thread), then every
+        // six hours. The delay keeps the window responsive while it is still opening.
+        _retentionTimer = new System.Threading.Timer(
+            _ => StartRetentionPass(manual: false), null,
+            TimeSpan.FromSeconds(20), TimeSpan.FromHours(6));
     }
 
     /// <summary>
@@ -450,6 +468,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Logger        = Logger.ToSettings(),
             LeakMonitor   = _leakMonitorEngine.Settings, // includes captured Golden Runs
             AccessControl = AccessControl.SnapshotConfig(), // preserve user list across saves
+            DataRetention = _retention,
             SimulationCsvPath = _simulation.FilePath, // keep the Test-mode playback selection
         };
         _settingsService.Save(settings);
@@ -601,18 +620,167 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 : "disarmed but not saved — returns to ARMED on restart";
     }
 
+    // --- data-folder housekeeping ---------------------------------------------------
+    //
+    // The program never deletes measurement data. An expired day folder is compressed into
+    // a sibling DD.zip — the rows stay recoverable with any unzip tool — which is what makes
+    // it safe to run unattended on a production machine. See DataRetentionSettings.
+
+    /// <summary>Whether expired day folders are compressed automatically. Engineer-editable.</summary>
+    public bool RetentionEnabled
+    {
+        get => _retention.Enabled;
+        set { if (_retention.Enabled != value) { _retention.Enabled = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>Age at which a day folder is compressed. 0 disables the age rule.</summary>
+    public int RetentionArchiveAfterDays
+    {
+        get => _retention.ArchiveAfterDays;
+        set { if (_retention.ArchiveAfterDays != value) { _retention.ArchiveAfterDays = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>Tree size above which compression continues into newer folders. 0 disables it.</summary>
+    public double RetentionMaxTotalSizeGB
+    {
+        get => _retention.MaxTotalSizeGB;
+        set { if (_retention.MaxTotalSizeGB != value) { _retention.MaxTotalSizeGB = value; OnPropertyChanged(); } }
+    }
+
+    private string _dataFolderStatusText = "Data folder: not scanned yet.";
+    /// <summary>One-line summary of the data tree, shown in the Configuration tab.</summary>
+    public string DataFolderStatusText { get => _dataFolderStatusText; private set => Set(ref _dataFolderStatusText, value); }
+
+    public RelayCommand ArchiveNowCommand { get; }
+
+    /// <summary>
+    /// Free-space / size warnings as of the last inspection, empty when nothing is wrong.
+    /// <see cref="MainWindow"/> shows these when the app opens and when it closes.
+    /// </summary>
+    public IReadOnlyList<string> DataFolderWarnings { get; private set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Re-inspect the data folder and refresh <see cref="DataFolderWarnings"/>. Cheap
+    /// (directory metadata only) and safe to call from the UI thread — used for the
+    /// shutdown warning, where starting a compression pass would be the wrong thing to do.
+    /// </summary>
+    public DataFolderState InspectDataFolder()
+    {
+        var state = DataRetentionService.Inspect(_lastDataDirectory, _retention);
+        DataFolderWarnings = state.Warnings;
+        DataFolderStatusText = DescribeDataFolder(state);
+        return state;
+    }
+
+    private static string DescribeDataFolder(DataFolderState s)
+    {
+        if (!s.Exists) return $"Data folder: {s.BaseDirectory} (not created yet)";
+        var parts = new List<string>
+        {
+            $"{DataRetentionService.Gb(s.TotalBytes)} in {s.DayFolderCount} day folder(s)",
+        };
+        if (s.ArchiveCount > 0)
+            parts.Add($"{s.ArchiveCount} archived ({DataRetentionService.Gb(s.ArchivedBytes)})");
+        if (s.OldestDay is { } oldest) parts.Add($"oldest {oldest:yyyy-MM-dd}");
+        if (s.DriveBytes > 0) parts.Add($"drive {s.FreePercent:0.#}% free");
+        return "Data folder: " + string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// Kick off one housekeeping pass on a worker thread. Compression is I/O-heavy and can
+    /// take minutes on a large folder, so it must never run on the UI or acquisition thread.
+    /// Overlapping passes are suppressed rather than queued.
+    /// </summary>
+    private void StartRetentionPass(bool manual)
+    {
+        if (System.Threading.Interlocked.Exchange(ref _retentionRunning, 1) == 1)
+        {
+            if (manual) StatusMessage = "Data folder housekeeping is already running.";
+            return;
+        }
+        _dispatcher.BeginInvoke(() => ArchiveNowCommand.RaiseCanExecuteChanged());
+
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                var result = DataRetentionService.Run(
+                    _lastDataDirectory, _retention,
+                    isInUse: IsFileInUseByLogger,
+                    report: (evt, message, isError) => _systemLogger.LogSystemEvent(
+                        isError ? LogSeverity.Error : LogSeverity.Information,
+                        evt, message, related: _lastDataDirectory));
+
+                var state = DataRetentionService.Inspect(_lastDataDirectory, _retention);
+                _dispatcher.BeginInvoke(() =>
+                {
+                    DataFolderWarnings = state.Warnings;
+                    DataFolderStatusText = DescribeDataFolder(state);
+                    if (result.ArchivedFolders > 0)
+                        StatusMessage = $"Data housekeeping: compressed {result.ArchivedFolders} day folder(s), " +
+                                        $"reclaimed {DataRetentionService.Gb(result.BytesSaved)}.";
+                    else if (manual)
+                        StatusMessage = "Data housekeeping: nothing was old enough to compress.";
+                });
+
+                if (result.ArchivedFolders > 0 || result.SkippedFolders > 0)
+                    _systemLogger.LogSystemEvent(LogSeverity.Information, "DataRetentionPass",
+                        $"Compressed {result.ArchivedFolders} folder(s), skipped {result.SkippedFolders}, " +
+                        $"reclaimed {DataRetentionService.Gb(result.BytesSaved)}",
+                        related: _lastDataDirectory,
+                        value: $"Total={DataRetentionService.Gb(result.BytesAfter)}");
+                if (result.StillOverCap)
+                    _systemLogger.LogSystemEvent(LogSeverity.Warning, "DataRetentionOverCap",
+                        "Data folder is still above its size limit after compressing everything eligible — " +
+                        "archives need to be moved off this machine.",
+                        related: _lastDataDirectory);
+                foreach (var w in state.Warnings)
+                    _systemLogger.LogSystemEvent(
+                        state.CriticalFreeSpace ? LogSeverity.Error : LogSeverity.Warning,
+                        "DataFolderWarning", w, related: _lastDataDirectory);
+            }
+            catch (Exception ex)
+            {
+                _systemLogger.LogError("DataRetention_Failed", ex, _lastDataDirectory);
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _retentionRunning, 0);
+                _dispatcher.BeginInvoke(() => ArchiveNowCommand.RaiseCanExecuteChanged());
+            }
+        });
+    }
+
+    /// <summary>
+    /// Is this file one the logger currently has open? The archiver asks before touching a
+    /// folder — it also probes the file lock itself, but an open handle held by our own
+    /// writers is worth answering directly rather than discovering through an exception.
+    /// </summary>
+    private bool IsFileInUseByLogger(string path)
+    {
+        foreach (var f in _intensityLogger.CurrentFiles)
+            if (!string.IsNullOrEmpty(f) && string.Equals(f, path, StringComparison.OrdinalIgnoreCase)) return true;
+        var ratio = _ratioCsvLogger.CurrentFile;
+        return !string.IsNullOrEmpty(ratio) && string.Equals(ratio, path, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void RaiseCanExec()
     {
         ApplyAllCommand.RaiseCanExecuteChanged();
         SaveAllCommand.RaiseCanExecuteChanged();
         LoadDefaultsAllCommand.RaiseCanExecuteChanged();
         ResetExperimentCommand.RaiseCanExecuteChanged();
+        ArchiveNowCommand.RaiseCanExecuteChanged();
         ChooseSimulationFileCommand.RaiseCanExecuteChanged();
         ClearSimulationFileCommand.RaiseCanExecuteChanged();
     }
 
     public void Dispose()
     {
+        // Stop the housekeeping timer first; an in-flight pass is left to finish on its own
+        // (it only touches files the logger has already released).
+        _retentionTimer?.Dispose();
+        _retentionTimer = null;
         AccessControl.RoleChanged       -= OnRoleChanged;
         Logger.PropertyChanged          -= OnLoggerPropertyChanged;
         _intensityLogger.StateChanged   -= OnIntensityStateChanged;

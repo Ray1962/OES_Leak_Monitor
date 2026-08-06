@@ -20,6 +20,13 @@ public sealed class AppSettings : IJsonOnDeserialized
     public LeakMonitorSettings LeakMonitor { get; set; } = LeakMonitorSettings.CreateDefault();
 
     /// <summary>
+    /// Housekeeping for the data folder: when expired day folders are compressed (never
+    /// deleted) and when to warn about free space. A settings.json predating this section
+    /// gets the defaults.
+    /// </summary>
+    public DataRetentionSettings DataRetention { get; set; } = new();
+
+    /// <summary>
     /// Optional full-spectrum CSV played back as the spectrum stream while in Test Mode
     /// (no spectrometer attached). Null/empty → use the built-in synthetic generator.
     /// Persisted so the last-used simulation file is reused on the next launch.
@@ -53,6 +60,7 @@ public sealed class AppSettings : IJsonOnDeserialized
             LeakMonitor.Ratios = LeakMonitorSettings.CreateDefault().Ratios;
         LeakMonitor.GoldenRuns ??= new();
         LeakMonitor.WavelengthCorrections ??= new();
+        DataRetention ??= new();
     }
 
     private void EnsureAt(int idx)

@@ -375,7 +375,7 @@ td code{white-space:nowrap;}
 </li>
 <li>☐ 當日的 <code>Data\YYYYMM\DD\</code> 資料夾內有今天的 CSV，且檔案大小持續成長。
 </li>
-<li>☐ 資料碟剩餘空間 <strong>&gt; 20%</strong>（程式不會自動刪檔）。
+<li>☐ 資料碟剩餘空間 <strong>&gt; 20%</strong>。程式<strong>不會刪除</strong>任何量測資料；餘量低於 10% 時它會在開／關程式時跳出警告（手冊 §7.4）。若該機台已啟用自動壓縮，過期資料會變成 <code>DD.zip</code> —— <strong>壓縮不是刪除</strong>，但這些日期在 Recordings / Ratio Review 裡要先解壓縮才看得到。
 </li>
 </ul>
 <blockquote><p><strong>兩份檔案的產生條件不同</strong>（手冊 §7.3）：</p>
@@ -772,7 +772,7 @@ td code{white-space:nowrap;}
 <tr><td>§6.4 策略複核</td><td>§6.4 Ratio Setup；§9.7 改了沒反應</td></tr>
 <tr><td>§6.5 洩漏率驗證</td><td>§6.6 Leak Calibration；<code>leak-rate-calibration.md</code></td></tr>
 <tr><td>§6.6 回放審查</td><td>§6.7 Recordings；§6.8 Ratio Review</td></tr>
-<tr><td>§6.7 備份</td><td>§7.4 備份建議；§3 帳號與權限</td></tr>
+<tr><td>§6.7 備份</td><td>§7.5 備份建議；§7.4 磁碟空間與舊資料壓縮；§3 帳號與權限</td></tr>
 <tr><td>§8 ALARM 處置</td><td>§8.3 警報發生時</td></tr>
 <tr><td>§9 事件驅動</td><td>§8.2 換配方；§8.4 定期維護</td></tr>
 </tbody></table></div>

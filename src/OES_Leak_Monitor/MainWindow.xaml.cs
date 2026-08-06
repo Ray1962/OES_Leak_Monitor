@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 
 namespace OES_Leak_Monitor;
@@ -17,7 +17,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Loaded  += (_, _) => InitializeAccessControl();
+        Loaded  += (_, _) =>
+        {
+            InitializeAccessControl();
+            ShowDataFolderWarning();
+        };
         Closing += MainWindow_Closing;
         Closed  += (_, _) =>
         {
@@ -38,7 +42,31 @@ public partial class MainWindow : Window
             MessageBox.Show(this,
                 "Sign in is required to close the application.",
                 "Permission required", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
         }
+        // Last chance to tell whoever is standing at the machine that the data drive needs
+        // attention — the next shift may only ever see this app being started and stopped.
+        ShowDataFolderWarning();
+    }
+
+    /// <summary>
+    /// Show the data-folder warnings, if any, when the app opens and when it closes. Silent
+    /// when there is nothing wrong: a dialog that appears every single time gets dismissed
+    /// without being read, which is exactly when it stops working as a warning.
+    /// </summary>
+    private void ShowDataFolderWarning()
+    {
+        DataFolderState state;
+        try { state = Vm.InspectDataFolder(); }
+        catch { return; }   // never let housekeeping block opening or closing the app
+        if (state.Warnings.Count == 0) return;
+
+        MessageBox.Show(this,
+            string.Join("\n\n", state.Warnings) +
+            $"\n\nData folder: {state.BaseDirectory}",
+            state.CriticalFreeSpace ? "Data drive almost full" : "Data folder needs attention",
+            MessageBoxButton.OK,
+            state.CriticalFreeSpace ? MessageBoxImage.Warning : MessageBoxImage.Information);
     }
 
     private MainViewModel Vm => (MainViewModel)DataContext;

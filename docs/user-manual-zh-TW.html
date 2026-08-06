@@ -137,7 +137,8 @@ td code{white-space:nowrap;}
 <a class="l3" href="#71-位置">7.1 位置</a>
 <a class="l3" href="#72-檔名規則">7.2 檔名規則</a>
 <a class="l3" href="#73-比值-csv-格式">7.3 比值 CSV 格式</a>
-<a class="l3" href="#74-備份建議">7.4 備份建議</a>
+<a class="l3" href="#74-磁碟空間與舊資料壓縮">7.4 磁碟空間與舊資料壓縮</a>
+<a class="l3" href="#75-備份建議">7.5 備份建議</a>
 <a class="l2" href="#8-日常操作-sop">8. 日常操作 SOP</a>
 <a class="l3" href="#81-每天開機">8.1 每天開機</a>
 <a class="l3" href="#82-換配方">8.2 換配方</a>
@@ -166,7 +167,7 @@ td code{white-space:nowrap;}
 </nav>
 <main>
 <h1 id="oes-leak-monitor-操作手冊">OES Leak Monitor 操作手冊</h1>
-<blockquote><p>版本對應：<code>Aqst.OesSpectrometer 0.4.6</code> / <code>Aqst.OesApp.Core 0.1.3</code> / <code>Aqst.OesApp.Wpf 0.1.7</code> 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）</p></blockquote>
+<blockquote><p>版本對應：<code>Aqst.OesSpectrometer 0.4.6</code> / <code>Aqst.OesApp.Core 0.1.4</code> / <code>Aqst.OesApp.Wpf 0.1.8</code> 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）</p></blockquote>
 <hr>
 <h2 id="目錄">目錄</h2>
 <ol>
@@ -428,6 +429,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><strong>Load Defaults</strong></td><td>回到出廠值（<strong>不會</strong>自動 Apply，也<strong>不會</strong>自動 Save）</td></tr>
 </tbody></table></div>
 <blockquote><p>改完記得 <strong>Apply → Save</strong> 兩個都按。只按 Apply 的話，下次開機會回到舊值。</p></blockquote>
+<p>動作列上方還有一排 <strong>Data folder</strong> 設定（舊資料自動壓縮與磁碟用量），見 §7.4。</p>
 <h4 id="621-hardware-parameters硬體參數">6.2.1 Hardware Parameters（硬體參數）</h4>
 <div class="tablewrap"><table>
 <thead><tr><th>參數</th><th>預設</th><th>說明</th></tr></thead>
@@ -827,8 +829,32 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>何時關檔</td><td>低於門檻並滿足停止確認</td><td>停止擷取、Reset Run、或<strong>跨過午夜</strong>（自動換日換檔）</td></tr>
 </tbody></table></div>
 <blockquote><p>💡 這是刻意的設計：比值資料是洩漏監控的核心記錄，體積只有全譜的百分之一，不應該因為「原始光譜錄影沒開」就跟著消失。 也因此比值檔的時間戳<strong>不再與強度檔相同</strong> —— 兩者各自開檔，不要用檔名時間去配對它們。</p></blockquote>
-<h3 id="74-備份建議">7.4 備份建議</h3>
-<p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正與波長修正。</p>
+<h3 id="74-磁碟空間與舊資料壓縮">7.4 磁碟空間與舊資料壓縮</h3>
+<p>全譜記錄的資料量很可觀（5 Hz、2048 點約 <strong>400 MB／小時</strong>），而程式<strong>不會刪除任何量測資料</strong>。Configuration 分頁底部有一排「Data folder」設定來處理這件事：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>控制項</th><th>預設</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Compress old data</strong></td><td><strong>關閉</strong></td><td>勾選後才會自動壓縮。<strong>預設關閉是刻意的</strong> —— 升級既有機台時不該有人沒同意就動到幾個月的資料</td></tr>
+<tr><td><strong>after ___ days</strong></td><td>30</td><td>超過這個天數的日資料夾會被壓成同層的 <code>DD.zip</code></td></tr>
+<tr><td><strong>cap ___ GB</strong></td><td>20</td><td>整個資料夾超過此上限時，會由舊到新繼續壓，直到符合</td></tr>
+<tr><td><strong>Compress now</strong></td><td>—</td><td>立刻在背景跑一次</td></tr>
+</tbody></table></div>
+<p><strong>壓縮不是刪除。</strong> <code>202605\08\</code> 會變成 <code>202605\08.zip</code>，裡面是原封不動的 CSV，用任何解壓縮軟體（含 Windows 內建的「解壓縮全部」）都能取回。要不要真的刪除，由貴廠的保存規範決定，程式不替你決定。</p>
+<p>安全規則：</p>
+<ul>
+<li><strong>最新 2 天永遠不壓</strong>，正在寫入的檔案也不壓。
+</li>
+<li>資料夾裡只要有<strong>任何一個檔案被開著</strong>（包含你用 Excel 開啟的），整個資料夾這次就跳過。
+</li>
+<li>先建立壓縮檔並<strong>逐一核對內容清單無誤</strong>，才刪除原始檔。中途任何失敗都保持原狀。
+</li>
+<li>每一個動作都寫進 <strong>Logs</strong> 分頁（<code>DataArchived</code> / <code>DataArchiveSkipped</code> / <code>DataArchiveFailed</code>）。
+</li>
+</ul>
+<blockquote><p>⚠️ <strong>已壓縮的日期不會出現在 Recordings / Ratio Review 的清單裡</strong>，要回放必須先把該 <code>DD.zip</code> 解壓縮回 <code>DD\</code> 資料夾。這是使用壓縮功能前要先知道的代價。</p></blockquote>
+<p><strong>磁碟警告</strong>（不論壓縮功能是否開啟都會發出）：程式<strong>開啟時與關閉時</strong>各檢查一次，餘量低於 <strong>10%</strong> 或資料夾超過容量上限就跳出提示，低於 <strong>5%</strong> 視為嚴重。沒問題時完全不跳 —— 每次都跳的視窗沒有人會讀。</p>
+<h3 id="75-備份建議">7.5 備份建議</h3>
+<p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正、波長修正與資料保存設定。</p>
 <hr>
 <h2 id="8-日常操作-sop">8. 日常操作 SOP</h2>
 <h3 id="81-每天開機">8.1 每天開機</h3>
@@ -890,7 +916,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>每次更動積分時間等曝光參數後</td><td><strong>重錄 Golden Run</strong></td></tr>
 <tr><td>定期（依機台穩定度）</td><td>檢查波長是否漂移，必要時用 Wavelength Calibration 修正</td></tr>
 <tr><td>定期</td><td>用標準漏孔重驗洩漏率校正是否仍準確</td></tr>
-<tr><td>定期</td><td>清理舊的 <code>Data\</code> 資料夾（程式不會自動刪檔）</td></tr>
+<tr><td>定期</td><td>檢視 <code>Data\</code> 資料夾用量（見 §7.4）。程式<strong>不會刪除</strong>量測資料 —— 需要時開啟自動壓縮，或自行轉存到伺服器</td></tr>
 </tbody></table></div>
 <hr>
 <h2 id="9-疑難排解">9. 疑難排解</h2>
