@@ -275,7 +275,7 @@ vcruntime140_cor3.dll</code></pre>
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>分頁</th><th>用途</th><th>權限</th></tr></thead>
 <tbody>
-<tr><td>1</td><td><strong>Monitor</strong></td><td>即時全光譜圖 + 選定波長強度趨勢；裝置連線／擷取控制</td><td>Operator+ 操作</td></tr>
+<tr><td>1</td><td><strong>Monitor</strong></td><td>即時全光譜圖 + 選定波長強度趨勢；裝置連線／擷取控制；Recorder 狀態列</td><td>Operator+ 操作（狀態列全開放檢視）</td></tr>
 <tr><td>2</td><td><strong>Leak Monitor</strong></td><td>洩漏偵測主畫面：狀態燈號、各比值、趨勢圖、Golden Run</td><td>檢視全開放</td></tr>
 <tr><td>3</td><td><strong>Ratio Setup</strong></td><td>設定要監控哪些譜線比值、門檻</td><td>Engineer+ 存檔</td></tr>
 <tr><td>4</td><td><strong>Wavelength Calibration</strong></td><td>波長漂移補償（校正整個 catalog 的譜線位置）</td><td>Engineer+ 存檔</td></tr>
@@ -362,7 +362,7 @@ vcruntime140_cor3.dll</code></pre>
 <h4 id="611-頂部reset-run">6.1.1 頂部：Reset Run</h4>
 <p><strong>Reset Run</strong>（Operator+）用在「調完參數，想從乾淨的狀態重新開始這一爐」：</p>
 <ul>
-<li>關閉目前的 Intensity CSV 與 Ratio CSV（下一次超過門檻時會開新檔）。
+<li>關閉目前的 Intensity CSV 與 Ratio CSV。兩者開新檔的時機不同：<strong>Intensity CSV 要等下一次超過門檻</strong>，<strong>Ratio CSV 下一幀就開新檔</strong>。
 </li>
 <li>清空 Monitor 強度趨勢圖與 Leak Monitor 的 % 趨勢圖。
 </li>
@@ -371,7 +371,22 @@ vcruntime140_cor3.dll</code></pre>
 </ul>
 <p><strong>保留不動</strong>：Golden Run 基準線、洩漏率校正、已鎖存的警報（必須由人按 Acknowledge 才清除）、擷取本身持續進行。</p>
 <blockquote><p>若你剛改過<strong>積分時間</strong>或其他會影響絕對強度的設定，Reset Run 不夠 —— 請<strong>重新錄一次 Golden Run</strong>，因為舊基準線是在不同曝光條件下錄的。</p></blockquote>
-<h4 id="612-裝置控制列devicepanel">6.1.2 裝置控制列（DevicePanel）</h4>
+<h4 id="612-recorder-狀態列唯讀">6.1.2 Recorder 狀態列（唯讀）</h4>
+<p>Reset Run 底下的細長狀態列（標示 <strong>Spectrum recorder</strong>），顯示<strong>全光譜記錄器現在到底有沒有在錄</strong>。純顯示，這裡按不到任何東西 —— 記錄器的開關與所有設定都在 Configuration 分頁（需 Engineer），但<strong>看</strong>狀態不需要權限，Guest 也看得到。</p>
+<blockquote><p>這條狀態列只講<strong>強度（全光譜）CSV</strong>。<strong>比值 CSV 是另一個獨立的記錄器</strong>，只要 OES 在擷取就一直寫，即使這裡顯示 <code>OFF</code> 也照常產生（見 §7.3）。</p></blockquote>
+<div class="tablewrap"><table>
+<thead><tr><th>徽章</th><th>顏色</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td><code>OFF</code></td><td>紅</td><td>記錄器<strong>沒有武裝</strong> —— 不會產生強度 CSV（比值 CSV 不受影響，見 §7.3）</td></tr>
+<tr><td><code>ARMED</code></td><td>藍</td><td>已武裝，等待強度跨過觸發門檻。右側會寫出目前的門檻條件</td></tr>
+<tr><td><code>STARTING</code></td><td>橘</td><td>已高於門檻，正在等 Start confirm 時間</td></tr>
+<tr><td><code>SAVING</code></td><td>綠</td><td>正在寫強度 CSV，右側顯示<strong>目前檔名</strong></td></tr>
+<tr><td><code>STOPPING</code></td><td>橘</td><td>已低於門檻，正在等 Stop confirm 時間</td></tr>
+</tbody></table></div>
+<p>滑鼠停在狀態列上會顯示<strong>完整檔案路徑</strong>（沒有開檔時則顯示開檔條件）。</p>
+<p>若右側出現橘色小字 <strong>「armed but not saved — reverts to OFF on restart」</strong>，表示有人在 Configuration 分頁按了 Start Save 卻<strong>沒有按 Save</strong> —— 目前確實在錄，但這個狀態沒有寫進 <code>settings.json</code>，<strong>下次重開程式就會變回 OFF</strong>。回 Configuration 按一次 <strong>Save</strong> 即可消除。反向的「disarmed but not saved」同理。</p>
+<blockquote><p>💡 每日巡檢的第一眼就看這條 —— 它是「以為在錄、其實沒錄」這個失效模式唯一的可見警示。</p></blockquote>
+<h4 id="613-裝置控制列devicepanel">6.1.3 裝置控制列（DevicePanel）</h4>
 <div class="tablewrap"><table>
 <thead><tr><th>按鈕</th><th>作用</th></tr></thead>
 <tbody>
@@ -384,7 +399,7 @@ vcruntime140_cor3.dll</code></pre>
 </tbody></table></div>
 <p>下方狀態列：<strong>Serial</strong>（序號）、<strong>Frame</strong>（每幀點數）、<strong>Last</strong>（最後一幀時間）、<strong>Test Mode</strong>（True/False）。</p>
 <p>圖表操作：滾輪縮放、右鍵選單有 Zoom In / Zoom Out / <strong>Zoom All</strong>（快捷鍵 <code>A</code>）。</p>
-<h4 id="613-強度趨勢圖wavelength-trend">6.1.3 強度趨勢圖（Wavelength Trend）</h4>
+<h4 id="614-強度趨勢圖wavelength-trend">6.1.4 強度趨勢圖（Wavelength Trend）</h4>
 <p>畫面下半部，顯示<strong>時間 vs 強度</strong>，最多 6 條線：</p>
 <ul>
 <li><strong>Trigger 波長</strong>（Configuration 裡設的那個「Selected wavelength」）。
@@ -716,7 +731,7 @@ vcruntime140_cor3.dll</code></pre>
 <div class="tablewrap"><table>
 <thead><tr><th>按鈕</th><th>說明</th></tr></thead>
 <tbody>
-<tr><td><strong>Refresh</strong></td><td>重新掃描資料夾</td></tr>
+<tr><td><strong>Refresh</strong></td><td>重新掃描資料夾。啟動時與 Configuration 改過資料夾按 Apply 後都會自動掃一次，所以平常只有在<strong>程式外部</strong>新增／刪除檔案時才需要手動按</td></tr>
 <tr><td><strong>Open Base</strong></td><td>用檔案總管開啟記錄器的根目錄</td></tr>
 <tr><td><strong>Open Folder</strong></td><td>開啟選定 session 的資料夾</td></tr>
 <tr><td><strong>Open File</strong></td><td>用預設程式開啟該 CSV</td></tr>
@@ -801,7 +816,16 @@ vcruntime140_cor3.dll</code></pre>
 <h3 id="73-比值-csv-格式">7.3 比值 CSV 格式</h3>
 <pre><code>Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,LeakRateSigma</code></pre>
 <p>每個比值兩欄（原始值 + % 基準），最後三欄是整體狀態與洩漏率估計。欄位是<strong>依標題名稱</strong>尋址的，所以舊版沒有 <code>LeakRate</code> 欄位的檔案仍可正常解析。</p>
-<p>比值檔與強度檔<strong>同步開關</strong> —— 只有在電漿強度高於觸發門檻時才有資料。</p>
+<p><strong>比值檔與強度檔是各自獨立的記錄器</strong>，只共用同一個輸出資料夾與檔名前綴：</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>強度 CSV（<code>_OES1_</code>）</th><th>比值 CSV（<code>_Ratio_</code>）</th></tr></thead>
+<tbody>
+<tr><td>什麼時候寫</td><td>只在強度<strong>高於觸發門檻</strong>時</td><td><strong>只要 OES 在擷取就一直寫</strong></td></tr>
+<tr><td>需要武裝嗎</td><td>要（Recorder 狀態列須非 <code>OFF</code>）</td><td>不用 —— 記錄器 <code>OFF</code> 也照樣產生</td></tr>
+<tr><td>每列大小</td><td>全譜約 22 KB（5 Hz ≈ 400 MB/小時）</td><td>約 200 B（5 Hz ≈ 4 MB/小時）</td></tr>
+<tr><td>何時關檔</td><td>低於門檻並滿足停止確認</td><td>停止擷取、Reset Run、或<strong>跨過午夜</strong>（自動換日換檔）</td></tr>
+</tbody></table></div>
+<blockquote><p>💡 這是刻意的設計：比值資料是洩漏監控的核心記錄，體積只有全譜的百分之一，不應該因為「原始光譜錄影沒開」就跟著消失。 也因此比值檔的時間戳<strong>不再與強度檔相同</strong> —— 兩者各自開檔，不要用檔名時間去配對它們。</p></blockquote>
 <h3 id="74-備份建議">7.4 備份建議</h3>
 <p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正與波長修正。</p>
 <hr>
@@ -821,7 +845,12 @@ vcruntime140_cor3.dll</code></pre>
 <li>沒有 <code>LOW SIGNAL</code> 警示。</li>
 </ul>
 </li>
-<li><strong>Configuration</strong> → <strong>Start Save</strong> 武裝記錄器（若需要留資料）。
+<li>回 <strong>Monitor</strong>，確認 <strong>Recorder 狀態列</strong>不是紅色 <code>OFF</code>（見 §6.1.2）。
+<ul>
+<li>顯示 <code>ARMED</code> / <code>SAVING</code> → 正常，不必做任何事。</li>
+<li>顯示 <code>OFF</code> → 記錄器沒武裝，<strong>通知工程師</strong>（武裝在 Engineer 權限的 Configuration 分頁，操作員進不去）。這是一次性設定，正常情況下不需要每天按。</li>
+<li>出現橘色「not saved」小字 → 同樣通知工程師補按一次 Save，否則下次開機會失效。</li>
+</ul>
 </li>
 </ol>
 <h3 id="82-換配方">8.2 換配方</h3>
@@ -906,12 +935,15 @@ vcruntime140_cor3.dll</code></pre>
 <p>（Leak Calibration 例外 —— 它存檔後立即生效。）</p>
 <h3 id="98-沒有產生-ratio-csv">9.8 沒有產生 Ratio CSV</h3>
 <p>依序確認：</p>
+<p>比值 CSV <strong>不需要</strong>記錄器武裝，也不看觸發門檻 —— 只要 OES 在擷取就該有檔案。所以依序確認：</p>
 <ol>
-<li>記錄器有沒有真的在存檔（Logger Status 應為 <code>Saving</code>）—— 強度必須<strong>高於觸發門檻</strong>才會開檔。
+<li>OES 是不是真的在擷取（Monitor 分頁 <code>Status: Acquiring</code>）。沒擷取就不會有任何資料。
 </li>
-<li><code>settings.json</code> 裡 <code>RatioCsvEnabled</code> 是否為 <code>true</code>（預設是）。
+<li><code>settings.json</code> 裡 <code>LeakMonitor.Enabled</code> 與 <code>RatioCsvEnabled</code> 是否都為 <code>true</code>（預設是）。
 </li>
-<li>看 <strong>Logs</strong> 分頁有沒有 <code>RatioCsvSkipped</code> 記錄，裡面會寫原因。
+<li>看 <strong>Logs</strong> 分頁有沒有 <code>RatioCsvSkipped</code>（設定被關）或 <code>RatioCsv_Open_Failed</code>（路徑寫不進去，例如磁碟滿或無權限）記錄，裡面會寫原因。
+</li>
+<li>檔案位置跟強度 CSV 同一個資料夾，但<strong>檔名時間戳不同</strong> —— 別拿強度檔的時間去找它。
 </li>
 </ol>
 <h3 id="99-測試模式下警報不會跳">9.9 測試模式下警報不會跳</h3>

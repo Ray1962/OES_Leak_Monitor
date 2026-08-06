@@ -65,6 +65,47 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Read-only mirror of the threshold logger. The LoggerPanel that owns
+                         Start Save / Stop Save sits in the Engineer-gated Configuration tab,
+                         so without this strip an Operator has no way to tell whether anything
+                         is being recorded. Status only — arming stays an Engineer action. -->
+                    <Border DockPanel.Dock="Top"
+                            Background="White"
+                            BorderBrush="#DDD" BorderThickness="0,0,0,1"
+                            Padding="10,5"
+                            ToolTip="{Binding RecorderTooltip}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Names the spectrum recorder specifically: the Ratio CSV is a
+                                 separate, always-on recorder, so a bare "Recorder: OFF" would
+                                 read as "nothing is being recorded", which is not true. -->
+                            <TextBlock Text="Spectrum recorder:" VerticalAlignment="Center"
+                                       Foreground="#777" Margin="0,0,8,0"/>
+                            <Border Background="{Binding RecorderBrush}"
+                                    CornerRadius="3" Padding="8,2" MinWidth="76">
+                                <TextBlock Text="{Binding RecorderStateText}"
+                                           Foreground="White" FontWeight="Bold" FontSize="11"
+                                           HorizontalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="{Binding RecorderDetailText}"
+                                       VerticalAlignment="Center" Margin="10,0,0,0"
+                                       Foreground="#444" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding RecorderWarningText}"
+                                       VerticalAlignment="Center" Margin="10,0,0,0"
+                                       Foreground="#B8860B" FontWeight="SemiBold">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding RecorderWarningText}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
                         <Grid>

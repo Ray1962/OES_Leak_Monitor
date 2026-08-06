@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Windows.Media;
 using Aqst.OesSpectrometer.Models;
 using Microsoft.Win32;
 using OxyPlot;
@@ -31,6 +32,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Ratio Setup configuration. Single-device app, so one flag suffices.
     private bool _wasAcquiring;
 
+    // Data directory the Recordings / Ratio Review tabs last scanned. They resolve it from
+    // the logger and scan once, so an Apply that repoints the output folder has to tell them
+    // to rescan — otherwise both tabs keep listing the old folder's files until someone
+    // presses Refresh.
+    private string _lastDataDirectory = "";
+
+    // The logger's armed flag as it stands in settings.json. The live flag can be flipped
+    // from the Configuration tab without saving, so the two can disagree — and the
+    // difference matters: an unsaved arm silently reverts on the next launch. Kept in sync
+    // at load and on every Save; the Monitor strip warns while they differ.
+    private bool _persistedLoggerEnabled;
+
     // Per-device colors and labels. Single OES for leak monitoring. Add tuples here
     // if you grow to multi-device — the rest of the wiring loops over this array.
     // Tag "OES1" is kept (rather than just "OES") so the recordings infrastructure
@@ -50,6 +63,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         Logger      = new LoggerViewModel(_intensityLogger, _paths.DataDirectory);
         LogViewer   = new LogViewerViewModel(_systemLogger);
+
+        // Hydrate the logger from settings.json BEFORE building the review tabs. Both of
+        // them read the logger in their constructors — Recordings/RatioReview scan
+        // EffectiveBaseDirectory once, and Recordings also snapshots the trigger wavelength
+        // for its plot title/series. Built against an empty LoggerViewModel they would take
+        // the factory defaults: the AppData fallback folder instead of the configured data
+        // directory (so both tabs listed "0 files" until the user pressed Refresh) and
+        // 337 nm instead of the configured trigger wavelength.
+        var settings = _settingsService.Load();
+        Logger.LoadFrom(settings.Logger);
+        _persistedLoggerEnabled = settings.Logger.Enabled;
+        // The Monitor tab mirrors the logger's armed flag / state / open file read-only, so
+        // an Operator — who cannot open the Engineer-gated Configuration tab where the
+        // LoggerPanel lives — can still see whether anything is being recorded.
+        Logger.PropertyChanged += OnLoggerPropertyChanged;
+        _lastDataDirectory = LoggerSettings.ResolveBaseDirectory(
+            settings.Logger.BaseDirectory, _paths.DataDirectory);
+
         Recordings  = new RecordingsViewModel(Logger, _intensityLogger, _paths.DataDirectory);
         RatioReview = new RatioReviewViewModel(Logger, _intensityLogger, _paths.DataDirectory);
 
@@ -71,11 +102,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _intensityLogger.ErrorOccurred  += OnIntensityError;
         _intensityLogger.FilesChanged   += OnIntensityFilesChanged;
 
-        // Load persisted settings (or defaults) before wiring change handlers, so the
-        // initial property writes don't trigger spurious CanExecute work.
-        var settings = _settingsService.Load();
+        // Devices exist now, so the persisted per-device parameters can be applied. (The
+        // settings themselves were loaded above, before the review tabs were built.)
         ApplySettingsToDevices(settings);
-        Logger.LoadFrom(settings.Logger);
 
         // Restore the last-used Test-mode simulation file (if it still exists on disk).
         // A missing/unparseable file silently falls back to the synthetic generator.
@@ -134,9 +163,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         LeakCalibration = new LeakCalibrationViewModel(_leakMonitorEngine,
             () => PersistLeakMonitorSettings("LeakCalibrationSaved"), _systemLogger);
 
-        // Ratio-trend CSV: a sibling of each intensity-logger save session, written
-        // while the threshold logger is saving (plasma intensity above the threshold).
-        _ratioCsvLogger = new RatioCsvLogger(_intensityLogger, _leakMonitorEngine, _systemLogger);
+        // Ratio-trend CSV: its own recorder, running for as long as the OES acquires —
+        // deliberately NOT tied to the threshold logger's save sessions, so disarming the
+        // raw-spectrum recorder (or running below its trigger threshold) no longer throws
+        // away the leak history. It only shares the output folder and file prefix.
+        _ratioCsvLogger = new RatioCsvLogger(_leakMonitorEngine, _paths.DataDirectory, _systemLogger);
+        _ratioCsvLogger.Configure(loggerSettings);
 
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
@@ -173,6 +205,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup.SetRole(IsEngineerOrHigher);
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
+
+        UpdateRecorderStatus();
     }
 
     /// <summary>
@@ -206,9 +240,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else if (!now && _wasAcquiring)
         {
-            // Close the current Intensity (and, via FilesChanged, Ratio) save session
-            // so a Stop genuinely ends the recording — the next Start gets new files.
+            // Close both recorders' sessions so a Stop genuinely ends the recording — the
+            // next Start gets new files. They are closed independently now: the Intensity
+            // CSV is threshold-driven, the Ratio CSV runs for the whole acquisition.
             _intensityLogger.Stop();
+            _ratioCsvLogger.Stop();
             _systemLogger.LogSystemEvent(LogSeverity.Information, "IntensityLoggerSessionEnded",
                 "Intensity/Ratio save session closed because OES acquisition stopped");
         }
@@ -266,6 +302,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Logger.ApplyCommand.Execute(null);
         // Re-point the Monitor-tab trend at the (possibly edited) trigger + monitored wavelengths.
         var ls = Logger.ToSettings();
+        // The ratio CSV shares the intensity logger's folder and prefix — an edited path
+        // takes effect on its next session, not mid-file.
+        _ratioCsvLogger.Configure(ls);
+        // Repointed output folder → the review tabs are now listing the wrong tree. Rescan
+        // only on an actual change; a scan walks every day folder under the base directory.
+        var dataDir = LoggerSettings.ResolveBaseDirectory(ls.BaseDirectory, _paths.DataDirectory);
+        if (!string.Equals(dataDir, _lastDataDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            _lastDataDirectory = dataDir;
+            Recordings.Refresh();
+            RatioReview.Refresh();
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "DataDirectoryChanged",
+                "Logger output folder changed — Recordings / Ratio Review rescanned",
+                value: dataDir);
+        }
         WavelengthTrend.Configure(ls.TriggerWavelength, ls.SaveStartThresholdIntensity,
             ls.MonitoredWavelengths?.Select(w => (double)w));
         StatusMessage = "Apply: parameters pushed to connected devices and logger.";
@@ -285,9 +336,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private void ResetExperiment()
     {
-        // (1) Roll to a fresh Intensity (and lockstep Ratio) CSV. The logger stays armed —
-        // Stop() force-closes to Idle so the next threshold cross opens new files.
+        // (1) Roll both recorders to fresh files. The threshold logger stays armed — Stop()
+        // force-closes it to Idle so the next threshold cross opens a new Intensity CSV;
+        // the Ratio CSV, which is not threshold-driven, reopens on the very next frame.
         _intensityLogger.Stop();
+        _ratioCsvLogger.Stop();
 
         // (2) Restart the live Monitor-tab intensity trend (new start time).
         WavelengthTrend.Reset();
@@ -399,6 +452,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             SimulationCsvPath = _simulation.FilePath, // keep the Test-mode playback selection
         };
         _settingsService.Save(settings);
+        // The armed flag now matches what is on disk, so the Monitor strip's
+        // "not saved" warning clears.
+        _persistedLoggerEnabled = settings.Logger.Enabled;
+        UpdateRecorderStatus();
         StatusMessage = "Settings saved to " + _settingsService.ConfigFilePath;
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsSaved",
             "Settings written to disk",
@@ -443,6 +500,106 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private string _statusMessage = "Ready";
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
 
+    // --- Monitor-tab recorder strip (read-only mirror of the logger) ---
+    //
+    // The LoggerPanel — with Start Save / Stop Save and every logger setting — lives in the
+    // Configuration tab, which is gated to Engineer+. An Operator running the daily check
+    // therefore has no way to see whether data is being recorded at all. These four
+    // properties project the logger's armed flag, state machine, and open file into a strip
+    // on the Monitor tab. Read-only on purpose: seeing the state is an Operator concern,
+    // changing it stays an Engineer one.
+
+    private string _recorderStateText = "OFF";
+    /// <summary>Short badge text: OFF / ARMED / STARTING / SAVING / STOPPING.</summary>
+    public string RecorderStateText { get => _recorderStateText; private set => Set(ref _recorderStateText, value); }
+
+    private Brush _recorderBrush = Brushes.Gray;
+    public Brush RecorderBrush { get => _recorderBrush; private set => Set(ref _recorderBrush, value); }
+
+    private string _recorderDetailText = "";
+    /// <summary>One sentence saying what the recorder is doing, naming the open file when there is one.</summary>
+    public string RecorderDetailText { get => _recorderDetailText; private set => Set(ref _recorderDetailText, value); }
+
+    private string _recorderWarningText = "";
+    /// <summary>
+    /// Non-empty only while the live armed flag differs from the one in <c>settings.json</c>.
+    /// Arming from the Configuration tab without pressing Save reverts on the next launch —
+    /// a silent stop-recording that is otherwise invisible until the data is missing.
+    /// </summary>
+    public string RecorderWarningText { get => _recorderWarningText; private set => Set(ref _recorderWarningText, value); }
+
+    private string _recorderTooltip = "";
+    /// <summary>Full path of the open CSV (or the trigger condition when nothing is open).</summary>
+    public string RecorderTooltip { get => _recorderTooltip; private set => Set(ref _recorderTooltip, value); }
+
+    private void OnLoggerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(LoggerViewModel.Enabled):
+            case nameof(LoggerViewModel.StateText):
+            case nameof(LoggerViewModel.CurrentFile1):
+            case nameof(LoggerViewModel.TriggerWavelength):
+            case nameof(LoggerViewModel.SaveStartThresholdIntensity):
+                UpdateRecorderStatus();
+                break;
+        }
+    }
+
+    private void UpdateRecorderStatus()
+    {
+        var file = Logger.CurrentFile1;
+        var hasFile = !string.IsNullOrWhiteSpace(file);
+        var trigger = $"{Logger.TriggerWavelength:0.#} nm above {Logger.SaveStartThresholdIntensity:0.#}";
+
+        if (!Logger.Enabled)
+        {
+            RecorderStateText = "OFF";
+            RecorderBrush     = Brushes.Firebrick;
+            RecorderDetailText = "Spectrum recording disarmed — the Ratio CSV is still being written.";
+            RecorderTooltip    = "The threshold logger is disabled, so no Intensity (full-spectrum) " +
+                                 "CSV is written. The Ratio CSV is a separate recorder and keeps " +
+                                 "running for as long as the OES acquires. An Engineer arms the " +
+                                 "spectrum recorder in the Configuration tab (LoggerPanel → Start " +
+                                 "Save), then presses Save so it stays armed after a restart.";
+        }
+        else
+        {
+            switch (Logger.StateText)
+            {
+                case nameof(LoggerState.Saving):
+                    RecorderStateText = "SAVING";
+                    RecorderBrush     = Brushes.ForestGreen;
+                    break;
+                case nameof(LoggerState.WaitingToStart):
+                    RecorderStateText = "STARTING";
+                    RecorderBrush     = Brushes.DarkOrange;
+                    break;
+                case nameof(LoggerState.WaitingToStop):
+                    RecorderStateText = "STOPPING";
+                    RecorderBrush     = Brushes.DarkOrange;
+                    break;
+                default:
+                    RecorderStateText = "ARMED";
+                    RecorderBrush     = Brushes.SteelBlue;
+                    break;
+            }
+            RecorderDetailText = hasFile
+                ? $"Writing {Path.GetFileName(file)}."
+                : $"Armed — waiting for {trigger}.";
+            RecorderTooltip = hasFile
+                ? file
+                : $"No file is open. One opens once the intensity at {trigger} is sustained " +
+                  $"for {Logger.StartConfirmSeconds:0.#} s.";
+        }
+
+        RecorderWarningText = Logger.Enabled == _persistedLoggerEnabled
+            ? ""
+            : Logger.Enabled
+                ? "armed but not saved — reverts to OFF on restart"
+                : "disarmed but not saved — returns to ARMED on restart";
+    }
+
     private void RaiseCanExec()
     {
         ApplyAllCommand.RaiseCanExecuteChanged();
@@ -456,6 +613,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         AccessControl.RoleChanged       -= OnRoleChanged;
+        Logger.PropertyChanged          -= OnLoggerPropertyChanged;
         _intensityLogger.StateChanged   -= OnIntensityStateChanged;
         _intensityLogger.ErrorOccurred  -= OnIntensityError;
         _intensityLogger.FilesChanged   -= OnIntensityFilesChanged;

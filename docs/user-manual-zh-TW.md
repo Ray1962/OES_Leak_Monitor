@@ -117,7 +117,7 @@ vcruntime140_cor3.dll
 
 | # | 分頁 | 用途 | 權限 |
 |---|---|---|---|
-| 1 | **Monitor** | 即時全光譜圖 + 選定波長強度趨勢；裝置連線／擷取控制 | Operator+ 操作 |
+| 1 | **Monitor** | 即時全光譜圖 + 選定波長強度趨勢；裝置連線／擷取控制；Recorder 狀態列 | Operator+ 操作（狀態列全開放檢視） |
 | 2 | **Leak Monitor** | 洩漏偵測主畫面：狀態燈號、各比值、趨勢圖、Golden Run | 檢視全開放 |
 | 3 | **Ratio Setup** | 設定要監控哪些譜線比值、門檻 | Engineer+ 存檔 |
 | 4 | **Wavelength Calibration** | 波長漂移補償（校正整個 catalog 的譜線位置） | Engineer+ 存檔 |
@@ -190,7 +190,7 @@ vcruntime140_cor3.dll
 
 **Reset Run**（Operator+）用在「調完參數，想從乾淨的狀態重新開始這一爐」：
 
-- 關閉目前的 Intensity CSV 與 Ratio CSV（下一次超過門檻時會開新檔）。
+- 關閉目前的 Intensity CSV 與 Ratio CSV。兩者開新檔的時機不同：**Intensity CSV 要等下一次超過門檻**，**Ratio CSV 下一幀就開新檔**。
 - 清空 Monitor 強度趨勢圖與 Leak Monitor 的 % 趨勢圖。
 - 重置各比值的即時平滑。
 
@@ -198,7 +198,27 @@ vcruntime140_cor3.dll
 
 > 若你剛改過**積分時間**或其他會影響絕對強度的設定，Reset Run 不夠 —— 請**重新錄一次 Golden Run**，因為舊基準線是在不同曝光條件下錄的。
 
-#### 6.1.2 裝置控制列（DevicePanel）
+#### 6.1.2 Recorder 狀態列（唯讀）
+
+Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**全光譜記錄器現在到底有沒有在錄**。純顯示，這裡按不到任何東西 —— 記錄器的開關與所有設定都在 Configuration 分頁（需 Engineer），但**看**狀態不需要權限，Guest 也看得到。
+
+> 這條狀態列只講**強度（全光譜）CSV**。**比值 CSV 是另一個獨立的記錄器**，只要 OES 在擷取就一直寫，即使這裡顯示 `OFF` 也照常產生（見 §7.3）。
+
+| 徽章 | 顏色 | 意義 |
+|---|---|---|
+| `OFF` | 紅 | 記錄器**沒有武裝** —— 不會產生強度 CSV（比值 CSV 不受影響，見 §7.3） |
+| `ARMED` | 藍 | 已武裝，等待強度跨過觸發門檻。右側會寫出目前的門檻條件 |
+| `STARTING` | 橘 | 已高於門檻，正在等 Start confirm 時間 |
+| `SAVING` | 綠 | 正在寫強度 CSV，右側顯示**目前檔名** |
+| `STOPPING` | 橘 | 已低於門檻，正在等 Stop confirm 時間 |
+
+滑鼠停在狀態列上會顯示**完整檔案路徑**（沒有開檔時則顯示開檔條件）。
+
+若右側出現橘色小字 **「armed but not saved — reverts to OFF on restart」**，表示有人在 Configuration 分頁按了 Start Save 卻**沒有按 Save** —— 目前確實在錄，但這個狀態沒有寫進 `settings.json`，**下次重開程式就會變回 OFF**。回 Configuration 按一次 **Save** 即可消除。反向的「disarmed but not saved」同理。
+
+> 💡 每日巡檢的第一眼就看這條 —— 它是「以為在錄、其實沒錄」這個失效模式唯一的可見警示。
+
+#### 6.1.3 裝置控制列（DevicePanel）
 
 | 按鈕 | 作用 |
 |---|---|
@@ -213,7 +233,7 @@ vcruntime140_cor3.dll
 
 圖表操作：滾輪縮放、右鍵選單有 Zoom In / Zoom Out / **Zoom All**（快捷鍵 `A`）。
 
-#### 6.1.3 強度趨勢圖（Wavelength Trend）
+#### 6.1.4 強度趨勢圖（Wavelength Trend）
 
 畫面下半部，顯示**時間 vs 強度**，最多 6 條線：
 
@@ -564,7 +584,7 @@ x ≈ s · Q
 
 | 按鈕 | 說明 |
 |---|---|
-| **Refresh** | 重新掃描資料夾 |
+| **Refresh** | 重新掃描資料夾。啟動時與 Configuration 改過資料夾按 Apply 後都會自動掃一次，所以平常只有在**程式外部**新增／刪除檔案時才需要手動按 |
 | **Open Base** | 用檔案總管開啟記錄器的根目錄 |
 | **Open Folder** | 開啟選定 session 的資料夾 |
 | **Open File** | 用預設程式開啟該 CSV |
@@ -659,7 +679,17 @@ Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,Le
 
 每個比值兩欄（原始值 + % 基準），最後三欄是整體狀態與洩漏率估計。欄位是**依標題名稱**尋址的，所以舊版沒有 `LeakRate` 欄位的檔案仍可正常解析。
 
-比值檔與強度檔**同步開關** —— 只有在電漿強度高於觸發門檻時才有資料。
+**比值檔與強度檔是各自獨立的記錄器**，只共用同一個輸出資料夾與檔名前綴：
+
+| | 強度 CSV（`_OES1_`） | 比值 CSV（`_Ratio_`） |
+|---|---|---|
+| 什麼時候寫 | 只在強度**高於觸發門檻**時 | **只要 OES 在擷取就一直寫** |
+| 需要武裝嗎 | 要（Recorder 狀態列須非 `OFF`） | 不用 —— 記錄器 `OFF` 也照樣產生 |
+| 每列大小 | 全譜約 22 KB（5 Hz ≈ 400 MB/小時） | 約 200 B（5 Hz ≈ 4 MB/小時） |
+| 何時關檔 | 低於門檻並滿足停止確認 | 停止擷取、Reset Run、或**跨過午夜**（自動換日換檔） |
+
+> 💡 這是刻意的設計：比值資料是洩漏監控的核心記錄，體積只有全譜的百分之一，不應該因為「原始光譜錄影沒開」就跟著消失。
+> 也因此比值檔的時間戳**不再與強度檔相同** —— 兩者各自開檔，不要用檔名時間去配對它們。
 
 ### 7.4 備份建議
 
@@ -678,7 +708,10 @@ Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,Le
    - **Baseline** 下拉選的是今天配方對應的基準線。
    - 狀態橫幅在電漿點著後轉為綠色 `OK — within baseline`。
    - 沒有 `LOW SIGNAL` 警示。
-5. **Configuration** → **Start Save** 武裝記錄器（若需要留資料）。
+5. 回 **Monitor**，確認 **Recorder 狀態列**不是紅色 `OFF`（見 §6.1.2）。
+   - 顯示 `ARMED` / `SAVING` → 正常，不必做任何事。
+   - 顯示 `OFF` → 記錄器沒武裝，**通知工程師**（武裝在 Engineer 權限的 Configuration 分頁，操作員進不去）。這是一次性設定，正常情況下不需要每天按。
+   - 出現橘色「not saved」小字 → 同樣通知工程師補按一次 Save，否則下次開機會失效。
 
 ### 8.2 換配方
 
@@ -764,9 +797,12 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 
 依序確認：
 
-1. 記錄器有沒有真的在存檔（Logger Status 應為 `Saving`）—— 強度必須**高於觸發門檻**才會開檔。
-2. `settings.json` 裡 `RatioCsvEnabled` 是否為 `true`（預設是）。
-3. 看 **Logs** 分頁有沒有 `RatioCsvSkipped` 記錄，裡面會寫原因。
+比值 CSV **不需要**記錄器武裝，也不看觸發門檻 —— 只要 OES 在擷取就該有檔案。所以依序確認：
+
+1. OES 是不是真的在擷取（Monitor 分頁 `Status: Acquiring`）。沒擷取就不會有任何資料。
+2. `settings.json` 裡 `LeakMonitor.Enabled` 與 `RatioCsvEnabled` 是否都為 `true`（預設是）。
+3. 看 **Logs** 分頁有沒有 `RatioCsvSkipped`（設定被關）或 `RatioCsv_Open_Failed`（路徑寫不進去，例如磁碟滿或無權限）記錄，裡面會寫原因。
+4. 檔案位置跟強度 CSV 同一個資料夾，但**檔名時間戳不同** —— 別拿強度檔的時間去找它。
 
 ### 9.9 測試模式下警報不會跳
 

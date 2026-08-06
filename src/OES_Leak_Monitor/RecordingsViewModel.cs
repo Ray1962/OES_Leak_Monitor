@@ -329,6 +329,12 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
                     {
                         var rec = Recording.TryParse(path);
                         if (rec is null) continue;
+                        // Single-OES app: only the "OES1" files are spectra. The sibling
+                        // "Ratio" file belongs to the Ratio Review tab, and since it no
+                        // longer shares a session timestamp with an intensity CSV it would
+                        // otherwise create an empty group of its own here. Historical
+                        // "OES2" files are ignored for the same reason.
+                        if (!rec.DeviceTag.Equals("OES1", StringComparison.OrdinalIgnoreCase)) continue;
                         fileCount++;
                         if (!groups.TryGetValue(rec.GroupKey, out var grp))
                         {
@@ -340,9 +346,7 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
                             };
                             groups[rec.GroupKey] = grp;
                         }
-                        // Single-OES app: only files tagged "OES1" populate the group.
-                        // Any historical "OES2" siblings on disk are silently ignored.
-                        if (rec.DeviceTag.Equals("OES1", StringComparison.OrdinalIgnoreCase)) grp.Oes1 = rec;
+                        grp.Oes1 = rec;
                     }
                 }
             }
