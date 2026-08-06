@@ -24,16 +24,17 @@ Steps:
    ```
 
 3. When it finishes, verify `src/OES_Leak_Monitor/bin/Publish/win-x64/` holds
-   **10** files: `OES_Leak_Monitor.exe`, the OES native DLLs
+   **11** files: `OES_Leak_Monitor.exe`, the OES native DLLs
    (`UserApplication.dll`, `SiUSBXp.dll`, `libsodium.dll`), the WPF
-   `*_cor3.dll` set (5 files), and `user-manual-zh-TW.html`. Report the full
-   output folder path and the `.exe` size. A count below 10 means the folder is
-   not shippable — say so rather than reporting success.
+   `*_cor3.dll` set (5 files), and the two operator docs
+   (`user-manual-zh-TW.html`, `daily-inspection-plan-zh-TW.html`). Report the
+   full output folder path and the `.exe` size. A count below 11 means the
+   folder is not shippable — say so rather than reporting success.
 
 Notes:
 - Never enable `IncludeNativeLibrariesForSelfExtract`. The OES native DLLs must
   stay loose next to the `.exe` — `DllResolver` only searches the app base dir.
 - Ship the whole output folder together, not just the `.exe`.
 - If the publish fails on restore, an `Aqst.*` package from step 1 is missing.
-- `publish.cmd` runs the same publish and then re-checks the 10 files itself, so
+- `publish.cmd` runs the same publish and then re-checks the 11 files itself, so
   prefer it when the user wants the folder opened in Explorer afterwards.

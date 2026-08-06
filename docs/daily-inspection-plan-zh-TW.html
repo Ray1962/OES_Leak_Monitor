@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Plasma Monitor 日常巡檢計畫</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#1-目的與適用範圍">1. 目的與適用範圍</a>
+<a class="l3" href="#11-監控目的">1.1 監控目的</a>
+<a class="l3" href="#12-兩階段巡檢的分工">1.2 兩階段巡檢的分工</a>
+<a class="l3" href="#13-不在本計畫範圍內">1.3 不在本計畫範圍內</a>
+<a class="l2" href="#2-巡檢層級頻率與責任分工">2. 巡檢層級、頻率與責任分工</a>
+<a class="l2" href="#3-巡檢前準備">3. 巡檢前準備</a>
+<a class="l2" href="#4-第一階段l1每日巡檢">4. 第一階段（L1）每日巡檢</a>
+<a class="l3" href="#40-步驟-0-連線與擷取狀態30-秒">4.0 步驟 0 — 連線與擷取狀態（30 秒）</a>
+<a class="l3" href="#41-步驟-1-檢查電漿強度光譜重點一">4.1 步驟 1 — 檢查電漿強度光譜【重點一】</a>
+<a class="l3" href="#42-步驟-2-檢查電漿強度趨勢重點二">4.2 步驟 2 — 檢查電漿強度趨勢【重點二】</a>
+<a class="l3" href="#43-步驟-3-leak-monitor-狀態與比值列">4.3 步驟 3 — Leak Monitor 狀態與比值列</a>
+<a class="l3" href="#44-步驟-4-資料記錄器與儲存空間">4.4 步驟 4 — 資料記錄器與儲存空間</a>
+<a class="l3" href="#45-步驟-5-系統日誌快掃">4.5 步驟 5 — 系統日誌快掃</a>
+<a class="l3" href="#46-l1-判定準則與處置">4.6 L1 判定準則與處置</a>
+<a class="l2" href="#5-光譜-趨勢-綜合判讀表">5. 光譜 × 趨勢 綜合判讀表</a>
+<a class="l2" href="#6-第二階段l2深入巡檢">6. 第二階段（L2）深入巡檢</a>
+<a class="l3" href="#61-基準線golden-run有效性複核">6.1 基準線（Golden Run）有效性複核</a>
+<a class="l3" href="#62-訊噪比與光路健康度">6.2 訊噪比與光路健康度</a>
+<a class="l3" href="#63-波長漂移查核與校正">6.3 波長漂移查核與校正</a>
+<a class="l3" href="#64-洩漏偵測策略複核l2-核心">6.4 洩漏偵測策略複核【L2 核心】</a>
+<a class="l3" href="#65-洩漏率校正驗證有做定量的機台">6.5 洩漏率校正驗證（有做定量的機台）</a>
+<a class="l3" href="#66-誤報漏報審查回放">6.6 誤報／漏報審查（回放）</a>
+<a class="l3" href="#67-組態備份與版本記錄">6.7 組態備份與版本記錄</a>
+<a class="l2" href="#7-洩漏偵測策略制定流程l2-專用">7. 洩漏偵測策略制定流程（L2 專用）</a>
+<a class="l3" href="#71-七個步驟">7.1 七個步驟</a>
+<a class="l3" href="#72-依機台製程的選線指引">7.2 依機台製程的選線指引</a>
+<a class="l3" href="#73-已知譜線干擾清單">7.3 已知譜線干擾清單</a>
+<a class="l3" href="#74-門檻設定建議">7.4 門檻設定建議</a>
+<a class="l2" href="#8-異常升級與處置矩陣">8. 異常升級與處置矩陣</a>
+<a class="l3" href="#alarm-發生時的處置流程">ALARM 發生時的處置流程</a>
+<a class="l2" href="#9-事件驅動巡檢">9. 事件驅動巡檢</a>
+<a class="l2" href="#10-巡檢記錄表可列印">10. 巡檢記錄表（可列印）</a>
+<a class="l3" href="#101-l1-每日巡檢表">10.1 L1 每日巡檢表</a>
+<a class="l3" href="#102-l2-深入巡檢表">10.2 L2 深入巡檢表</a>
+<a class="l2" href="#11-附錄-a判定門檻速查">11. 附錄 A：判定門檻速查</a>
+<a class="l2" href="#12-附錄-b常見誤報原因">12. 附錄 B：常見誤報原因</a>
+<a class="l2" href="#13-附錄-c與操作手冊章節對照">13. 附錄 C：與操作手冊章節對照</a>
+</nav>
+<main>
+<h1 id="oes-plasma-monitor-日常巡檢計畫">OES Plasma Monitor 日常巡檢計畫</h1>
+<p><strong>適用系統</strong>：OES Leak Monitor（電漿光學發射光譜空氣洩漏監控系統） <strong>適用場所</strong>：半導體廠 CVD／PECVD／電漿蝕刻／電漿清洗等使用電漿製程之生產設備 <strong>版本</strong>：1.0　<strong>制定日期</strong>：2026-08-06</p>
+<blockquote><p>本文件是<strong>巡檢作業規範</strong>。軟體的功能說明、每個控制項的意義、參數預設值請看 <a href="user-manual-zh-TW.md"><code>user-manual-zh-TW.md</code></a>（操作手冊）；洩漏率換算的數學請看 <a href="leak-rate-calibration.md"><code>leak-rate-calibration.md</code></a>。本文件只講「每天／每週要看什麼、 看到什麼算異常、異常了怎麼辦」。</p></blockquote>
+<hr>
+<h2 id="目錄">目錄</h2>
+<ol>
+<li><a href="#1-目的與適用範圍">目的與適用範圍</a>
+</li>
+<li><a href="#2-巡檢層級頻率與責任分工">巡檢層級、頻率與責任分工</a>
+</li>
+<li><a href="#3-巡檢前準備">巡檢前準備</a>
+</li>
+<li><a href="#4-第一階段l1每日巡檢">第一階段（L1）每日巡檢</a>
+</li>
+<li><a href="#5-光譜-趨勢-綜合判讀表">光譜 × 趨勢 綜合判讀表</a>
+</li>
+<li><a href="#6-第二階段l2深入巡檢">第二階段（L2）深入巡檢</a>
+</li>
+<li><a href="#7-洩漏偵測策略制定流程l2-專用">洩漏偵測策略制定流程（L2 專用）</a>
+</li>
+<li><a href="#8-異常升級與處置矩陣">異常升級與處置矩陣</a>
+</li>
+<li><a href="#9-事件驅動巡檢">事件驅動巡檢</a>
+</li>
+<li><a href="#10-巡檢記錄表可列印">巡檢記錄表（可列印）</a>
+</li>
+<li><a href="#11-附錄-a判定門檻速查">附錄 A：判定門檻速查</a>
+</li>
+<li><a href="#12-附錄-b常見誤報原因">附錄 B：常見誤報原因</a>
+</li>
+<li><a href="#13-附錄-c與操作手冊章節對照">附錄 C：與操作手冊章節對照</a>
+</li>
+</ol>
+<hr>
+<h2 id="1-目的與適用範圍">1. 目的與適用範圍</h2>
+<h3 id="11-監控目的">1.1 監控目的</h3>
+<p>在製程腔體上以光纖取電漿自身的發光，用<strong>比值法（actinometry）</strong>即時判斷是否有<strong>空氣（氮、氧、水氣）漏入製程腔</strong>。</p>
+<p>空氣漏入的光譜特徵是：<strong>O、OH、NO（以及 N₂⁺）等物種的譜線同時上升</strong>，而製程本身供應的參考譜線（N₂ 337.1 nm、Ar 750.4 nm 等）維持不變。用比值而非絕對強度，是為了消掉功率、壓力、觀察窗汙染這類<strong>與洩漏無關</strong>的漂移。</p>
+<p>漏氣在半導體製程上的後果是實質的：膜質劣化（含氧、含氮）、顆粒增加、腔體與泵浦腐蝕、真空件壽命縮短，嚴重時整批 WIP 報廢。<strong>這套系統的價值在於「在製程結果變壞之前就看到趨勢」</strong>，所以巡檢的重點不是「有沒有跳警報」，而是<strong>「趨勢有沒有在慢慢變」</strong>。</p>
+<h3 id="12-兩階段巡檢的分工">1.2 兩階段巡檢的分工</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>階段</th><th>名稱</th><th>目的</th><th>需要的能力</th></tr></thead>
+<tbody>
+<tr><td><strong>第一階段（L1）</strong></td><td>一般性簡易巡檢</td><td><strong>只問一句話：現在跟平常一不一樣？</strong> 不調參數、不改設定，發現異常就記錄並上報</td><td>會操作介面即可（Operator 權限）</td></tr>
+<tr><td><strong>第二階段（L2）</strong></td><td>深入巡檢</td><td>確認<strong>偵測策略本身還有效</strong>：基準線、譜線選擇、門檻、SNR、波長、洩漏率校正</td><td>需懂製程氣體與光譜（Engineer 權限）</td></tr>
+</tbody></table></div>
+<blockquote><p>⚠️ <strong>L1 人員不得更改任何設定。</strong> 調整門檻、換譜線、重錄 Golden Run 一律屬於 L2。 L1 若「因為一直跳警報就把門檻調高」，等於關掉這套系統。</p></blockquote>
+<h3 id="13-不在本計畫範圍內">1.3 不在本計畫範圍內</h3>
+<ul>
+<li>光譜儀硬體本身的計量校正（送校）。
+</li>
+<li>腔體的實體檢漏（氦質譜檢漏、升壓率測試）——本系統是<strong>線上早期指標</strong>，確認漏點仍需實體檢漏。
+</li>
+<li>機台的製程參數調整。
+</li>
+</ul>
+<hr>
+<h2 id="2-巡檢層級頻率與責任分工">2. 巡檢層級、頻率與責任分工</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>L1 每日巡檢</th><th>L2 深入巡檢</th></tr></thead>
+<tbody>
+<tr><td>頻率</td><td><strong>每班次一次</strong>（建議交接時），至少每日一次</td><td><strong>每週一次</strong>；另加事件驅動（見 §9）</td></tr>
+<tr><td>每台耗時</td><td>約 5–10 分鐘</td><td>約 30–60 分鐘</td></tr>
+<tr><td>執行者</td><td>設備技術員／製程操作員</td><td>設備工程師／製程工程師</td></tr>
+<tr><td>軟體權限</td><td>Operator</td><td>Engineer 或 Admin</td></tr>
+<tr><td>產出</td><td>L1 巡檢表（§10.1）</td><td>L2 巡檢表（§10.2）＋設定變更記錄</td></tr>
+<tr><td>可否改設定</td><td><strong>否</strong></td><td>是（須記錄變更原因與前後值）</td></tr>
+<tr><td>異常處理</td><td>記錄 → 通報工程師</td><td>判定 → 處置 → 驗證 → 結案</td></tr>
+</tbody></table></div>
+<p><strong>建議排程</strong>：L2 安排在<strong>機台已知穩定、且剛跑完良品批</strong>的時段做，因為 L2 的許多項目（重錄 Golden Run、驗證校正）需要一個「確定沒有洩漏」的基準狀態。剛做完 PM 但尚未驗證的機台不適合做 L2 定基準。</p>
+<hr>
+<h2 id="3-巡檢前準備">3. 巡檢前準備</h2>
+<p>巡檢開始前先確認以下四件事，缺一則巡檢結果不可信：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>確認方式</th><th>不符合時</th></tr></thead>
+<tbody>
+<tr><td>帳號權限</td><td>右上角角色徽章顯示 <code>Operator</code> 以上</td><td>先 <strong>Sign In</strong>；閒置 5 分鐘會自動鎖回 Guest</td></tr>
+<tr><td>硬體連線</td><td>Monitor 分頁狀態列 <strong>Test Mode = False</strong></td><td><strong>立刻停止巡檢並上報</strong> ——<code>True</code> 代表現在畫面上全是模擬資料，判讀完全無效</td></tr>
+<tr><td>電漿狀態</td><td>機台正在跑製程（有電漿）</td><td>沒電漿時只能做「介面存活」檢查，比值判讀無效（會顯示 <code>No Plasma</code>）</td></tr>
+<tr><td>對照基準</td><td>手邊有<strong>同配方、同機台</strong>的前次巡檢記錄</td><td>L1 的判定全部是「跟上次比」，沒有對照就只能記錄不能判定</td></tr>
+</tbody></table></div>
+<blockquote><p>💡 <strong>關於 Test Mode</strong>：<code>Test Mode = True</code> 而硬體確實有接，最常見原因是程式資料夾裡少了 <code>UserApplication.dll</code> / <code>SiUSBXp.dll</code> / <code>libsodium.dll</code>（見手冊 §9.1）。這是本系統最危險的失效模式 ——畫面看起來一切正常、數字會動、卻完全沒在監控真實腔體。<strong>每次巡檢第一件事就是確認這一格。</strong></p></blockquote>
+<hr>
+<h2 id="4-第一階段l1每日巡檢">4. 第一階段（L1）每日巡檢</h2>
+<p><strong>原則</strong>：由「光」到「數」——先看光譜長相（§4.1），再看時間趨勢（§4.2），最後才看系統給的結論（§4.3）。反過來只看警報燈，會漏掉「還沒到門檻但已經在爬」的緩漏。</p>
+<h3 id="40-步驟-0-連線與擷取狀態30-秒">4.0 步驟 0 — 連線與擷取狀態（30 秒）</h3>
+<p>在 <strong>Monitor</strong> 分頁確認：</p>
+<ul>
+<li>☐ <code>Test Mode</code> = <strong>False</strong>
+</li>
+<li>☐ <code>Frame</code> 每幀點數與平常一致（例如 2048），沒有變成 1000（測試模式的點數）
+</li>
+<li>☐ <code>Last</code>（最後一幀時間）在<strong>數秒內</strong>持續更新——停住代表擷取已中斷
+</li>
+<li>☐ <code>Serial</code>（序號）與該機台配掛的光譜儀相符
+</li>
+</ul>
+<p>任一項不符 → <strong>停止判讀，直接進入 §8 升級流程</strong>。</p>
+<h3 id="41-步驟-1-檢查電漿強度光譜重點一">4.1 步驟 1 — 檢查電漿強度光譜【重點一】</h3>
+<p>畫面：<strong>Monitor</strong> 分頁上半部的全譜圖（DevicePanel）。操作：滑鼠滾輪縮放、右鍵 → <strong>Zoom All</strong>（快捷鍵 <code>A</code>）回到全譜。</p>
+<p>看五件事，<strong>由粗到細</strong>：</p>
+<h4 id="1-整體強度水準">(1) 整體強度水準</h4>
+<ul>
+<li>全譜最高峰的計數值與前次巡檢相比，變化應在 <strong>±20% 以內</strong>。
+</li>
+<li><strong>明顯偏低</strong>（例如掉到 70% 以下）→ 觀察窗汙染、光纖鬆脫或彎折、電漿功率下降。
+</li>
+<li><strong>明顯偏高</strong> → 有人改過積分時間，或製程條件改變。
+</li>
+</ul>
+<blockquote><p>⚠️ 強度絕對值的變化<strong>本身不是洩漏</strong>。洩漏看的是比值（§4.3）。但強度大幅下降會讓譜線掉進雜訊底， 使系統進入 <code>Low Signal</code> 而<strong>失去偵測能力</strong>——這才是要抓的。</p></blockquote>
+<h4 id="2-訊號飽和削頂">(2) 訊號飽和（削頂）</h4>
+<ul>
+<li>☐ 沒有任何峰的頂端呈現<strong>平頂／被切平</strong>的形狀。
+</li>
+<li>飽和代表該波長已超出偵測器量程，強度讀值不再正確，比值必然失真。
+</li>
+<li>發現飽和 → 記錄並上報（L2 需縮短 Integration Time 後重錄 Golden Run）。
+</li>
+</ul>
+<h4 id="3-基線暗背景水準">(3) 基線（暗背景）水準</h4>
+<ul>
+<li>譜線之間的「谷底」應接近平坦且貼近零；若整條基線被整體抬高，通常是雜散光、外部漏光（機台門開著、維修燈照到觀察窗）或偵測器溫度異常。
+</li>
+<li>☐ 巡檢時確認<strong>腔體觀察窗附近沒有外部光源照入</strong>。
+</li>
+</ul>
+<h4 id="4-關鍵譜線是否都在形狀是否正常">(4) 關鍵譜線是否都在、形狀是否正常</h4>
+<p>對照該機台的<strong>標準光譜照片</strong>（L2 於策略定案時拍存，見 §7.1 步驟 7），逐一確認下列譜線存在且峰形對稱：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>譜線</th><th>波長</th><th>角色</th></tr></thead>
+<tbody>
+<tr><td>N₂ (SPS)</td><td>337.1 nm</td><td>常用參考線／電漿存在判定</td></tr>
+<tr><td>OH</td><td>308.9 nm</td><td>洩漏指標（水氣）</td></tr>
+<tr><td>NO</td><td>237.0 nm</td><td>洩漏指標（N+O 反應產物）</td></tr>
+<tr><td>O</td><td>777.2 nm</td><td>洩漏指標（氧原子）</td></tr>
+<tr><td>Ar</td><td>750.4 / 811.5 nm</td><td>參考線（若製程有通 Ar）</td></tr>
+<tr><td>N₂⁺</td><td>391.4 nm</td><td>空氣漏入的高敏感指標（若策略有納入）</td></tr>
+</tbody></table></div>
+<ul>
+<li>☐ <strong>峰形對稱、無分裂、無明顯變寬</strong> ——變寬或偏移見手冊 §9.3（多為硬體平均模式問題）。
+</li>
+<li>☐ <strong>沒有新出現的、平常不存在的峰</strong>。新峰的常見來源：金屬（Fe 372 / Cr 425 / Al 396 → 腔體或載具被濺射）、CN 388（有機物或 O-ring 被侵蝕）、H 656（水氣或有機物）。<strong>新峰一律記錄並上報</strong>。
+</li>
+</ul>
+<h4 id="5-幀完整性">(5) 幀完整性</h4>
+<ul>
+<li>☐ 光譜沒有出現<strong>斷裂／撕裂</strong>（波形中間出現不連續的階梯或錯位段）。
+</li>
+<li>這是 Z5／乙太網路機種在長積分時間下的已知現象，處置是 L2 把 Acquire Mode 改為 <code>Oneshot</code>（手冊 §9.2）。
+</li>
+</ul>
+<h3 id="42-步驟-2-檢查電漿強度趨勢重點二">4.2 步驟 2 — 檢查電漿強度趨勢【重點二】</h3>
+<p>畫面：<strong>Monitor</strong> 分頁下半部的 <strong>Wavelength Trend</strong>（時間 vs 強度，保留 30 分鐘）。</p>
+<p>這張圖畫的是<strong>每幀原始計數</strong>（刻意不濾波），最多 6 條線：Trigger 波長 ＋ Monitored Wavelengths 前 5 個。</p>
+<p><strong>建議巡檢操作順序</strong>：</p>
+<ol>
+<li>先按 <strong>Zoom All</strong> 看完整 30 分鐘。
+</li>
+<li>勾 <strong>Smooth</strong>（τ ≈ 3 s EMA）——雜訊被壓下去後，<strong>緩慢的趨勢</strong>才看得出來。切換時歷史也會一起重算。
+</li>
+<li>再勾 <strong>Normalize</strong>——所有線以「勾選當下」為 1.0，這時看的是<strong>各線之間有沒有分歧</strong>。 洩漏的特徵就是「洩漏指標線往上跑、參考線持平」，正規化後一眼可辨。
+</li>
+<li>判讀完<strong>取消 Normalize</strong>，把畫面留在原始狀態給下一班。
+</li>
+</ol>
+<p>檢查四件事：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>檢查項</th><th>正常</th><th>異常樣態</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>平穩度</strong></td><td>各線在 30 分鐘內圍繞水平帶波動</td><td>有線單調上升／下降</td></tr>
+<tr><td>2</td><td><strong>同步性</strong></td><td>所有線一起動（功率、壓力波動的正常表現）</td><td><strong>只有部分線在動</strong> → 化學組成真的變了</td></tr>
+<tr><td>3</td><td><strong>階梯跳動</strong></td><td>無</td><td>出現方波狀突跳 → 有人改參數、或幀撕裂</td></tr>
+<tr><td>4</td><td><strong>訊號中斷</strong></td><td>曲線連續</td><td>出現斷點／歸零 → 擷取中斷或電漿熄滅</td></tr>
+</tbody></table></div>
+<p><strong>判讀的關鍵是「同步 vs 分歧」</strong>：</p>
+<ul>
+<li><strong>全部線同步緩降</strong>（正規化後仍重疊）→ 光路問題（觀察窗汙染、光纖），<strong>不是洩漏</strong>。
+</li>
+<li><strong>O／OH／NO 上升而 N₂ 或 Ar 持平</strong>（正規化後明顯分岔）→ <strong>高度懷疑空氣洩漏</strong>，即使 Leak Monitor 尚未跳警報，也要立即記錄並上報。這是本系統最有價值的一個判讀，也是把「巡檢」做成「預警」的關鍵。
+</li>
+</ul>
+<blockquote><p>💡 每條趨勢線取的是該波長 <strong>±0.5 nm 內的峰值</strong>（吸收波長漂移用的峰值定位，不是濾波）， 所以小幅波長漂移不會讓線掉下去；若某線<strong>莫名掉到接近零</strong>，多半是漂移已超過 ±0.5 nm，或該峰真的消失了。</p></blockquote>
+<h3 id="43-步驟-3-leak-monitor-狀態與比值列">4.3 步驟 3 — Leak Monitor 狀態與比值列</h3>
+<p>畫面：<strong>Leak Monitor</strong> 分頁。這一步是看「系統的結論」，但要<strong>用前兩步的觀察去驗證它</strong>。</p>
+<ul>
+<li>☐ <strong>狀態橫幅</strong>：應為綠色 <code>OK — within baseline</code>。
+<ul>
+<li>灰色 <code>Idle</code> → 沒電漿或沒基準線（若製程正在跑卻顯示 Idle，屬異常，上報）。</li>
+<li>橘 <code>WARNING</code> / 紅 <code>ALARM</code> → 進入 §8 處置流程。</li>
+</ul>
+</li>
+<li>☐ <strong>沒有「LOW SIGNAL」警示</strong>。出現代表有比值的譜線太靠近雜訊底，<strong>該比值已被排除在警報判定之外</strong>——系統的偵測能力已經缺一角，必須上報（處置見手冊 §9.4，屬 L2）。
+</li>
+<li>☐ <strong>沒有「測試模式」註記</strong>。
+</li>
+<li>☐ <strong>Baseline 下拉選的是今天這支配方對應的基準線</strong>。選錯基準線 = 拿別的配方當標準，全部判讀作廢。這是實務上最常見的人為錯誤，<strong>每次巡檢都要確認</strong>。
+</li>
+<li>☐ <strong>逐條比值列</strong>，記錄下列數值到巡檢表：
+</li>
+</ul>
+<div class="tablewrap"><table>
+<thead><tr><th>欄位</th><th>L1 判定</th></tr></thead>
+<tbody>
+<tr><td>狀態</td><td>應為 <code>Normal</code>（綠）</td></tr>
+<tr><td><strong>% of baseline</strong></td><td><strong>100 ± 10%</strong> 視為正常；<strong>110–120%</strong> 記為「觀察」；<strong>&gt; 120%</strong> 為異常（已達預設 Warn factor）</td></tr>
+<tr><td>斜率</td><td>應接近 0；<strong>持續為正</strong>即使百分比還低，也記為「觀察」</td></tr>
+<tr><td>SNR</td><td>應 <strong>&gt; 10</strong>；<strong>5–10</strong> 記為「觀察」（逼近預設下限 5）；<strong>&lt; 5</strong> 該比值已被停用</td></tr>
+<tr><td>baseline (mean ± σ)</td><td>與前次巡檢應完全相同——<strong>數值變了代表基準線被重錄過</strong>，須確認是誰、為什麼</td></tr>
+</tbody></table></div>
+<ul>
+<li>☐ <strong>趨勢圖（% of baseline，30 分鐘）</strong>：所有比值曲線應在 100% 附近水平擺動。<strong>任何一條呈現持續上升</strong>，即使還在門檻以下，都要記錄。
+</li>
+<li>☐ <strong>洩漏率讀值</strong>（若已做校正）：記錄數值與 confidence。
+<ul>
+<li>顯示 <code>calibration "X" needs its baseline …</code> → 校正與目前基準線不配對，<strong>估算已暫停</strong>，上報。</li>
+</ul>
+</li>
+</ul>
+<h3 id="44-步驟-4-資料記錄器與儲存空間">4.4 步驟 4 — 資料記錄器與儲存空間</h3>
+<p>畫面：<strong>Monitor</strong> 分頁的 <strong>Recorder 狀態列</strong>（Reset Run 下方那條，唯讀，不需權限即可檢視）。</p>
+<ul>
+<li>☐ <strong>徽章不是紅色 <code>OFF</code></strong> —— <code>OFF</code> 代表<strong>全光譜記錄器</strong>沒武裝，不會產生強度 CSV（比值 CSV 不受影響，仍照常寫）。有電漿時應為 <code>SAVING</code>；沒電漿時 <code>ARMED</code> 為正常。
+</li>
+<li>☐ <strong>沒有橘色「not saved」小字</strong> —— 出現代表武裝狀態沒寫進 <code>settings.json</code>，<strong>下次重開就會失效</strong>（需工程師補按 Configuration 的 Save）。
+</li>
+<li>☐ <code>SAVING</code> 時右側有檔名，且滑鼠停留可看到完整路徑。
+</li>
+<li>☐ 當日的 <code>Data\YYYYMM\DD\</code> 資料夾內有今天的 CSV，且檔案大小持續成長。
+</li>
+<li>☐ 資料碟剩餘空間 <strong>&gt; 20%</strong>（程式不會自動刪檔）。
+</li>
+</ul>
+<blockquote><p><strong>兩份檔案的產生條件不同</strong>（手冊 §7.3）：</p>
+<ul>
+<li><strong>強度 CSV</strong>（<code>_OES1_</code>）只在記錄器武裝<strong>且</strong>強度高於觸發門檻時才寫 —— 當班沒跑電漿就沒有檔案，屬正常。
+</li>
+<li><strong>比值 CSV</strong>（<code>_Ratio_</code>）只要 OES 在擷取就一直寫，跨午夜會自動換日換檔。<strong>擷取中卻沒有今天的比值檔 = 異常</strong>（手冊 §9.8），因為這代表洩漏監控的歷史沒有被留下來，每週 L2 的回放審查（§6.6）會沒有資料可看。
+</li>
+</ul>
+<p>⚠️ 武裝／解除武裝在 Engineer 權限的 Configuration 分頁，<strong>L1 人員無法也不需要操作</strong> —— 只負責看狀態列並回報。這是一次性設定，不是每日動作。</p></blockquote>
+<h3 id="45-步驟-5-系統日誌快掃">4.5 步驟 5 — 系統日誌快掃</h3>
+<p>畫面：<strong>Logs</strong> 分頁，掃過上一班次的記錄。</p>
+<ul>
+<li>☐ 無 <code>Error</code> 等級記錄。
+</li>
+<li>☐ 無 <code>GoldenRunRatioLowSnr</code>（基準線被拒絕）。
+</li>
+<li>☐ 無 <code>LeakCalibrationSuspended</code>（洩漏率校正被暫停）。
+</li>
+<li>☐ 無非預期的 <code>RatiosReloaded</code> / 設定變更記錄——代表有人動過設定，須確認是否為授權變更。
+</li>
+</ul>
+<h3 id="46-l1-判定準則與處置">4.6 L1 判定準則與處置</h3>
+<p>依「最嚴重的一項」決定整台機台的巡檢結論：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>結論</th><th>條件</th><th>處置</th></tr></thead>
+<tbody>
+<tr><td><strong>正常</strong></td><td>所有項目合格</td><td>簽名結案</td></tr>
+<tr><td><strong>觀察</strong></td><td>出現任一「觀察」條件：比值 110–120%、SNR 5–10、斜率持續為正、強度較前次變化 20–30%</td><td>記錄；<strong>縮短巡檢間隔為每 4 小時一次</strong>；連續兩班仍在觀察 → 升為異常</td></tr>
+<tr><td><strong>異常</strong></td><td>比值 &gt; 120%、WARNING 橫幅、LOW SIGNAL、光譜出現新峰／飽和、Test Mode = True、擷取中斷</td><td><strong>2 小時內</strong>通報設備工程師執行 L2</td></tr>
+<tr><td><strong>緊急</strong></td><td>ALARM 橫幅、多條洩漏指標同步陡升、洩漏率讀值明顯攀升</td><td><strong>立即</strong>依 §8 通報，並依廠內規定評估是否暫停投料</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="5-光譜-趨勢-綜合判讀表">5. 光譜 × 趨勢 綜合判讀表</h2>
+<p>這張表是 L1 與 L2 共用的核心判讀工具——<strong>同樣一個「數值變了」，要靠「哪些線一起變」才能分辨原因</strong>。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>光譜表現</th><th>強度趨勢</th><th>比值（% of baseline）</th><th>最可能原因</th><th>動作</th></tr></thead>
+<tbody>
+<tr><td>所有峰同步下降，峰形不變</td><td>全線同步緩降</td><td><strong>持平</strong></td><td>觀察窗汙染／光纖劣化／對位偏移</td><td>L2：清潔觀察窗 → <strong>重錄 Golden Run</strong></td></tr>
+<tr><td>O 777、OH 309、NO 237 升高，N₂ 337 不變</td><td>指標線與參考線<strong>分歧</strong></td><td><strong>多條同步上升</strong></td><td><strong>空氣洩漏（典型）</strong></td><td>§8 緊急流程</td></tr>
+<tr><td>只有 O 777 升高</td><td>單線上升</td><td>單一比值上升</td><td>該線受干擾（含 F 製程的 SiF 777）／製程含氧氣體變動</td><td>L2：查干擾（§7.3）</td></tr>
+<tr><td>N₂⁺ 391.4 陡升</td><td>陡升</td><td>上升</td><td><strong>空氣漏入的高敏感早期指標</strong></td><td>§8：即使其他線還沒動也要查</td></tr>
+<tr><td>所有峰同步上下擺動</td><td>全線同相位振盪</td><td>持平</td><td>電漿功率／壓力／匹配器擺動</td><td>通報製程；非洩漏</td></tr>
+<tr><td>出現金屬峰（Fe/Cr/Al）</td><td>新線出現</td><td>不定</td><td>腔體壁／載具濺射、零件損傷</td><td>通報設備；安排開腔檢查</td></tr>
+<tr><td>出現 CN 388、H 656</td><td>新線出現</td><td>可能伴隨 OH 上升</td><td>有機物污染、O-ring 侵蝕、水氣</td><td>L2 判定；可能是<strong>慢漏＋水氣</strong></td></tr>
+<tr><td>峰整體平移</td><td>曲線莫名掉低</td><td>可能整體偏移</td><td>波長漂移</td><td>L2：Wavelength Calibration（§6.3）</td></tr>
+<tr><td>峰變寬、變形</td><td>抖動增加</td><td>σ 變大、門檻自動放寬</td><td>硬體平均模式問題</td><td>L2：Average Mode → <code>Software</code>（手冊 §9.3）</td></tr>
+<tr><td>光譜斷裂／撕裂</td><td>出現尖刺</td><td>突跳</td><td>幀完整性問題</td><td>L2：Acquire Mode → <code>Oneshot</code>（手冊 §9.2）</td></tr>
+<tr><td>譜線接近雜訊底</td><td>曲線淹在雜訊裡</td><td><code>Low Signal</code></td><td>積分時間不足／訊號太弱</td><td>L2：見手冊 §9.4</td></tr>
+</tbody></table></div>
+<blockquote><p><strong>記住這條主線</strong>： <strong>「強度變、比值不變」＝ 光路或電漿條件問題（本系統設計上要忽略它）。</strong> <strong>「比值變」＝ 電漿裡的化學組成真的變了，才可能是洩漏。</strong></p></blockquote>
+<hr>
+<h2 id="6-第二階段l2深入巡檢">6. 第二階段（L2）深入巡檢</h2>
+<p>L2 的核心問題不是「今天有沒有漏」，而是：<strong>「這套偵測策略，今天還抓得到漏嗎？」</strong> 一套門檻設得太鬆、基準線過期、譜線已掉進雜訊的系統，會天天顯示綠燈，然後在真的漏氣時什麼都不說。</p>
+<h3 id="61-基準線golden-run有效性複核">6.1 基準線（Golden Run）有效性複核</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>檢查項</th><th>合格條件</th><th>不合格處置</th></tr></thead>
+<tbody>
+<tr><td>基準線清單完整性</td><td><strong>每支在跑的配方都有</strong>對應的基準線</td><td>跑一段確定良品的製程 → <strong>Capture Golden Run</strong></td></tr>
+<tr><td>基準線年齡</td><td>建議 <strong>≤ 3 個月</strong>，或距上次 PM 之後</td><td>重錄</td></tr>
+<tr><td>每條比值都有基準值</td><td>沒有比值顯示「無基準線」</td><td>查 Logs 的 <code>GoldenRunRatioLowSnr</code>；先救訊號再重錄（§6.2）</td></tr>
+<tr><td>基準線 σ 合理</td><td>σ／mean 建議 <strong>&lt; 10%</strong></td><td>σ 過大代表錄製當時電漿不穩，重錄</td></tr>
+<tr><td>長期偏移</td><td>各比值日常值應圍繞 100%</td><td>若<strong>長期穩定停在 105–115%</strong> 而非漏氣所致，代表基準線已不代表現況 → 重錄</td></tr>
+<tr><td>名稱可辨識</td><td>名稱含<strong>配方＋日期</strong></td><td>更名規範化，避免選錯基準線</td></tr>
+</tbody></table></div>
+<blockquote><p>⚠️ <strong>重錄 Golden Run 的前提是「確定此刻沒有洩漏」。</strong> 若在已經慢漏的狀態下重錄， 等於把漏氣狀態定義成正常——系統從此永遠不會報警。<strong>重錄前應先完成一次實體檢漏或升壓率測試。</strong> 這是整套系統最重要的一條紀律。</p></blockquote>
+<h3 id="62-訊噪比與光路健康度">6.2 訊噪比與光路健康度</h3>
+<ul>
+<li>記錄各比值目前的 <strong>SNR</strong> 值，與前次 L2 比較，<strong>做成長期趨勢</strong>（本系統不會自動畫 SNR 長期圖，請記在巡檢表上）。
+</li>
+<li>SNR 逐月下降 → 光路劣化（觀察窗鍍膜、光纖老化）。在掉到門檻（預設 5）以前就要處理，<strong>不要等到 <code>Low Signal</code></strong>。
+</li>
+<li>參考線（N₂ 337 或 Ar 750）的絕對強度也一併記錄，作為觀察窗汙染速率的指標。
+</li>
+<li>處置順序（同手冊 §9.4）：拉長 Integration Time → 提高 Average Count（配 <code>Software</code> 平均）→ 檢查光纖與觀察窗 → 該線本來就弱則改 <code>AbsoluteIntensity</code> 模式 → <strong>最後手段</strong>才是調低 Min SNR（<strong>不可設為 0</strong>）。
+</li>
+<li>每次更動積分時間或平均設定後，<strong>必須重錄 Golden Run</strong>（曝光條件變了，舊基準線無效）。
+</li>
+</ul>
+<h3 id="63-波長漂移查核與校正">6.3 波長漂移查核與校正</h3>
+<ol>
+<li>在 Monitor 全譜圖上放大一條<strong>已知波長且明確的譜線</strong>（建議 N₂ 337.1 nm 或 Ar 750.4 nm）。
+</li>
+<li>讀出實際峰位，與標稱值相減。
+</li>
+<li>判定：
+</li>
+</ol>
+<div class="tablewrap"><table>
+<thead><tr><th>偏差</th><th>處置</th></tr></thead>
+<tbody>
+<tr><td>≤ 0.1 nm</td><td>合格，不動</td></tr>
+<tr><td>0.1–0.5 nm</td><td>到 <strong>Wavelength Calibration</strong> 分頁登記該譜線的偏移量</td></tr>
+<tr><td>&gt; 0.5 nm</td><td>異常，先查機械／溫度／光譜儀本身，再談校正（上限 ±5 nm）</td></tr>
+</tbody></table></div>
+<ol>
+<li>存檔後<strong>必須回 Monitor 分頁 Stop → Start</strong> 才生效（暫存機制）。
+</li>
+<li>校正會改變擷取窗位置 → <strong>重錄 Golden Run</strong>。
+</li>
+</ol>
+<blockquote><p>波長修正是<strong>依「物種＋波長」對整份目錄生效</strong>的，所以修一次，所有用到該譜線的比值（訊號線或參考線） 一起對齊。不需要逐條比值去改。</p></blockquote>
+<h3 id="64-洩漏偵測策略複核l2-核心">6.4 洩漏偵測策略複核【L2 核心】</h3>
+<p>依序回答六個問題，任何一個答不出「是」，就要重新走 §7 的策略制定流程。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>問題</th><th>判斷依據</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>訊號線選得對嗎？</strong></td><td>洩漏指標物種，是否<strong>確定不由製程氣體本身產生</strong>？（見 §7.2）</td></tr>
+<tr><td>2</td><td><strong>參考線選得對嗎？</strong></td><td>參考線物種是否由製程<strong>穩定供應</strong>、且<strong>與洩漏無關</strong>？流量會隨步驟變動的氣體不適合當參考線</td></tr>
+<tr><td>3</td><td><strong>有沒有譜線干擾？</strong></td><td>對照 §7.3 的干擾清單，特別是含氟製程的 SiF 777 vs O 777</td></tr>
+<tr><td>4</td><td><strong>門檻合理嗎？</strong></td><td>檢視近一個月的 Ratio Review：門檻線是否<strong>穿過正常資料的雜訊帶</strong>（會誤報）或<strong>遠高於實際漏氣時的上升幅度</strong>（會漏報）</td></tr>
+<tr><td>5</td><td><strong>監測模式對嗎？</strong></td><td>弱訊號線用 <code>Ratio</code> 會劇烈跳動 → 應改 <code>AbsoluteIntensity</code>；但該模式<strong>不再抵銷電漿條件漂移</strong>，需要更穩定的操作點與更頻繁的重錄基準線</td></tr>
+<tr><td>6</td><td><strong>複合判定合理嗎？</strong></td><td><code>RequireTwoForAlarm</code>（預設開）要求兩條比值同時 Alarm。若該機台只有一條可靠指標線，此設定會讓警報<strong>永遠不觸發</strong></td></tr>
+</tbody></table></div>
+<p><strong>所有設定變更都必須記錄</strong>：變更項目、前值、後值、原因、變更人、驗證方式。 變更後記得：Ratio Setup 與 Wavelength Calibration 的修改是<strong>暫存</strong>的，需 <strong>Stop → Start</strong> 才生效（Leak Calibration 例外，存檔即生效）。</p>
+<h3 id="65-洩漏率校正驗證有做定量的機台">6.5 洩漏率校正驗證（有做定量的機台）</h3>
+<ol>
+<li>確認目前 <strong>Baseline 與校正配對</strong>（狀態顯示 <code>Active</code>，不是 <code>BaselineMismatch</code>）。
+</li>
+<li>以<strong>標準漏孔（calibrated leak）</strong>通入已知漏率，讀取 Leak Monitor 的洩漏率估計值。
+</li>
+<li>判定：偏差 <strong>≤ ±30%</strong> 視為合格（本系統定位是趨勢預警，不是計量儀器）；偏差過大則重做校正（Leak Calibration 分頁）。
+</li>
+<li>☐ 確認校正用的氣體是<strong>空氣</strong>（或與待測洩漏相同的氣體）——用惰性氣體做的校正無法對應 O／OH／NO 的上升。
+</li>
+<li>記錄本次驗證的漏率、讀值、偏差百分比。
+</li>
+</ol>
+<h3 id="66-誤報漏報審查回放">6.6 誤報／漏報審查（回放）</h3>
+<ul>
+<li>到 <strong>Ratio Review</strong> 分頁，回放過去一週的比值資料。
+<ul>
+<li>對每次曾發生的 WARNING / ALARM：是<strong>持續上升</strong>（真事件）還是<strong>短暫尖峰</strong>（雜訊／製程切換瞬態）？</li>
+<li>短暫尖峰多 → 提高 <strong>Confirm time</strong>（預設 15 s）比調高門檻更好，<strong>不會犧牲靈敏度</strong>。</li>
+</ul>
+</li>
+<li>到 <strong>Recordings</strong> 分頁，抽查一組完整光譜，確認 CSV 有正常落地且可重新解析。
+</li>
+<li>統計本週：誤報次數、漏報（事後才由其他手段發現的洩漏）次數，記入巡檢表。<strong>漏報一次就必須重新檢討策略。</strong>
+</li>
+</ul>
+<h3 id="67-組態備份與版本記錄">6.7 組態備份與版本記錄</h3>
+<ul>
+<li>☐ 備份 <strong><code>settings.json</code></strong>（<code>Config</code> 資料夾）——一個檔案就涵蓋裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正、波長修正。
+</li>
+<li>☐ 備份檔名含<strong>機台編號＋日期</strong>，存到廠內備份路徑。
+</li>
+<li>☐ 確認預設帳號 <code>admin/admin</code> <strong>已更改</strong>，且帳號清單中沒有離職人員。
+</li>
+<li>☐ 清理超過保存期限的舊 <code>Data\</code> 資料夾。
+</li>
+</ul>
+<hr>
+<h2 id="7-洩漏偵測策略制定流程l2-專用">7. 洩漏偵測策略制定流程（L2 專用）</h2>
+<p>新機台導入、換製程、或 §6.4 複核不合格時走這套流程。</p>
+<h3 id="71-七個步驟">7.1 七個步驟</h3>
+<p><strong>步驟 1 — 列出製程氣體與副產物。</strong> 把該配方所有進氣（含清洗步驟的 NF₃／O₂／Ar）與已知副產物列出來。<strong>這一步決定後面全部</strong>。</p>
+<p><strong>步驟 2 — 選洩漏指標（訊號線）。</strong> 原則：<strong>該物種必須是製程本身不會產生的</strong>。空氣漏入的候選指標：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>指標</th><th>波長</th><th>特性</th></tr></thead>
+<tbody>
+<tr><td>O</td><td>777.2 nm</td><td>強、易測；但<strong>製程若通 O₂／N₂O／CO₂ 則不可用</strong></td></tr>
+<tr><td>OH</td><td>308.9 nm</td><td>對<strong>水氣／潮濕漏點</strong>敏感；製程含 H 源（SiH₄、NH₃、H₂）時背景偏高</td></tr>
+<tr><td>NO</td><td>237.0 nm</td><td>N＋O 反應產物，<strong>同時需要氮和氧才會出現</strong>，對「空氣」的專一性高；訊號較弱</td></tr>
+<tr><td>N₂⁺</td><td>391.4 nm</td><td>對空氣漏入<strong>極敏感的早期指標</strong>；受電子溫度影響，需配對穩定的參考線</td></tr>
+<tr><td>N₂</td><td>337.1 nm</td><td>製程通 N₂／NH₃／N₂O 時<strong>不能當指標</strong>，只能當參考線</td></tr>
+</tbody></table></div>
+<p><strong>步驟 3 — 選參考線。</strong> 原則：製程<strong>穩定供應</strong>、流量在該步驟中<strong>不變</strong>、且<strong>與洩漏無關</strong>。優先順序：</p>
+<ol>
+<li><strong>Ar 750.4 / 811.5 nm</strong> —— 若製程有通固定流量的 Ar，這是最理想的 actinometer。
+</li>
+<li><strong>N₂ 337.1 nm</strong> —— 製程本身大量供應 N₂ 時可用（但此時 N₂ 就不能當指標）。
+</li>
+<li><strong>Hα 656.3 nm</strong> —— 製程含穩定 H 源時可用。
+</li>
+</ol>
+<p><strong>步驟 4 — 決定監測模式。</strong> 訊號線在該機台上 SNR 穩定 &gt; 10 → <code>Ratio</code>（預設，能抵銷電漿條件漂移）。 訊號線先天很弱、SNR 徘徊在 5 附近 → <code>AbsoluteIntensity</code>（少一個雜訊來源，但不再抵銷漂移）。</p>
+<p><strong>步驟 5 — 錄基準線並觀察一週。</strong> 在<strong>確定無洩漏</strong>（剛做完檢漏）的狀態下 Capture Golden Run，先<strong>不設嚴格門檻</strong>，讓它跑一週，用 Ratio Review 看正常波動帶有多寬。</p>
+<p><strong>步驟 6 — 依實測波動帶設定門檻。</strong> 見 §7.4。<strong>門檻要根據實測的雜訊帶決定，不要沿用預設值就上線。</strong></p>
+<p><strong>步驟 7 — 用標準漏孔驗證，並存檔基準文件。</strong> 通入已知漏率，確認：(a) 系統確實會報；(b) 報的時間延遲可接受；(c) 上升的是預期的那幾條比值。 驗證通過後，<strong>截圖存檔該機台的「標準光譜」與「正常趨勢」</strong>，作為日後 L1 巡檢的比對基準，並備份 <code>settings.json</code>。</p>
+<h3 id="72-依機台製程的選線指引">7.2 依機台製程的選線指引</h3>
+<blockquote><p>⚠️ 下表是<strong>判斷原則的示範</strong>，不是可直接套用的配方。每台機台的實際光譜必須現場確認後才可定案（步驟 5–7）。</p></blockquote>
+<div class="tablewrap"><table>
+<thead><tr><th>製程類型</th><th>典型氣體</th><th>不可用作指標</th><th>建議指標</th><th>建議參考線</th></tr></thead>
+<tbody>
+<tr><td>PECVD SiN</td><td>SiH₄ / NH₃ / N₂</td><td>N₂（製程本身就有大量 N）</td><td><strong>O 777、OH 309</strong></td><td>N₂ 337（背景穩定）或 Ar 750</td></tr>
+<tr><td>PECVD SiO₂（SiH₄+N₂O）</td><td>SiH₄ / N₂O</td><td><strong>O 與 N 都不可用</strong></td><td><strong>N₂⁺ 391 的相對變化</strong>；必要時改用<strong>升壓率／氦檢漏</strong>輔助</td><td>Ar 750（若有通 Ar）</td></tr>
+<tr><td>PECVD SiO₂（TEOS+O₂）</td><td>TEOS / O₂</td><td>O（製程供應）</td><td><strong>N₂ 337、N₂⁺ 391、NO 237</strong></td><td>Ar 750 或 O 777（此處 O 反而穩定）</td></tr>
+<tr><td>電漿蝕刻（氟碳系）</td><td>CF₄ / C₄F₈ / O₂ / Ar</td><td>O（常通 O₂）；<strong>O 777 另有 SiF 干擾</strong></td><td><strong>N₂ 337、N₂⁺ 391</strong></td><td><strong>Ar 750／811（理想）</strong></td></tr>
+<tr><td>電漿蝕刻（氯系）</td><td>Cl₂ / BCl₃ / Ar</td><td>—</td><td><strong>O 777、N₂ 337、OH 309</strong></td><td>Ar 750／811</td></tr>
+<tr><td>腔體清洗（NF₃ / 遠端電漿）</td><td>NF₃ / Ar</td><td>—</td><td>清洗步驟通常<strong>不建議納入監控</strong>（化學劇烈變動）</td><td>—</td></tr>
+<tr><td>純惰性／氫氣製程</td><td>Ar / H₂</td><td>—</td><td><strong>O 777、OH 309、NO 237、N₂ 337 全可用</strong>（最理想的監控情境）</td><td>Ar 750／811</td></tr>
+</tbody></table></div>
+<p><strong>共通原則</strong>：若某支配方<strong>找不到任何乾淨的洩漏指標</strong>（例如同時通 O₂ 與 N₂O 的製程），誠實的做法是<strong>在該配方停用洩漏監控</strong>（或只保留趨勢記錄不報警），改在<strong>其他配方或待機／抽真空階段</strong>做監控——而不是硬設一組會誤報的門檻。<strong>待機抽真空時的空腔電漿是很好的檢漏窗口</strong>，因為此時沒有製程氣體干擾。</p>
+<h3 id="73-已知譜線干擾清單">7.3 已知譜線干擾清單</h3>
+<p>同一波長可能來自多個物種，選線與判讀時必須避開：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>波長</th><th>可能來源</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td><strong>777 nm</strong></td><td><strong>O 777.2</strong> vs <strong>SiF 777.0 / 777.9</strong></td><td>含氟＋含矽製程（蝕刻、NF₃ 清洗）會讓 O 777 假性升高</td></tr>
+<tr><td><strong>308.9 nm</strong></td><td><strong>OH 308.9</strong> vs <strong>Cl₂ 308.9</strong>、Al 308.2</td><td>氯系蝕刻、含鋁製程會干擾 OH 判讀</td></tr>
+<tr><td><strong>237 nm</strong></td><td><strong>NO 237.0</strong> vs <strong>SiO 234.4 / 238.8</strong> 鄰近</td><td>含矽製程需確認峰形，必要時改用 NO 其他band head</td></tr>
+<tr><td><strong>336–337 nm</strong></td><td><strong>N₂ 337.1</strong> vs <strong>NH 336.0</strong></td><td>含 NH₃ 製程中兩者靠近，需足夠解析度</td></tr>
+<tr><td><strong>388 nm</strong></td><td><strong>N₂⁺ 388.4</strong> vs <strong>CN 388.3</strong></td><td>有機污染或含碳製程會混淆 N₂⁺ 判讀</td></tr>
+<tr><td><strong>750.4 nm</strong></td><td><strong>Ar 750.4</strong> vs <strong>N₂ 750.4</strong></td><td>目錄中兩物種同波長，選線時務必確認選到的是哪一個物種</td></tr>
+<tr><td><strong>427.8 nm</strong></td><td><strong>N₂ 427.8</strong> vs <strong>N₂⁺ 427.8</strong></td><td>同上</td></tr>
+</tbody></table></div>
+<blockquote><p>判斷是否受干擾的實務方法：<strong>在只通該製程氣體、確定無洩漏的狀態下看該峰是否存在</strong>。 若存在，它就有背景，不適合當純粹的洩漏指標（或至少基準線要在同條件下錄）。</p></blockquote>
+<h3 id="74-門檻設定建議">7.4 門檻設定建議</h3>
+<p>用 §7.1 步驟 5 觀察到的<strong>實際波動帶</strong>來設，而不是照抄預設值：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>預設</th><th>調整原則</th></tr></thead>
+<tbody>
+<tr><td><strong>Warn factor</strong></td><td>1.2</td><td>設在「正常波動帶上緣」之上一點。實測波動若只有 ±3%，1.2 太鬆，可收到 1.10</td></tr>
+<tr><td><strong>Alarm factor</strong></td><td>1.5</td><td>一般設為 Warn 的 1.5–2 倍幅度</td></tr>
+<tr><td><strong>Warn σ</strong></td><td>3.0</td><td>雜訊大的比值靠 σ 這一路把關（系統取 factor 與 σ 兩者<strong>較大者</strong>）</td></tr>
+<tr><td><strong>Alarm σ</strong></td><td>6.0</td><td>同上</td></tr>
+<tr><td><strong>EMA τ</strong></td><td>5 s</td><td>訊號吵 → 加大（代價：反應變慢）。緩漏偵測可到 10–20 s</td></tr>
+<tr><td><strong>Confirm time</strong></td><td>15 s</td><td><strong>對付短暫尖峰誤報的第一選擇</strong>——比調高門檻好，因為不犧牲靈敏度</td></tr>
+<tr><td><strong>Min SNR</strong></td><td>5.0</td><td>弱線可略降但<strong>絕不設 0</strong>；設 0 等於關掉假警報保護</td></tr>
+<tr><td><strong>RequireTwoForAlarm</strong></td><td>開</td><td>有 ≥2 條可靠指標線時保持開啟（大幅降低誤報）；只有 1 條時<strong>必須關閉</strong>，否則永不報警</td></tr>
+</tbody></table></div>
+<p><strong>設完的驗收條件</strong>：(a) 一週內誤報 0 次；(b) 標準漏孔測試必報；(c) 門檻線在 Ratio Review 上目視<strong>明顯高於正常雜訊帶、明顯低於漏氣時的上升幅度</strong>。</p>
+<hr>
+<h2 id="8-異常升級與處置矩陣">8. 異常升級與處置矩陣</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>等級</th><th>觸發條件</th><th>通報對象</th><th>時限</th><th>立即動作</th></tr></thead>
+<tbody>
+<tr><td><strong>L0 記錄</strong></td><td>「觀察」條件</td><td>記入巡檢表</td><td>—</td><td>縮短巡檢間隔為每 4 小時</td></tr>
+<tr><td><strong>L1 通知</strong></td><td>比值 &gt; 120%、WARNING、LOW SIGNAL、新譜線出現</td><td>設備工程師</td><td>2 小時</td><td>保留現況、勿改設定；工程師執行 L2</td></tr>
+<tr><td><strong>L2 告警</strong></td><td>ALARM 橫幅、多條指標同步上升</td><td>設備工程師＋製程工程師＋領班</td><td><strong>立即</strong></td><td>依下方 ALARM 處置流程</td></tr>
+<tr><td><strong>L3 停機</strong></td><td>洩漏率持續攀升、伴隨製程異常或膜質異常</td><td>加通報部門主管</td><td><strong>立即</strong></td><td>依廠內規定評估暫停投料、隔離 WIP</td></tr>
+</tbody></table></div>
+<h3 id="alarm-發生時的處置流程">ALARM 發生時的處置流程</h3>
+<ol>
+<li><strong>記錄</strong>狀態橫幅出現的時間、洩漏率讀值與 confidence、當時的配方與步驟。
+</li>
+<li><strong>判定型態</strong>——看哪幾條比值進了 ALARM：
+<ul>
+<li><strong>O／OH／NO（或 N₂⁺）同時上升</strong> → 典型空氣洩漏，繼續步驟 3。</li>
+<li><strong>只有單一條上升</strong> → 優先懷疑譜線干擾或製程變化（對照 §7.3），仍需查證。</li>
+</ul>
+</li>
+<li><strong>回放確認</strong>：到 <strong>Ratio Review</strong> 看這段時間是<strong>持續上升</strong>還是<strong>短暫尖峰</strong>。持續上升才是真事件。
+</li>
+<li><strong>關聯比對</strong>：與機台自身的真空度、壓力、RF 反射功率、腔體升壓率記錄交叉比對。
+</li>
+<li><strong>實體檢查</strong>：O-ring、法蘭、觀察窗、閥件、波紋管、feedthrough；必要時做<strong>氦質譜檢漏</strong>確認漏點。
+</li>
+<li><strong>修復並驗證</strong>：修復後跑一段製程，確認比值回到 100% 附近。
+</li>
+<li><strong>清除鎖存</strong>：確認排除後，按 <strong>Acknowledge Alarm</strong>（Operator+）。<strong>警報是鎖存的，不會自己消失——這是刻意設計，不要用重開程式來「清警報」。</strong>
+</li>
+<li><strong>結案記錄</strong>：填寫異常單，含根因、處置、驗證結果；若基準線在漏氣期間被人重錄過，<strong>必須重新錄一次</strong>。
+</li>
+</ol>
+<blockquote><p>⚠️ <strong>絕對禁止</strong>：以「調高門檻」「關閉該比值」「重錄 Golden Run」作為 ALARM 的處置手段。 這三個動作都會讓警報消失，但漏氣還在。任何一項若確有必要，須由工程師在<strong>確認無洩漏之後</strong>執行並記錄。</p></blockquote>
+<hr>
+<h2 id="9-事件驅動巡檢">9. 事件驅動巡檢</h2>
+<p>以下事件發生後，<strong>不等排程，立刻執行對應項目</strong>：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>事件</th><th>必做項目</th></tr></thead>
+<tbody>
+<tr><td><strong>PM／開腔／換 O-ring</strong></td><td>實體檢漏合格後 → <strong>重錄 Golden Run</strong> → 觀察一班次</td></tr>
+<tr><td><strong>清潔觀察窗／更換光纖</strong></td><td>檢查強度回升幅度 → <strong>重錄 Golden Run</strong>（強度變了，舊基準線無效）</td></tr>
+<tr><td><strong>更改積分時間／平均設定</strong></td><td><strong>重錄 Golden Run</strong>（曝光條件變了）</td></tr>
+<tr><td><strong>換配方／新配方導入</strong></td><td>切換 Baseline 至對應基準線（洩漏率校正會自動跟著切換）→ 按 <strong>Reset Run</strong> → 若無對應基準線則走 §7 全流程</td></tr>
+<tr><td><strong>更改 Ratio Setup / Wavelength Calibration</strong></td><td>存檔後 <strong>Stop → Start</strong> 使其生效 → 確認生效 → <strong>重錄 Golden Run</strong></td></tr>
+<tr><td><strong>光譜儀更換／重新連接</strong></td><td>確認 Serial 與 Test Mode → 波長查核（§6.3）→ 重錄 Golden Run</td></tr>
+<tr><td><strong>軟體升級</strong></td><td>備份 <code>settings.json</code> → 升級後確認比值設定與基準線都在 → 確認 Configuration 分頁的權限保護仍有效</td></tr>
+<tr><td><strong>發生過 ALARM 並修復</strong></td><td>依 §8 步驟 6–8；確認修復後才可重錄基準線</td></tr>
+<tr><td><strong>連續兩班次被判「觀察」</strong></td><td>升級為異常，執行完整 L2</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="10-巡檢記錄表可列印">10. 巡檢記錄表（可列印）</h2>
+<h3 id="101-l1-每日巡檢表">10.1 L1 每日巡檢表</h3>
+<p><strong>機台編號</strong>：＿＿＿＿　<strong>配方</strong>：＿＿＿＿　<strong>日期／班別</strong>：＿＿＿＿　<strong>巡檢人</strong>：＿＿＿＿</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>檢查項目</th><th>判定基準</th><th>結果</th><th>記錄值</th></tr></thead>
+<tbody>
+<tr><td>0-1</td><td>Test Mode = False</td><td>必須 False</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>0-2</td><td>Frame 點數正常、Last 持續更新</td><td>與平常相同</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>1-1</td><td>全譜最高峰強度</td><td>與前次 ±20%</td><td>☐合格 ☐觀察 ☐異常</td><td>計數＿＿＿</td></tr>
+<tr><td>1-2</td><td>無訊號飽和（削頂）</td><td>無平頂峰</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>1-3</td><td>基線平坦貼近零</td><td>無整體抬升</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>1-4</td><td>關鍵譜線齊全、峰形正常</td><td>對照標準光譜</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>1-5</td><td>無新出現的譜線</td><td>無</td><td>☐合格 ☐異常</td><td>新峰＿＿nm</td></tr>
+<tr><td>1-6</td><td>無光譜斷裂／撕裂</td><td>無</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>2-1</td><td>趨勢平穩、無單調上升</td><td>水平帶波動</td><td>☐合格 ☐觀察 ☐異常</td><td></td></tr>
+<tr><td>2-2</td><td>Normalize 後各線無分歧</td><td>各線重疊</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>2-3</td><td>無階梯跳動／訊號中斷</td><td>曲線連續</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>3-1</td><td>狀態橫幅 = 綠色 OK</td><td>綠</td><td>☐OK ☐WARN ☐ALARM ☐Idle</td><td></td></tr>
+<tr><td>3-2</td><td>無 LOW SIGNAL 警示</td><td>無</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>3-3</td><td>Baseline 為本配方對應者</td><td>名稱相符</td><td>☐合格 ☐異常</td><td>名稱＿＿＿</td></tr>
+<tr><td>3-4</td><td>各比值 % of baseline</td><td>100 ± 10%</td><td>☐合格 ☐觀察 ☐異常</td><td>見下表</td></tr>
+<tr><td>3-5</td><td>各比值 SNR</td><td>&gt; 10</td><td>☐合格 ☐觀察 ☐異常</td><td>見下表</td></tr>
+<tr><td>3-6</td><td>洩漏率讀值</td><td>記錄</td><td>☐正常 ☐暫停 ☐未校正</td><td>＿＿mbar·L/s</td></tr>
+<tr><td>4-1</td><td>Spectrum recorder 徽章非 <code>OFF</code>、無「not saved」</td><td>ARMED／SAVING</td><td>☐合格 ☐異常</td><td>徽章＿＿＿</td></tr>
+<tr><td>4-1b</td><td>今天有比值 CSV（<code>_Ratio_</code>）且持續成長</td><td>擷取中必有</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>4-1c</td><td>強度 CSV 落地情形符合機台規定</td><td>依機台規定</td><td>☐合格 ☐異常</td><td></td></tr>
+<tr><td>4-2</td><td>資料碟剩餘 &gt; 20%</td><td>&gt; 20%</td><td>☐合格 ☐異常</td><td>＿＿%</td></tr>
+<tr><td>5-1</td><td>系統日誌無 Error／異常記錄</td><td>無</td><td>☐合格 ☐異常</td><td></td></tr>
+</tbody></table></div>
+<p><strong>各比值記錄</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>比值名稱</th><th>狀態</th><th>% of baseline</th><th>斜率</th><th>SNR</th></tr></thead>
+<tbody>
+<tr><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td><td></td></tr>
+</tbody></table></div>
+<p><strong>本次結論</strong>：☐正常　☐觀察　☐異常（已通報：＿＿＿＿）　☐緊急 <strong>備註／異常說明</strong>：＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿ <strong>巡檢人簽名</strong>：＿＿＿＿　<strong>主管確認</strong>：＿＿＿＿</p>
+<h3 id="102-l2-深入巡檢表">10.2 L2 深入巡檢表</h3>
+<p><strong>機台編號</strong>：＿＿＿＿　<strong>日期</strong>：＿＿＿＿　<strong>工程師</strong>：＿＿＿＿</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>檢查項目</th><th>結果</th><th>記錄／處置</th></tr></thead>
+<tbody>
+<tr><td>6.1-1</td><td>每支配方都有對應基準線</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.1-2</td><td>基準線年齡 ≤ 3 個月</td><td>☐是 ☐否</td><td>錄製日＿＿＿</td></tr>
+<tr><td>6.1-3</td><td>每條比值都有基準值</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.1-4</td><td>基準線 σ/mean &lt; 10%</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.1-5</td><td>無長期系統性偏移</td><td>☐是 ☐否</td><td>平均＿＿%</td></tr>
+<tr><td>6.2-1</td><td>各比值 SNR（與上月比較）</td><td>☐持平 ☐下降</td><td>記錄各值</td></tr>
+<tr><td>6.2-2</td><td>參考線絕對強度（觀察窗汙染指標）</td><td>☐持平 ☐下降</td><td>＿＿計數</td></tr>
+<tr><td>6.3-1</td><td>波長偏差 ≤ 0.1 nm</td><td>☐是 ☐否</td><td>偏差＿＿nm</td></tr>
+<tr><td>6.4-1</td><td>訊號線未與製程氣體衝突</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.4-2</td><td>參考線流量穩定且與洩漏無關</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.4-3</td><td>已排除譜線干擾（§7.3）</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.4-4</td><td>門檻與實測雜訊帶相稱</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.4-5</td><td>監測模式適當</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.4-6</td><td>RequireTwoForAlarm 設定合理</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.5-1</td><td>校正狀態 = Active</td><td>☐是 ☐否</td><td></td></tr>
+<tr><td>6.5-2</td><td>標準漏孔驗證偏差 ≤ ±30%</td><td>☐是 ☐否</td><td>實測＿＿／讀值＿＿</td></tr>
+<tr><td>6.6-1</td><td>本週誤報次數</td><td></td><td>＿＿次</td></tr>
+<tr><td>6.6-2</td><td>本週漏報次數（必須為 0）</td><td>☐0 ☐有</td><td></td></tr>
+<tr><td>6.7-1</td><td>settings.json 已備份</td><td>☐是</td><td>路徑＿＿＿</td></tr>
+<tr><td>6.7-2</td><td>帳號清單已檢視、預設密碼已改</td><td>☐是</td><td></td></tr>
+<tr><td>6.7-3</td><td>舊資料已清理</td><td>☐是</td><td></td></tr>
+</tbody></table></div>
+<p><strong>設定變更記錄</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>前值</th><th>後值</th><th>原因</th><th>是否已 Stop→Start</th><th>是否已重錄 Golden Run</th></tr></thead>
+<tbody>
+<tr><td></td><td></td><td></td><td></td><td>☐是 ☐不需</td><td>☐是 ☐不需</td></tr>
+<tr><td></td><td></td><td></td><td></td><td>☐是 ☐不需</td><td>☐是 ☐不需</td></tr>
+</tbody></table></div>
+<p><strong>本次結論</strong>：☐策略有效，維持現狀　☐已調整（見上表）　☐需重新制定策略（走 §7） <strong>工程師簽名</strong>：＿＿＿＿　<strong>主管確認</strong>：＿＿＿＿</p>
+<hr>
+<h2 id="11-附錄-a判定門檻速查">11. 附錄 A：判定門檻速查</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>指標</th><th>正常</th><th>觀察</th><th>異常</th></tr></thead>
+<tbody>
+<tr><td>全譜最高峰強度（vs 前次）</td><td>±20% 內</td><td>20–30%</td><td>&gt; 30%</td></tr>
+<tr><td>比值 % of baseline</td><td>100 ± 10%</td><td>110–120%</td><td>&gt; 120%</td></tr>
+<tr><td>比值斜率</td><td>≈ 0</td><td>持續為正</td><td>明顯陡升</td></tr>
+<tr><td>SNR</td><td>&gt; 10</td><td>5–10</td><td>&lt; 5（該比值已停用）</td></tr>
+<tr><td>波長偏差</td><td>≤ 0.1 nm</td><td>0.1–0.5 nm</td><td>&gt; 0.5 nm</td></tr>
+<tr><td>基準線 σ/mean</td><td>&lt; 10%</td><td>10–20%</td><td>&gt; 20%</td></tr>
+<tr><td>基準線年齡</td><td>≤ 3 個月</td><td>3–6 個月</td><td>&gt; 6 個月或跨過 PM</td></tr>
+<tr><td>洩漏率驗證偏差</td><td>≤ ±30%</td><td>±30–50%</td><td>&gt; ±50%</td></tr>
+<tr><td>資料碟剩餘空間</td><td>&gt; 20%</td><td>10–20%</td><td>&lt; 10%</td></tr>
+</tbody></table></div>
+<p><strong>系統內建預設值</strong>（可於 Ratio Setup 逐條調整，詳見手冊 §10.2）： Warn factor 1.2｜Alarm factor 1.5｜Warn σ 3.0｜Alarm σ 6.0｜EMA τ 5 s｜Confirm time 15 s｜Min SNR 5.0｜Golden Run 擷取 60 s｜電漿存在判定 = 參考線基準均值的 20%。</p>
+<hr>
+<h2 id="12-附錄-b常見誤報原因">12. 附錄 B：常見誤報原因</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>現象</th><th>原因</th><th>處置</th></tr></thead>
+<tbody>
+<tr><td>製程步驟切換瞬間跳 WARNING</td><td>氣體切換瞬態</td><td>加大 <strong>Confirm time</strong>（優先），或在該步驟不納入監控</td></tr>
+<tr><td>每次點火／熄火時跳警報</td><td>電漿建立過程的化學瞬態</td><td>同上；確認 PlasmaPresentFloor 是否合適</td></tr>
+<tr><td>週期性、固定時間出現</td><td>腔體清洗步驟、機台自動程序</td><td>確認是否應排除該步驟</td></tr>
+<tr><td>單一比值頻繁跳動、其他不動</td><td>該譜線受干擾（§7.3）或訊號太弱</td><td>換譜線、或改 <code>AbsoluteIntensity</code> 模式</td></tr>
+<tr><td>換班後開始頻繁警報</td><td>換了配方卻沒切 Baseline</td><td>切換至正確基準線（L1 巡檢項 3-3）</td></tr>
+<tr><td>PM 後全面偏高</td><td>基準線是 PM 前錄的（強度條件已變）</td><td>檢漏合格後重錄 Golden Run</td></tr>
+<tr><td>長期穩定停在 110% 左右</td><td>基準線已不代表現況</td><td>確認無漏後重錄</td></tr>
+<tr><td>雨季／濕度高時 OH 偏高</td><td>環境水氣經微漏進入</td><td>真實訊號，非誤報——查實體漏點</td></tr>
+<tr><td>全部比值同時劇烈跳動</td><td>電漿不穩（功率／匹配器）</td><td>通報製程，非洩漏</td></tr>
+<tr><td>顯示 <code>Low Signal</code> 後就再也不報警</td><td>該比值已被排除在判定外</td><td><strong>這是漏報風險，必須處理</strong>（§6.2）</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="13-附錄-c與操作手冊章節對照">13. 附錄 C：與操作手冊章節對照</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>本計畫章節</th><th>操作手冊對應章節</th></tr></thead>
+<tbody>
+<tr><td>§4.0 連線狀態</td><td>§6.1.3 裝置控制列；§9.1 掉進測試模式</td></tr>
+<tr><td>§4.1 檢查光譜</td><td>§6.1.3 圖表操作；§9.2 幀撕裂；§9.3 峰形變寬</td></tr>
+<tr><td>§4.2 檢查趨勢</td><td>§6.1.4 強度趨勢圖</td></tr>
+<tr><td>§4.3 Leak Monitor</td><td>§6.3 全章；§6.3.4 比值列與五種狀態</td></tr>
+<tr><td>§4.4 記錄器</td><td>§6.1.2 Recorder 狀態列；§6.2.3 Data Logger；§7 檔案與資料夾；§9.8 沒有 Ratio CSV</td></tr>
+<tr><td>§6.1 基準線複核</td><td>§6.3.5 Golden Run 擷取流程；§9.5 基準線被拒絕</td></tr>
+<tr><td>§6.2 SNR 與光路</td><td>§9.4 一直顯示 Low Signal</td></tr>
+<tr><td>§6.3 波長校正</td><td>§6.5 Wavelength Calibration</td></tr>
+<tr><td>§6.4 策略複核</td><td>§6.4 Ratio Setup；§9.7 改了沒反應</td></tr>
+<tr><td>§6.5 洩漏率驗證</td><td>§6.6 Leak Calibration；<code>leak-rate-calibration.md</code></td></tr>
+<tr><td>§6.6 回放審查</td><td>§6.7 Recordings；§6.8 Ratio Review</td></tr>
+<tr><td>§6.7 備份</td><td>§7.4 備份建議；§3 帳號與權限</td></tr>
+<tr><td>§8 ALARM 處置</td><td>§8.3 警報發生時</td></tr>
+<tr><td>§9 事件驅動</td><td>§8.2 換配方；§8.4 定期維護</td></tr>
+</tbody></table></div>
+</main>
+</div>
+</body>
+</html>

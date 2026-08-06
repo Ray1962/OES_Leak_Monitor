@@ -65,6 +65,7 @@ for %%F in (
     SiUSBXp.dll
     libsodium.dll
     user-manual-zh-TW.html
+    daily-inspection-plan-zh-TW.html
 ) do (
     if not exist "%PUBFOLDER%\%%F" set "MISSING=!MISSING! %%F"
 )
@@ -76,16 +77,17 @@ if defined MISSING (
     echo  Missing from %PUBFOLDER%:
     for %%M in (!MISSING!) do echo    %%M
     echo.
-    echo  Delete the folder and run this script again. If user-manual-zh-TW.html
-    echo  is the only thing missing, regenerate it first:
+    echo  Delete the folder and run this script again. If only the .html docs are
+    echo  missing, regenerate them first:
     echo    python3 tools\md2html.py docs\user-manual-zh-TW.md docs\user-manual-zh-TW.html "OES Leak Monitor manual"
+    echo    python3 tools\md2html.py docs\daily-inspection-plan-zh-TW.md docs\daily-inspection-plan-zh-TW.html "OES Plasma Monitor inspection plan"
     echo.
     pause
     exit /b 1
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 10 files present ***
+echo  *** PUBLISH SUCCEEDED - all 11 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -96,6 +98,7 @@ echo    UserApplication.dll        native OES DLL
 echo    SiUSBXp.dll                native USB DLL
 echo    libsodium.dll              native OES SDK dependency
 echo    user-manual-zh-TW.html     operator manual
+echo    daily-inspection-plan-zh-TW.html   daily/weekly inspection plan
 echo.
 
 if exist "%PUBFOLDER%" start "" explorer "%PUBFOLDER%"
