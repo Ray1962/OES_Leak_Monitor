@@ -660,11 +660,21 @@ public sealed class LeakMonitorEngine : IDisposable
     /// edited in the Ratio Setup tab. Meant to be called when OES acquisition (re)starts, so
     /// a mid-run edit never disturbs a live evaluation. Resets per-ratio smoothing/state and
     /// re-applies the active Golden Run.
+    /// <para><b>Latched alarms survive.</b> This runs on every Stop→Start of acquisition, and
+    /// rebuilding the monitors used to drop every latch with it — so a confirmed leak could be
+    /// cleared by restarting acquisition, silently and without an Acknowledge. A latch is
+    /// carried over for any ratio still measuring the same quantity
+    /// (<see cref="RatioDefinition.MeasuresSameAs"/>) and is dropped, with a log line, for one
+    /// that was redefined, disabled or removed — there the alarm referred to a measurement that
+    /// no longer exists.</para>
     /// </summary>
     public void ReloadRatios()
     {
         lock (_gate)
         {
+            var latched = _monitors.Where(m => m.HasLatchedAlarm).Select(m => m.Key).ToHashSet();
+            var previousDefs = new Dictionary<string, RatioDefinition>(_defs);
+
             _monitors.Clear();
             _defs.Clear();
             var lookup = WavelengthCalibration.Build(_settings.WavelengthCorrections);
@@ -675,7 +685,27 @@ public sealed class LeakMonitorEngine : IDisposable
                 _monitors.Add(new RatioMonitor(corrected));
             }
             ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // rebuilds the estimator
-            _overall = LeakAlarmLevel.Idle;
+
+            foreach (var key in latched)
+            {
+                var mon = _monitors.FirstOrDefault(m => m.Key == key);
+                previousDefs.TryGetValue(key, out var before);
+                _defs.TryGetValue(key, out var after);
+                if (mon is not null && after is { Enabled: true } && (before?.MeasuresSameAs(after) ?? false))
+                {
+                    mon.RestoreLatchedAlarm();
+                }
+                else
+                {
+                    _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorAlarmLatchDropped",
+                        $"Latched alarm on {before?.DisplayName ?? key} was not carried over — the " +
+                        "ratio was removed, disabled, or redefined, so the alarm referred to a " +
+                        "measurement that no longer exists.",
+                        related: $"Ratio={key}");
+                }
+            }
+            // Recompute rather than assume Idle: a carried-over latch must still read Alarm.
+            _overall = ComputeOverall();
         }
         RatiosReloaded?.Invoke(this, EventArgs.Empty);
     }

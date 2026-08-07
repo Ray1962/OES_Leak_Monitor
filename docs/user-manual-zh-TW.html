@@ -372,6 +372,7 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 </ul>
 <p><strong>保留不動</strong>：Golden Run 基準線、洩漏率校正、已鎖存的警報（必須由人按 Acknowledge 才清除）、擷取本身持續進行。</p>
+<blockquote><p><strong>鎖存的警報也會跨越「停止 → 啟動擷取」。</strong> 重啟擷取會套用 Ratio Setup 的暫存修改（重建所有比值），以前那個重建會把鎖存的警報一起清掉 —— 等於<strong>不用 Acknowledge 就能讓一個已確認的洩漏消失</strong>。現在只有「該比值被刪除、停用，或被改成量別的東西」時鎖存才會放掉，而且會在日誌記一筆 <code>LeakMonitorAlarmLatchDropped</code>。只調門檻或平滑參數不算改變量測對象，鎖存會保留。</p></blockquote>
 <blockquote><p>若你剛改過<strong>積分時間</strong>或其他會影響絕對強度的設定，Reset Run 不夠 —— 請<strong>重新錄一次 Golden Run</strong>，因為舊基準線是在不同曝光條件下錄的。</p></blockquote>
 <h4 id="612-recorder-狀態列唯讀">6.1.2 Recorder 狀態列（唯讀）</h4>
 <p>Reset Run 底下的細長狀態列（標示 <strong>Spectrum recorder</strong>），顯示<strong>全光譜記錄器現在到底有沒有在錄</strong>。純顯示，這裡按不到任何東西 —— 記錄器的開關與所有設定都在 Configuration 分頁（需 Engineer），但<strong>看</strong>狀態不需要權限，Guest 也看得到。</p>
@@ -819,8 +820,20 @@ vcruntime140_cor3.dll</code></pre>
 <li>Ratio CSV 被略過的原因
 </li>
 </ul>
-<p>日誌檔位置：<code>%APPDATA%\OES_Leak_Monitor\Logs\yyMMddHH.csv</code>（每小時一個檔）。</p>
-<blockquote><p>追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方。</p></blockquote>
+<p>日誌檔位置：<code>%APPDATA%\OES_Leak_Monitor\Logs\yyMMddHH.csv</code>（每小時一個檔）。欄位：</p>
+<pre><code>Time,Status,Condition,Description,RelatedParameters,Value,Timestamp,LogLevel</code></pre>
+<div class="tablewrap"><table>
+<thead><tr><th>欄位</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><code>Time</code></td><td>距離程式啟動的秒數（方便對照同一次執行內的先後）</td></tr>
+<tr><td><code>Condition</code></td><td>事件代號，例如 <code>Device_RuntimeError</code>、<code>GoldenRunRatioDropped</code></td></tr>
+<tr><td><code>Description</code></td><td><strong>人看的說明</strong>：發生什麼事、該怎麼處理</td></tr>
+<tr><td><code>RelatedParameters</code> / <code>Value</code></td><td>相關參數與數值</td></tr>
+<tr><td><code>Timestamp</code></td><td>絕對時間</td></tr>
+</tbody></table></div>
+<blockquote><p>⚠️ <strong><code>Description</code> 欄是在 <code>Aqst.OesApp.Core</code> 0.1.7 才寫進檔案的。</strong> 在那之前，這一欄的內容只存在於執行中的記憶體（Logs 分頁看得到），關掉程式就消失 —— 檔案裡只留下「發生了一個叫 <code>Device_RuntimeError</code> 的事件」，完全沒有錯誤內容。<strong>0.1.7 之前的舊日誌檔沒有這一欄，也救不回來。</strong></p>
+<p>若同一小時內先後跑過新舊版本，新版會另開 <code>yyMMddHH_1.csv</code>，避免同一個檔案裡混著兩種欄位數。</p></blockquote>
+<blockquote><p>追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 <code>Description</code> 欄會直接寫出原因。</p></blockquote>
 <hr>
 <h2 id="7-檔案與資料夾">7. 檔案與資料夾</h2>
 <h3 id="71-位置">7.1 位置</h3>

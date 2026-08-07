@@ -119,6 +119,20 @@ public sealed class RatioMonitor
     /// <summary>Clears the latched alarm so a recovered process can return to Normal.</summary>
     public void Acknowledge() => _latchedAlarm = false;
 
+    /// <summary>True while an alarm is latched and unacknowledged.</summary>
+    public bool HasLatchedAlarm => _latchedAlarm;
+
+    /// <summary>
+    /// Re-arms a latch carried over from the monitor instance this one replaced (a ratio-set
+    /// reload rebuilds every monitor). Only the operator's Acknowledge clears a latch — a
+    /// confirmed leak must not disappear because acquisition was restarted.
+    /// </summary>
+    public void RestoreLatchedAlarm()
+    {
+        _latchedAlarm = true;
+        _state = RatioState.Alarm;
+    }
+
     /// <summary>
     /// Drops the live smoothing / trend / confirmation state so a new experiment run starts
     /// clean — pre-change frames no longer bridge into the post-change EMA. Keeps the Golden

@@ -70,6 +70,23 @@ public sealed class LineRegion
     public double PeakSearchHalfWidthNm { get; set; } = 1.0;
 
     public LineRegion Clone() => (LineRegion)MemberwiseClone();
+
+    /// <summary>
+    /// True when <paramref name="other"/> would read the same number out of the same spectrum:
+    /// same line, same window, same extraction. Used to decide whether state accumulated against
+    /// this region (a latched alarm) still refers to the same measurement after a configuration
+    /// reload. Compared on the *effective* region, so a changed wavelength correction counts as
+    /// a different measurement.
+    /// </summary>
+    public bool MeasuresSameAs(LineRegion? other) =>
+        other is not null &&
+        Label == other.Label &&
+        Mode == other.Mode &&
+        CenterNm == other.CenterNm &&
+        HalfWidthNm == other.HalfWidthNm &&
+        BaselineGapNm == other.BaselineGapNm &&
+        BaselineWidthNm == other.BaselineWidthNm &&
+        PeakSearchHalfWidthNm == other.PeakSearchHalfWidthNm;
 }
 
 /// <summary>

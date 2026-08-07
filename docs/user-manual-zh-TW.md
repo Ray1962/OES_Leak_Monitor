@@ -196,6 +196,8 @@ vcruntime140_cor3.dll
 
 **保留不動**：Golden Run 基準線、洩漏率校正、已鎖存的警報（必須由人按 Acknowledge 才清除）、擷取本身持續進行。
 
+> **鎖存的警報也會跨越「停止 → 啟動擷取」。** 重啟擷取會套用 Ratio Setup 的暫存修改（重建所有比值），以前那個重建會把鎖存的警報一起清掉 —— 等於**不用 Acknowledge 就能讓一個已確認的洩漏消失**。現在只有「該比值被刪除、停用，或被改成量別的東西」時鎖存才會放掉，而且會在日誌記一筆 `LeakMonitorAlarmLatchDropped`。只調門檻或平滑參數不算改變量測對象，鎖存會保留。
+
 > 若你剛改過**積分時間**或其他會影響絕對強度的設定，Reset Run 不夠 —— 請**重新錄一次 Golden Run**，因為舊基準線是在不同曝光條件下錄的。
 
 #### 6.1.2 Recorder 狀態列（唯讀）
@@ -677,9 +679,25 @@ x ≈ s · Q
 - **洩漏率校正的啟用／暫停／清除**
 - Ratio CSV 被略過的原因
 
-日誌檔位置：`%APPDATA%\OES_Leak_Monitor\Logs\yyMMddHH.csv`（每小時一個檔）。
+日誌檔位置：`%APPDATA%\OES_Leak_Monitor\Logs\yyMMddHH.csv`（每小時一個檔）。欄位：
 
-> 追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方。
+```
+Time,Status,Condition,Description,RelatedParameters,Value,Timestamp,LogLevel
+```
+
+| 欄位 | 內容 |
+|---|---|
+| `Time` | 距離程式啟動的秒數（方便對照同一次執行內的先後） |
+| `Condition` | 事件代號，例如 `Device_RuntimeError`、`GoldenRunRatioDropped` |
+| `Description` | **人看的說明**：發生什麼事、該怎麼處理 |
+| `RelatedParameters` / `Value` | 相關參數與數值 |
+| `Timestamp` | 絕對時間 |
+
+> ⚠️ **`Description` 欄是在 `Aqst.OesApp.Core` 0.1.7 才寫進檔案的。** 在那之前，這一欄的內容只存在於執行中的記憶體（Logs 分頁看得到），關掉程式就消失 —— 檔案裡只留下「發生了一個叫 `Device_RuntimeError` 的事件」，完全沒有錯誤內容。**0.1.7 之前的舊日誌檔沒有這一欄，也救不回來。**
+>
+> 若同一小時內先後跑過新舊版本，新版會另開 `yyMMddHH_1.csv`，避免同一個檔案裡混著兩種欄位數。
+
+> 追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 `Description` 欄會直接寫出原因。
 
 ---
 

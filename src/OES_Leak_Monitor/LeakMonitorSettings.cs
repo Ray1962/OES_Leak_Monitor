@@ -78,6 +78,20 @@ public sealed class RatioDefinition
     public bool ValueHasPedestal =>
         MonitorMode == MonitorMode.AbsoluteIntensity && Numerator.Mode == LineExtractMode.RawMean;
 
+    /// <summary>
+    /// True when <paramref name="other"/> monitors the same quantity — same mode, same monitored
+    /// line, and (in ratio mode, where it is divided in) the same reference line. Thresholds and
+    /// smoothing are deliberately *not* compared: retuning a threshold does not change what is
+    /// being measured, so an alarm raised against the old one still refers to the same thing.
+    /// </summary>
+    public bool MeasuresSameAs(RatioDefinition? other) =>
+        other is not null &&
+        Key == other.Key &&
+        MonitorMode == other.MonitorMode &&
+        Numerator.MeasuresSameAs(other.Numerator) &&
+        (MonitorMode == MonitorMode.AbsoluteIntensity ||
+         Denominator.MeasuresSameAs(other.Denominator));
+
     public RatioDefinition Clone() => new()
     {
         Key = Key, DisplayName = DisplayName, Enabled = Enabled,
