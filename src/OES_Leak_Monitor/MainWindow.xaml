@@ -195,6 +195,21 @@
                                        ToolTip="{Binding DataFolderStatusText}"/>
                         </StackPanel>
 
+                        <!-- Live trend charts. One window for both (Monitor tab's wavelength
+                             trend and the Leak Monitor's % -of-baseline chart) — they are read
+                             together, and every point is held in memory, so the ceiling is a
+                             real limit rather than a preference. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Trend charts:" VerticalAlignment="Center"
+                                       Margin="0,0,8,0" FontWeight="SemiBold"/>
+                            <TextBlock Text="keep last" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox Text="{Binding TrendRetentionMinutes, UpdateSourceTrigger=LostFocus}"
+                                     Width="52" VerticalAlignment="Center" TextAlignment="Right"
+                                     ToolTip="Minutes of history kept on the Monitor tab's Wavelength Trend and the Leak Monitor's % -of-baseline chart (1–480). Applies to both. Takes effect on Apply; shortening it trims the charts immediately. Longer windows hold more points in memory — use the Recordings tab to review anything longer than a few hours."/>
+                            <TextBlock Text="minutes  (1–480, applies to the Monitor trend and the Leak Monitor trend)"
+                                       VerticalAlignment="Center" Margin="4,0,0,0" Foreground="#445"/>
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply"
                                     Command="{Binding ApplyAllCommand}"

@@ -21,7 +21,10 @@ namespace OES_Leak_Monitor;
 /// </summary>
 public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 {
-    private static readonly TimeSpan TrendRetention = TimeSpan.FromMinutes(30);
+    /// <summary>How much history the % -of-baseline chart keeps. Set from
+    /// <see cref="AppSettings.TrendRetentionMinutes"/> (Configuration tab); the Monitor tab's
+    /// wavelength trend follows the same setting.</summary>
+    private TimeSpan _retention = TimeSpan.FromMinutes(AppSettings.DefaultTrendRetentionMinutes);
     private static readonly OxyColor[] TrendPalette =
     {
         OxyColors.SteelBlue, OxyColors.ForestGreen, OxyColors.DarkOrange, OxyColors.MediumPurple,
@@ -318,7 +321,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _pendingOverall = snap.Overall;
 
         double x = DateTimeAxis.ToDouble(snap.Timestamp);
-        double cutoff = DateTimeAxis.ToDouble(snap.Timestamp - TrendRetention);
+        double cutoff = DateTimeAxis.ToDouble(snap.Timestamp - _retention);
         var lowSignal = new List<string>();
         foreach (var rs in snap.Ratios)
         {
@@ -374,6 +377,36 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     /// The per-ratio rows keep showing live values; only the historical curve is dropped.
     /// Must be called on the UI thread.
     /// </summary>
+    /// <summary>
+    /// Sets how much history the trend keeps. Shortening trims what is already plotted rather
+    /// than waiting for frames to age it out — with acquisition stopped that would be for ever.
+    /// Trimmed against the newest plotted point, not the wall clock, since the chart's clock is
+    /// the spectrum stream. Must be called on the UI thread.
+    /// </summary>
+    public void SetRetention(TimeSpan retention)
+    {
+        var clamped = TimeSpan.FromMinutes(Math.Clamp(retention.TotalMinutes,
+            AppSettings.MinTrendRetentionMinutes, AppSettings.MaxTrendRetentionMinutes));
+        if (clamped == _retention) return;
+        bool shorter = clamped < _retention;
+        _retention = clamped;
+        if (!shorter) return;
+
+        double newest = double.NegativeInfinity;
+        foreach (var s in _seriesByKey.Values)
+            if (s.Points.Count > 0 && s.Points[^1].X > newest) newest = s.Points[^1].X;
+        if (double.IsNegativeInfinity(newest)) return;
+
+        double cutoff = newest - clamped.TotalDays;   // OxyPlot's time axis counts in days
+        foreach (var s in _seriesByKey.Values)
+        {
+            int drop = 0;
+            while (drop < s.Points.Count && s.Points[drop].X < cutoff) drop++;
+            if (drop > 0) s.Points.RemoveRange(0, drop);
+        }
+        PlotModel.InvalidatePlot(true);
+    }
+
     public void ResetTrend()
     {
         foreach (var s in _seriesByKey.Values) s.Points.Clear();

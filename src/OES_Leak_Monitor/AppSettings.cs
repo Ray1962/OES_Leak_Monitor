@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Aqst.OesApp.Core;
@@ -25,6 +26,23 @@ public sealed class AppSettings : IJsonOnDeserialized
     /// gets the defaults.
     /// </summary>
     public DataRetentionSettings DataRetention { get; set; } = new();
+
+    /// <summary>
+    /// How much history the two live trend charts keep — the Monitor tab's Wavelength Trend and
+    /// the Leak Monitor's % -of-baseline chart. One setting for both: they sit in the same app
+    /// and are read together, and a run whose interesting stretch is 45 minutes long is 45
+    /// minutes long on both. Clamped to
+    /// <see cref="MinTrendRetentionMinutes"/>..<see cref="MaxTrendRetentionMinutes"/> on load —
+    /// the charts hold every point in memory, so the ceiling is a real limit, not a preference.
+    /// </summary>
+    public int TrendRetentionMinutes { get; set; } = DefaultTrendRetentionMinutes;
+
+    public const int DefaultTrendRetentionMinutes = 30;
+    public const int MinTrendRetentionMinutes = 1;
+    /// <summary>8 hours. At 5 Hz that is ~144 000 points per line and six lines on the Monitor
+    /// trend, which OxyPlot still draws — beyond it the chart, not the data, becomes the
+    /// problem. Use Recordings to review anything longer.</summary>
+    public const int MaxTrendRetentionMinutes = 480;
 
     /// <summary>
     /// Optional full-spectrum CSV played back as the spectrum stream while in Test Mode
@@ -61,6 +79,12 @@ public sealed class AppSettings : IJsonOnDeserialized
         LeakMonitor.GoldenRuns ??= new();
         LeakMonitor.WavelengthCorrections ??= new();
         DataRetention ??= new();
+        // A settings.json predating this key deserializes to 0, which would leave both trend
+        // charts empty. Clamp rather than reject: any out-of-range value has an obvious
+        // intent-preserving nearest legal value.
+        TrendRetentionMinutes = TrendRetentionMinutes <= 0
+            ? DefaultTrendRetentionMinutes
+            : Math.Clamp(TrendRetentionMinutes, MinTrendRetentionMinutes, MaxTrendRetentionMinutes);
     }
 
     private void EnsureAt(int idx)

@@ -35,8 +35,10 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
     /// wavelength-calibration drift / pixel jitter without picking up neighbouring lines.</summary>
     private const double PeakSearchHalfWidthNm = 0.5;
 
-    /// <summary>How much trend history is kept on the chart (matches the Leak Monitor trend).</summary>
-    private static readonly TimeSpan TrendRetention = TimeSpan.FromMinutes(30);
+    /// <summary>How much trend history is kept on the chart. Set from
+    /// <see cref="AppSettings.TrendRetentionMinutes"/> (Configuration tab); the Leak Monitor
+    /// trend follows the same setting.</summary>
+    private TimeSpan _retention = TimeSpan.FromMinutes(AppSettings.DefaultTrendRetentionMinutes);
 
     /// <summary>Time constant for the optional EMA smoothing, seconds — the same
     /// α = 1 − exp(−dt/τ) scheme the Leak Monitor ratio EMA uses. Light by design: it damps
@@ -135,6 +137,42 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
             OnPropertyChanged(nameof(WavelengthText));
         }
         UpdateThresholdLine();
+        PlotModel.InvalidatePlot(true);
+    }
+
+    /// <summary>
+    /// Sets how much history the chart keeps. Shortening it trims what is already on screen
+    /// straight away rather than waiting for the next frame to age points out — otherwise the
+    /// setting appears to do nothing until data arrives, which on a stopped device is for ever.
+    /// Must be called on the UI thread.
+    /// </summary>
+    public void SetRetention(TimeSpan retention)
+    {
+        var clamped = TimeSpan.FromMinutes(Math.Clamp(retention.TotalMinutes,
+            AppSettings.MinTrendRetentionMinutes, AppSettings.MaxTrendRetentionMinutes));
+        if (clamped == _retention) return;
+        bool shorter = clamped < _retention;
+        _retention = clamped;
+        if (!shorter) return;
+
+        // Trim against the newest point we hold, not DateTime.Now: the chart's clock is the
+        // spectrum stream, and on a stopped device "now" would empty it.
+        double newest = double.NegativeInfinity;
+        foreach (var t in _tracked)
+            if (t.Raw.Count > 0 && t.Raw[^1].X > newest) newest = t.Raw[^1].X;
+        if (double.IsNegativeInfinity(newest)) return;
+
+        double cutoff = newest - clamped.TotalDays;   // OxyPlot's time axis counts in days
+        foreach (var t in _tracked)
+        {
+            // Raw and display are trimmed by the same count so they stay index-aligned —
+            // ReprojectAll rebuilds one from the other.
+            int drop = 0;
+            while (drop < t.Raw.Count && t.Raw[drop].X < cutoff) drop++;
+            if (drop == 0) continue;
+            t.Raw.RemoveRange(0, drop);
+            t.Series.Points.RemoveRange(0, Math.Min(drop, t.Series.Points.Count));
+        }
         PlotModel.InvalidatePlot(true);
     }
 
@@ -256,7 +294,7 @@ public sealed class WavelengthTrendViewModel : INotifyPropertyChanged, IDisposab
         if (!ReferenceEquals(nms, _trackedNm)) return;
 
         double x = DateTimeAxis.ToDouble(timestamp);
-        double cutoff = DateTimeAxis.ToDouble(timestamp - TrendRetention);
+        double cutoff = DateTimeAxis.ToDouble(timestamp - _retention);
 
         for (int i = 0; i < _tracked.Count; i++)
         {

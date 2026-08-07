@@ -133,6 +133,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         WavelengthTrend = new WavelengthTrendViewModel(
             loggerSettings.TriggerWavelength, TrendThresholdFor(loggerSettings),
             loggerSettings.MonitoredWavelengths?.Select(w => (double)w));
+        // Both live trend charts share one retention setting; AppSettings has already clamped it.
+        _trendRetentionMinutes = settings.TrendRetentionMinutes;
+        WavelengthTrend.SetRetention(TimeSpan.FromMinutes(_trendRetentionMinutes));
 
         // Actinometry leak monitor: build from persisted config, feed it the same
         // spectrum stream the intensity logger sees, and bridge its lifecycle into
@@ -147,6 +150,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // absolute-intensity reading against a baseline that no longer applies.
         _leakMonitorEngine.ConfigureAcquisition(_devices[0].ToSettings());
         LeakMonitor = new LeakMonitorViewModel(_leakMonitorEngine, _systemLogger);
+        LeakMonitor.SetRetention(TimeSpan.FromMinutes(_trendRetentionMinutes));
 
         // Single fan-out: each device frame is mapped through the Test-mode simulation
         // (a no-op unless a CSV is loaded and the frame is synthetic) and then handed to
@@ -353,6 +357,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         WavelengthTrend.Configure(ls.TriggerWavelength, TrendThresholdFor(ls),
             ls.MonitoredWavelengths?.Select(w => (double)w));
+        // Both trend charts share one retention window — see AppSettings.TrendRetentionMinutes.
+        var trendRetention = TimeSpan.FromMinutes(TrendRetentionMinutes);
+        WavelengthTrend.SetRetention(trendRetention);
+        LeakMonitor.SetRetention(trendRetention);
         StatusMessage = "Apply: parameters pushed to connected devices and logger.";
         _systemLogger.LogSystemEvent(LogSeverity.Information, "ApplyAll",
             "User pushed configuration to devices and logger",
@@ -395,6 +403,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         foreach (var d in _devices) d.LoadDefaultsCommand.Execute(null);
         Logger.LoadDefaults();
+        TrendRetentionMinutes = AppSettings.DefaultTrendRetentionMinutes;
         StatusMessage = "Defaults loaded — click Apply to push to devices and logger.";
         _systemLogger.LogSystemEvent(LogSeverity.Information, "LoadDefaultsAll",
             "Reset to factory defaults (not yet applied/persisted)",
@@ -484,6 +493,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             LeakMonitor   = _leakMonitorEngine.Settings, // includes captured Golden Runs
             AccessControl = AccessControl.SnapshotConfig(), // preserve user list across saves
             DataRetention = _retention,
+            TrendRetentionMinutes = TrendRetentionMinutes,
             SimulationCsvPath = _simulation.FilePath, // keep the Test-mode playback selection
         };
         _settingsService.Save(settings);
@@ -671,6 +681,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get => _retention.ArchiveAfterDays;
         set { if (_retention.ArchiveAfterDays != value) { _retention.ArchiveAfterDays = value; OnPropertyChanged(); } }
+    }
+
+    private int _trendRetentionMinutes = AppSettings.DefaultTrendRetentionMinutes;
+    /// <summary>
+    /// How much history both live trend charts keep — the Monitor tab's wavelength trend and the
+    /// Leak Monitor's % -of-baseline chart. Takes effect on Apply (like every other Configuration
+    /// field) and is persisted by Save. Clamped here as well as on load, so a typed value out of
+    /// range snaps back in the box instead of being silently ignored.
+    /// </summary>
+    public int TrendRetentionMinutes
+    {
+        get => _trendRetentionMinutes;
+        set
+        {
+            int clamped = Math.Clamp(value, AppSettings.MinTrendRetentionMinutes,
+                                            AppSettings.MaxTrendRetentionMinutes);
+            // Notify even when the stored value is unchanged, so a rejected entry snaps the
+            // bound TextBox back — same idiom as RatioEditViewModel.MinSnr.
+            if (!Set(ref _trendRetentionMinutes, clamped) && clamped != value)
+                OnPropertyChanged();
+        }
     }
 
     /// <summary>Tree size above which compression continues into newer folders. 0 disables it.</summary>

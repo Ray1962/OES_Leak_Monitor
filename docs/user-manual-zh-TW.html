@@ -157,12 +157,13 @@ td code{white-space:nowrap;}
 <a class="l3" href="#910-guest-關不掉程式">9.10 Guest 關不掉程式</a>
 <a class="l2" href="#10-附錄參數預設值">10. 附錄：參數預設值</a>
 <a class="l3" href="#101-硬體參數">10.1 硬體參數</a>
-<a class="l3" href="#102-比值門檻每組比值各自可調">10.2 比值門檻（每組比值各自可調）</a>
-<a class="l3" href="#103-洩漏監控全域設定">10.3 洩漏監控全域設定</a>
-<a class="l3" href="#104-出廠預設比值">10.4 出廠預設比值</a>
-<a class="l3" href="#105-可選參考譜線">10.5 可選參考譜線</a>
-<a class="l3" href="#106-趨勢圖">10.6 趨勢圖</a>
-<a class="l3" href="#107-帳號">10.7 帳號</a>
+<a class="l3" href="#102-記錄器觸發建議值">10.2 記錄器觸發（建議值）</a>
+<a class="l3" href="#103-比值門檻每組比值各自可調">10.3 比值門檻（每組比值各自可調）</a>
+<a class="l3" href="#104-洩漏監控全域設定">10.4 洩漏監控全域設定</a>
+<a class="l3" href="#105-出廠預設比值">10.5 出廠預設比值</a>
+<a class="l3" href="#106-可選參考譜線">10.6 可選參考譜線</a>
+<a class="l3" href="#107-趨勢圖">10.7 趨勢圖</a>
+<a class="l3" href="#108-帳號">10.8 帳號</a>
 <a class="l2" href="#名詞對照">名詞對照</a>
 </nav>
 <main>
@@ -416,7 +417,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><strong>Normalize</strong></td><td>以「勾選當下」的值為 1.0 做正規化，看各線的相對發散。正規化期間門檻參考線會隱藏</td></tr>
 <tr><td><strong>Zoom All</strong></td><td>縮放回全部資料。放大狀態下時間軸仍會持續跟隨最新資料</td></tr>
 </tbody></table></div>
-<p>虛線是 Save 門檻強度的參考線。資料保留 <strong>30 分鐘</strong>。</p>
+<p>虛線是 Save 門檻強度的參考線。保留時間預設 <strong>30 分鐘</strong>，可在 Configuration 分頁的 <strong>Trend charts</strong> 調整（1–480 分鐘，見 §10.7）。</p>
 <hr>
 <h3 id="62-configuration設定">6.2 Configuration（設定）</h3>
 <p><strong>需 Engineer 權限。</strong> 分上下兩塊，中間可拖曳分隔。底部是共用的動作列。</p>
@@ -429,7 +430,13 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><strong>Load Defaults</strong></td><td>回到出廠值（<strong>不會</strong>自動 Apply，也<strong>不會</strong>自動 Save）</td></tr>
 </tbody></table></div>
 <blockquote><p>改完記得 <strong>Apply → Save</strong> 兩個都按。只按 Apply 的話，下次開機會回到舊值。</p></blockquote>
-<p>動作列上方還有一排 <strong>Data folder</strong> 設定（舊資料自動壓縮與磁碟用量），見 §7.4。</p>
+<p>動作列上方還有兩排設定：</p>
+<ul>
+<li><strong>Data folder</strong> —— 舊資料自動壓縮與磁碟用量，見 §7.4。
+</li>
+<li><strong>Trend charts</strong> —— <code>keep last ___ minutes</code>：兩張即時趨勢圖（Monitor 分頁的強度趨勢、Leak Monitor 的 % 趨勢）保留多久的歷史。<strong>一個設定同時管兩張圖</strong>，範圍 <strong>1–480 分鐘</strong>，預設 30。按 <strong>Apply</strong> 生效；<strong>縮短時會立刻裁掉圖上已有的資料</strong>（不會等到下一幀才慢慢過期，否則停止擷取時等於永遠不生效）。 &gt; 每一個點都留在記憶體裡，所以上限 480 分鐘是實際限制而不是偏好。要看更長的區間請用 Recordings / Ratio Review 分頁讀 CSV。
+</li>
+</ul>
 <h4 id="621-hardware-parameters硬體參數">6.2.1 Hardware Parameters（硬體參數）</h4>
 <div class="tablewrap"><table>
 <thead><tr><th>參數</th><th>預設</th><th>說明</th></tr></thead>
@@ -491,7 +498,8 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><code>AnyMonitoredWavelength</code></td><td>Monitored Wavelengths 中<strong>最亮的一條</strong></td><td>多步驟配方，但希望保留譜線專一性（例如同時盯載氣 Ar 與製程線），避免室內光誤觸發</td></tr>
 </tbody></table></div>
 <blockquote><p>💡 <strong>為什麼是分位數而不是「最大值」</strong>：單一壞點或宇宙射線尖峰就能把最大值永久釘在高位，記錄器會一直誤以為電漿開著。實測把一個像素灌到 60000 counts，p99 只從 14813 變成 14831（＋0.1%），而最大值會直接讀成 60000。</p></blockquote>
-<blockquote><p>⚠️ <strong>換模式一定要重設 Save Threshold Intensity</strong>。同一張光譜下，單一譜線可能讀 124、p99 讀 14813、最亮監測線讀 52639 —— 量級差很多。門檻欄位下方的綠色小字會顯示<strong>目前的實際讀值</strong>（<code>now 14813 · threshold 100</code>），照著它設就不會猜錯。</p></blockquote>
+<blockquote><p>⚠️ <strong>換模式一定要重設 Save Threshold Intensity</strong>。同一張光譜下，單一譜線可能讀 124、p99 讀 14813、最亮監測線讀 52639 —— 量級差很多。門檻欄位下方的綠色小字會顯示<strong>目前的實際讀值</strong>（<code>now 14813 · threshold 100</code>），照著它設就不會猜錯。建議值與實測的取法見 <strong>§10.2</strong>。</p></blockquote>
+<blockquote><p>⚠️ <strong>這個門檻不只管全譜 CSV</strong>。<code>AbsoluteIntensity</code> 比值的「電漿存在」判定用的是同一個量、同一個門檻（見 §6.4.2），所以調它會同時改變洩漏監控何時開始評估。設得太低，電漿關閉時的暗電流基座會被當成電漿開著。</p></blockquote>
 <blockquote><p>若觸發量根本無法計算（例如波長超出光譜儀量程），<strong>Logs 分頁會出現一筆錯誤說明原因</strong>，而不是像舊版那樣安靜地什麼都不做。</p></blockquote>
 <p><strong>Output Files（輸出檔案）</strong></p>
 <div class="tablewrap"><table>
@@ -617,7 +625,7 @@ vcruntime140_cor3.dll</code></pre>
 </ul>
 <blockquote><p>⚠️ <strong>什麼時候必須重錄 Golden Run</strong>：改了積分時間或其他影響絕對強度的設定、換了參考譜線（<code>Ratio</code> 模式）、改了監控方式或擷取方式、清理過觀察窗、換過光纖、製程配方改變。前三項程式會自動偵測並停用舊基準線；其餘的只有你知道。</p></blockquote>
 <h4 id="636-趨勢圖">6.3.6 趨勢圖</h4>
-<p>畫每個比值的 <strong>% of baseline</strong> 隨時間變化，保留 <strong>30 分鐘</strong>。放大時時間軸仍會跟隨最新資料。</p>
+<p>畫每個比值的 <strong>% of baseline</strong> 隨時間變化。保留時間預設 <strong>30 分鐘</strong>，與 Monitor 分頁的強度趨勢<strong>共用同一個設定</strong>（Configuration → Trend charts，見 §10.7）。放大時時間軸仍會跟隨最新資料。</p>
 <hr>
 <h3 id="64-ratio-setup比值設定">6.4 Ratio Setup（比值設定）</h3>
 <p><strong>Engineer+ 才能存檔。</strong></p>
@@ -645,7 +653,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><code>AbsoluteIntensity</code></td><td>訊號線的絕對強度（扣背景後）&lt;br&gt;<strong>完全不使用參考線</strong></td><td>訊號線很弱、接近雜訊底時。兩個小數字相除會劇烈擺盪，拿掉除法就少一個雜訊來源</td></tr>
 </tbody></table></div>
 <p><code>AbsoluteIntensity</code> 的代價：<strong>不再抵消電漿條件漂移</strong>（功率／壓力／流量變化會直接反映在讀值上）。因此使用它時必須維持穩定的操作點，並更頻繁地重錄基準線。</p>
-<blockquote><p><strong>絕對強度模式的「電漿存在」判定來自記錄器的儲存觸發</strong>（Configuration 分頁的 trigger 波長與 save-start 門檻），不再看參考譜線 —— 選了這個模式，右側就不會出現 Reference line 欄位。</p>
+<blockquote><p><strong>絕對強度模式的「電漿存在」判定來自記錄器的儲存觸發</strong>（Configuration 分頁的 trigger 波長與 save-start 門檻，建議值見 <strong>§10.2</strong>），不再看參考譜線 —— 選了這個模式，右側就不會出現 Reference line 欄位。</p>
 <p>這樣改的原因：絕對強度模式本來就不對參考線做除法，所以那條線根本不必存在；而一條不存在的譜線扣完背景後只剩在 0 附近正負跳動的雜訊，於是「參考線 &gt; 0」變成一枚硬幣，決定這一幀要不要計算。更糟的是，若參考線落在彎曲的連續光上（兩側基準視窗拉出的直線會高於凸型連續光），扣出來會<strong>系統性為負</strong>，該比值就一幀也不會被評估 —— CSV 欄位整片空白，畫面永遠停在 No Plasma。同理，參考線的 SNR 也不再影響 <code>Low Signal</code> 判定，只看被監控的那條線。</p></blockquote>
 <blockquote><p><strong>% 趨勢的單位由「擷取方式」決定，不是由監控方式決定</strong>：只有 <code>AbsoluteIntensity</code> + <code>RawMean</code>（讀值帶連續光基座）才改用 σ 正規化分數（基準線 = 100、高一個 warn-σ = 120，斜率以 σ/min 計）。<code>AbsoluteIntensity</code> 搭配 <code>PeakHeight</code> / <code>Integral</code> 時，讀值已經扣掉背景，基準均值本身就是訊號，所以照常用 <code>值 ÷ 基準均值 × 100</code>（斜率 %/min）。</p></blockquote>
 <p><strong>Signal line（訊號譜線）／ Reference line（參考譜線）</strong>（Reference line 只在 <code>Ratio</code> 模式出現）</p>
@@ -1026,7 +1034,28 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>Straylight Correction</td><td>關</td></tr>
 <tr><td>Linearity Correction</td><td>開</td></tr>
 </tbody></table></div>
-<h3 id="102-比值門檻每組比值各自可調">10.2 比值門檻（每組比值各自可調）</h3>
+<h3 id="102-記錄器觸發建議值">10.2 記錄器觸發（建議值）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>出廠預設</th><th><strong>建議值</strong></th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>Trigger Mode</td><td><code>Wavelength</code></td><td><code>AnyMonitoredWavelength</code></td><td>保留譜線專一性，又能涵蓋不同步驟亮起的物種</td></tr>
+<tr><td>Save Threshold Intensity</td><td>1000</td><td><strong>10000</strong></td><td>見下方</td></tr>
+<tr><td>Start Confirm Time</td><td>2.0 s</td><td>2.0 s</td><td></td></tr>
+<tr><td>Stop Confirm Time</td><td>3.0 s</td><td>3.0 s</td><td></td></tr>
+<tr><td>Min Save Time</td><td>5.0 s</td><td>5.0 s</td><td></td></tr>
+<tr><td>Wavelength Tolerance</td><td>2.0 nm</td><td>2.0 nm</td><td></td></tr>
+</tbody></table></div>
+<p><strong>門檻要設在「電漿關」與「電漿開」之間，而且兩邊都要留餘裕。</strong> 這個門檻不只決定全譜 CSV 何時開錄 —— <code>AbsoluteIntensity</code> 比值的<strong>電漿存在判定也用它</strong>（見 §6.4.2），所以設得太低會讓電漿關閉時的暗電流基座被當成「電漿開著」，那些幀就會被拿去算比值、甚至被錄進 Golden Run 基準線。</p>
+<p>實測（本機、<code>AnyMonitoredWavelength</code>，監控 436.8 / 487.4 / 546.6 nm）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>狀態</th><th>觸發量實測</th></tr></thead>
+<tbody>
+<tr><td>電漿<strong>關</strong></td><td>1046 – 1112</td></tr>
+<tr><td>電漿<strong>開</strong></td><td>32111 – 33371</td></tr>
+</tbody></table></div>
+<p>門檻 <strong>10000</strong> 約為電漿開的 1/3、電漿關的 10 倍，兩邊都有很大餘裕。<strong>這是你機台的數字，不是通則</strong> —— 換配方、換積分時間、清過觀察窗之後都要重新量。量法：把門檻欄位下方的綠色小字（<code>now …·threshold …</code>）分別在電漿開與關的時候各看一次，取中間值。</p>
+<blockquote><p>⚠️ 門檻設得太低的症狀：Leak Monitor 的 σ 分數趨勢偶爾出現極深的負向尖峰（例如 −2800），把 Y 軸整個拉壞。那不是洩漏 —— 洩漏是往上的 —— 而是電漿關閉時的幀通過了閘門。狀態列會維持 Normal，所以不會誤報警，但趨勢圖會不能看，而且如果 Golden Run 剛好錄到開關電漿的瞬間，基準線就被汙染了。</p></blockquote>
+<h3 id="103-比值門檻每組比值各自可調">10.3 比值門檻（每組比值各自可調）</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>參數</th><th>預設值</th></tr></thead>
 <tbody>
@@ -1039,7 +1068,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>Min SNR</td><td>5.0</td></tr>
 <tr><td>Monitoring method</td><td><code>Ratio</code></td></tr>
 </tbody></table></div>
-<h3 id="103-洩漏監控全域設定">10.3 洩漏監控全域設定</h3>
+<h3 id="104-洩漏監控全域設定">10.4 洩漏監控全域設定</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>參數</th><th>預設值</th></tr></thead>
 <tbody>
@@ -1055,7 +1084,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>比值數量上限</td><td>10</td></tr>
 <tr><td>波長修正上限</td><td>±5 nm</td></tr>
 </tbody></table></div>
-<h3 id="104-出廠預設比值">10.4 出廠預設比值</h3>
+<h3 id="105-出廠預設比值">10.5 出廠預設比值</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>Key</th><th>名稱</th><th>訊號線</th><th>擷取方式</th><th>參考線</th></tr></thead>
 <tbody>
@@ -1064,19 +1093,18 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><code>R_NO</code></td><td>NO 237 / N₂ 337</td><td>NO 237.0 nm</td><td>Integral</td><td>N₂ 337.1 nm</td></tr>
 <tr><td><code>R_Ar</code></td><td>Ar 750 / N₂ 337</td><td>Ar 750.4 nm</td><td>PeakHeight</td><td>N₂ 337.1 nm</td></tr>
 </tbody></table></div>
-<h3 id="105-可選參考譜線">10.5 可選參考譜線</h3>
+<h3 id="106-可選參考譜線">10.6 可選參考譜線</h3>
 <p><code>N₂ 337.1</code>、<code>N₂ 662.4</code>、<code>Hα 656.3</code>、<code>Ar 750.4</code>、<code>Ar 811.5</code></p>
-<h3 id="106-趨勢圖">10.6 趨勢圖</h3>
+<h3 id="107-趨勢圖">10.7 趨勢圖</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>項目</th><th>值</th></tr></thead>
 <tbody>
-<tr><td>Monitor 強度趨勢保留</td><td>30 分鐘</td></tr>
-<tr><td>Leak Monitor % 趨勢保留</td><td>30 分鐘</td></tr>
+<tr><td>趨勢保留時間（兩張圖共用）</td><td>30 分鐘，可調 <strong>1–480</strong>（Configuration → Trend charts）</td></tr>
 <tr><td>強度趨勢峰值搜尋範圍</td><td>±0.5 nm</td></tr>
 <tr><td>Smooth 的 EMA τ</td><td>3 s</td></tr>
 <tr><td>強度趨勢最多線數</td><td>1 條 trigger + 5 條 monitored</td></tr>
 </tbody></table></div>
-<h3 id="107-帳號">10.7 帳號</h3>
+<h3 id="108-帳號">10.8 帳號</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>項目</th><th>值</th></tr></thead>
 <tbody>
