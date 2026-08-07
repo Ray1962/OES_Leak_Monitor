@@ -182,7 +182,16 @@ td code{white-space:nowrap;}
 <h2 id="1-目的與適用範圍">1. 目的與適用範圍</h2>
 <h3 id="11-監控目的">1.1 監控目的</h3>
 <p>在製程腔體上以光纖取電漿自身的發光，用<strong>比值法（actinometry）</strong>即時判斷是否有<strong>空氣（氮、氧、水氣）漏入製程腔</strong>。</p>
-<p>空氣漏入的光譜特徵是：<strong>O、OH、NO（以及 N₂⁺）等物種的譜線同時上升</strong>，而製程本身供應的參考譜線（N₂ 337.1 nm、Ar 750.4 nm 等）維持不變。用比值而非絕對強度，是為了消掉功率、壓力、觀察窗汙染這類<strong>與洩漏無關</strong>的漂移。</p>
+<p>空氣漏入會改變某些物種的發光強度，而製程本身供應的參考譜線維持不變 —— 用比值而非絕對強度，是為了消掉功率、壓力、觀察窗汙染這類<strong>與洩漏無關</strong>的漂移。</p>
+<blockquote><p>⚠️ <strong>「哪些物種會上升」必須在你的機台上實測確認，不能照抄。</strong> 常見的假設是 O、OH、NO、N₂⁺ 同時上升；但在一台 <strong>Ar 80 sccm / 0.95 torr / RF 50 W</strong> 的實機上，對 100 單位的空氣洩漏實測（皆已除以 Ar 750.4）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>譜線</th><th>反應</th><th></th><th>譜線</th><th>反應</th></tr></thead>
+<tbody>
+<tr><td><strong>N₂ 337.1</strong></td><td><strong>+71.0%（33.8σ）</strong></td><td></td><td>O 777.2</td><td>+3.2%（0.7σ）</td></tr>
+<tr><td><strong>NO 237</strong></td><td><strong>+57.1%（18.3σ）</strong></td><td></td><td>N₂⁺ 391.4</td><td>+4.5%（0.8σ）</td></tr>
+<tr><td><strong>N₂ 357.7</strong></td><td><strong>+41.6%（16.2σ）</strong></td><td></td><td>OH 308.9</td><td>+0.0%（0.1σ）</td></tr>
+</tbody></table></div>
+<p>也就是說：<strong>氮是示蹤物，氧完全不動</strong>，而常被當成「高敏感早期指標」的 N₂⁺ 391.4 一點反應也沒有。壓力、功率、氣體組成一變，會動的物種就可能換人。<strong>上線前務必依 §7 的步驟 5–7 用一次已知洩漏挑線</strong>，並依實測結果修正下面的判讀表。</p></blockquote>
 <p>漏氣在半導體製程上的後果是實質的：膜質劣化（含氧、含氮）、顆粒增加、腔體與泵浦腐蝕、真空件壽命縮短，嚴重時整批 WIP 報廢。<strong>這套系統的價值在於「在製程結果變壞之前就看到趨勢」</strong>，所以巡檢的重點不是「有沒有跳警報」，而是<strong>「趨勢有沒有在慢慢變」</strong>。</p>
 <h3 id="12-兩階段巡檢的分工">1.2 兩階段巡檢的分工</h3>
 <div class="tablewrap"><table>
@@ -415,9 +424,10 @@ td code{white-space:nowrap;}
 <thead><tr><th>光譜表現</th><th>強度趨勢</th><th>比值（% of baseline）</th><th>最可能原因</th><th>動作</th></tr></thead>
 <tbody>
 <tr><td>所有峰同步下降，峰形不變</td><td>全線同步緩降</td><td><strong>持平</strong></td><td>觀察窗汙染／光纖劣化／對位偏移</td><td>L2：清潔觀察窗 → <strong>重錄 Golden Run</strong></td></tr>
-<tr><td>O 777、OH 309、NO 237 升高，N₂ 337 不變</td><td>指標線與參考線<strong>分歧</strong></td><td><strong>多條同步上升</strong></td><td><strong>空氣洩漏（典型）</strong></td><td>§8 緊急流程</td></tr>
+<tr><td><strong>你機台實測會動的那些指標線</strong>同步升高，參考線不變</td><td>指標線與參考線<strong>分歧</strong></td><td><strong>多條同步上升</strong></td><td><strong>空氣洩漏（典型）</strong></td><td>§8 緊急流程</td></tr>
+<tr><td>全部指標線一起升高，<strong>連參考線也升高</strong></td><td>全線同步上升</td><td>幅度遠小於強度變化</td><td>電漿條件改變（壓力／阻抗）；洩漏也會造成，但<strong>必須看比值才分得出來</strong></td><td>看比值：比值不動就不是洩漏</td></tr>
 <tr><td>只有 O 777 升高</td><td>單線上升</td><td>單一比值上升</td><td>該線受干擾（含 F 製程的 SiF 777）／製程含氧氣體變動</td><td>L2：查干擾（§7.3）</td></tr>
-<tr><td>N₂⁺ 391.4 陡升</td><td>陡升</td><td>上升</td><td><strong>空氣漏入的高敏感早期指標</strong></td><td>§8：即使其他線還沒動也要查</td></tr>
+<tr><td>N₂⁺ 391.4 陡升</td><td>陡升</td><td>上升</td><td>在<strong>部分</strong>機台是空氣漏入的高敏感早期指標 —— 但實測過的 Ar 電漿上它完全不反應（0.8σ），<strong>先確認它在你機台上會動再依賴它</strong></td><td>§8：若已驗證過它會動，即使其他線還沒動也要查</td></tr>
 <tr><td>所有峰同步上下擺動</td><td>全線同相位振盪</td><td>持平</td><td>電漿功率／壓力／匹配器擺動</td><td>通報製程；非洩漏</td></tr>
 <tr><td>出現金屬峰（Fe/Cr/Al）</td><td>新線出現</td><td>不定</td><td>腔體壁／載具濺射、零件損傷</td><td>通報設備；安排開腔檢查</td></tr>
 <tr><td>出現 CN 388、H 656</td><td>新線出現</td><td>可能伴隨 OH 上升</td><td>有機物污染、O-ring 侵蝕、水氣</td><td>L2 判定；可能是<strong>慢漏＋水氣</strong></td></tr>
@@ -567,7 +577,7 @@ td code{white-space:nowrap;}
 <tr><td>電漿蝕刻（氟碳系）</td><td>CF₄ / C₄F₈ / O₂ / Ar</td><td>O（常通 O₂）；<strong>O 777 另有 SiF 干擾</strong></td><td><strong>N₂ 337、N₂⁺ 391</strong></td><td><strong>Ar 750／811（理想）</strong></td></tr>
 <tr><td>電漿蝕刻（氯系）</td><td>Cl₂ / BCl₃ / Ar</td><td>—</td><td><strong>O 777、N₂ 337、OH 309</strong></td><td>Ar 750／811</td></tr>
 <tr><td>腔體清洗（NF₃ / 遠端電漿）</td><td>NF₃ / Ar</td><td>—</td><td>清洗步驟通常<strong>不建議納入監控</strong>（化學劇烈變動）</td><td>—</td></tr>
-<tr><td>純惰性／氫氣製程</td><td>Ar / H₂</td><td>—</td><td><strong>O 777、OH 309、NO 237、N₂ 337 全可用</strong>（最理想的監控情境）</td><td>Ar 750／811</td></tr>
+<tr><td>純惰性／氫氣製程</td><td>Ar / H₂</td><td>—</td><td>乾淨、無製程氣體干擾，<strong>但不代表每條線都會動</strong>：一台 Ar / 0.95 torr / 50 W 的實機上只有 <strong>N₂ 337、NO 237、N₂ 357</strong> 有反應，O 777、OH 309、N₂⁺ 391 全部無反應</td><td>Ar 750／811</td></tr>
 </tbody></table></div>
 <p><strong>共通原則</strong>：若某支配方<strong>找不到任何乾淨的洩漏指標</strong>（例如同時通 O₂ 與 N₂O 的製程），誠實的做法是<strong>在該配方停用洩漏監控</strong>（或只保留趨勢記錄不報警），改在<strong>其他配方或待機／抽真空階段</strong>做監控——而不是硬設一組會誤報的門檻。<strong>待機抽真空時的空腔電漿是很好的檢漏窗口</strong>，因為此時沒有製程氣體干擾。</p>
 <h3 id="73-已知譜線干擾清單">7.3 已知譜線干擾清單</h3>
