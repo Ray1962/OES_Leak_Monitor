@@ -112,6 +112,17 @@ public sealed class LeakMonitorEngine : IDisposable
     // Live acquisition conditions, for stamping onto a Golden Run and for detecting that the
     // active baseline was captured under different ones. Device half comes from the host via
     // ConfigureAcquisition; the axis half is read off each frame.
+    // Isolated gate dropouts — frames the spectrometer returned blank between two good ones.
+    // Counted and reported because the gate now discards them silently, and an instrument fault
+    // you cannot measure is one you cannot fix: this is the number that says whether changing
+    // AcquireMode helped.
+    private const double MaxDropoutSeconds = 1.0;
+    private bool _gateWasOpen;                // a good frame has been seen at least once
+    private int _closedRun;                   // consecutive gate-closed frames
+    private DateTime _closedRunStart;
+    private int _dropoutFrames, _dropoutEvents, _dropoutsSinceLog;
+    private DateTime _lastDropoutLog;
+
     private AcquisitionFingerprint? _acquisition;
     private string _acquisitionWarning = "";  // "" when the active baseline still applies
     private string _acquisitionWarned = "";   // last warning logged, so it is logged once
@@ -269,6 +280,7 @@ public sealed class LeakMonitorEngine : IDisposable
             // continuum) decide whether the frame was evaluated at all. Measured once per frame
             // and shared by every absolute ratio; null = the gate could not be evaluated.
             bool? triggerPlasma = _plasmaGate?.IsPlasmaPresent(wl, inten);
+            if (triggerPlasma is { } g) TrackGateDropouts(g, sample.Timestamp);
 
             foreach (var mon in _monitors)
             {
@@ -285,19 +297,21 @@ public sealed class LeakMonitorEngine : IDisposable
                 double num = numM.Value, den = denM.Value;
 
                 bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
-                bool plasma;
-                if (absolute)
-                {
-                    // An unusable / unmeasurable gate leaves the ratio ungated rather than dark:
-                    // "we can't tell" is not "plasma off", and a silently dead ratio is the
-                    // failure mode this change exists to remove. Said once in the log.
-                    plasma = triggerPlasma ?? true;
-                    if (triggerPlasma is null) WarnGateUnusableOnce();
-                }
-                else
-                {
-                    plasma = !double.IsNaN(den) && den > 0 && den > floor;
-                }
+                // An unusable / unmeasurable gate leaves the ratio ungated rather than dark:
+                // "we can't tell" is not "plasma off", and a silently dead ratio is the failure
+                // mode this gate exists to remove. Said once in the log.
+                if (triggerPlasma is null) WarnGateUnusableOnce();
+                bool gateOpen = triggerPlasma ?? true;
+                // Ratio mode additionally needs its own reference line, because it divides by it.
+                // But the reference check alone is not a plasma test: a frame the spectrometer
+                // returns blank still carries ~75 counts at the reference wavelength, which
+                // clears "> 0" — and clears a PlasmaPresentFloor derived from a capture that
+                // those same blank frames contaminated. Ten such frames in one real run poisoned
+                // a Golden Run baseline (σ 2.6× the mean) and skewed the offline analysis before
+                // anyone noticed. Both conditions now have to hold.
+                bool plasma = absolute
+                    ? gateOpen
+                    : gateOpen && !double.IsNaN(den) && den > 0 && den > floor;
                 mon.Update(numM, denM, sample.Timestamp, plasma);
 
                 // The monitored quantity: the signal/reference ratio, or — in absolute mode —
@@ -311,6 +325,7 @@ public sealed class LeakMonitorEngine : IDisposable
                     var diag = GetDiag(mon.Key);
                     diag.Frames++;
                     if (double.IsNaN(num)) diag.NumeratorMissing++;
+                    if (!gateOpen) diag.GateClosed++;
                     if (!absolute && (double.IsNaN(den) || den <= 0)) diag.ReferenceMissing++;
                     if (plasma && (absolute || den != 0) && !double.IsNaN(value))
                     {
@@ -919,10 +934,52 @@ public sealed class LeakMonitorEngine : IDisposable
     }
 
     /// <summary>
-    /// Says once — not once per frame — that the absolute-intensity plasma gate could not be
-    /// evaluated, so those ratios are running ungated. Silence here is what made a mistyped
-    /// trigger wavelength look like a dead leak monitor. Reset by <see cref="ConfigureTrigger"/>,
-    /// so a corrected setting reports again if it is still wrong.
+    /// Counts brief gate closures that sit between two good frames — the signature of a frame
+    /// the spectrometer returned blank, as opposed to the plasma genuinely going off (which
+    /// lasts far longer than <see cref="MaxDropoutSeconds"/>). A real run produced twenty such
+    /// frames in thirteen minutes; one of them landed inside a Golden Run capture and pushed
+    /// that ratio's baseline σ to 2.6× its mean, so the baseline was rejected and nobody could
+    /// see why. The gate discards them now, but silently — this is what makes the fault
+    /// visible, and what tells you whether changing the acquire mode fixed it. First occurrence
+    /// is logged at once, then a running total at most every five minutes. Caller holds the lock.
+    /// </summary>
+    private void TrackGateDropouts(bool open, DateTime ts)
+    {
+        if (!open)
+        {
+            if (_closedRun++ == 0) _closedRunStart = ts;
+            return;
+        }
+        if (_closedRun > 0 && _gateWasOpen &&
+            (ts - _closedRunStart).TotalSeconds <= MaxDropoutSeconds)
+        {
+            _dropoutFrames += _closedRun;
+            _dropoutEvents++;
+            _dropoutsSinceLog += _closedRun;
+            bool first = _lastDropoutLog == default;
+            if (first || (ts - _lastDropoutLog).TotalMinutes >= 5)
+            {
+                _lastDropoutLog = ts;
+                _log?.LogSystemEvent(LogSeverity.Warning, "SpectrumFrameDropout",
+                    $"The spectrometer returned {_dropoutsSinceLog} blank frame(s) between good " +
+                    "ones — the plasma gate discarded them, so no reading was corrupted, but they " +
+                    "are an instrument fault, not a process event. If this persists, try " +
+                    "AcquireMode = Oneshot in the Configuration tab.",
+                    related: $"EventsThisSession={_dropoutEvents},FramesThisSession={_dropoutFrames}",
+                    value: $"Since last report={_dropoutsSinceLog}");
+                _dropoutsSinceLog = 0;
+            }
+        }
+        _closedRun = 0;
+        _gateWasOpen = true;
+    }
+
+    /// <summary>
+    /// Says once — not once per frame — that the plasma gate could not be evaluated, so every
+    /// ratio is running without it (ratio-mode entries fall back to their reference line alone,
+    /// which does not reject a blank frame). Silence here is what made a mistyped trigger
+    /// wavelength look like a dead leak monitor. Reset by <see cref="ConfigureTrigger"/>, so a
+    /// corrected setting reports again if it is still wrong.
     /// </summary>
     private void WarnGateUnusableOnce()
     {
@@ -935,8 +992,10 @@ public sealed class LeakMonitorEngine : IDisposable
                 : $"the trigger could not be measured on this frame ({_plasmaGate.Description}) — " +
                   "the wavelength is outside the spectrometer axis or its tolerance";
         _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorPlasmaGateUnavailable",
-            $"Absolute-intensity ratios are running without a plasma-present gate: {why}. " +
-            "Set the logger's trigger wavelength and save-start threshold in the Configuration tab.",
+            $"Every ratio is running without the plasma-present gate: {why}. Absolute-intensity " +
+            "entries are ungated; ratio-mode entries fall back to their reference line, which " +
+            "does not reject a frame the spectrometer returns blank. Set the logger's trigger " +
+            "wavelength and save-start threshold in the Configuration tab.",
             value: _plasmaGate?.Description ?? "(none)");
     }
 
@@ -952,10 +1011,13 @@ public sealed class LeakMonitorEngine : IDisposable
             if (d.NumeratorMissing == d.Frames)
                 reason = $"the monitored line {def.Numerator.Label} ({def.Numerator.CenterNm:0.#} nm) " +
                          "fell outside the spectrometer wavelength range in every frame";
-            else if (absolute && d.LowSnr == 0)
+            else if (d.GateClosed == d.Frames)
                 reason = "no frame passed the plasma-present gate — check the logger's trigger " +
-                         "wavelength / save-start threshold, which is what gates absolute-intensity " +
-                         "ratios, and that the plasma was on during the capture";
+                         "wavelength / save-start threshold, which is what gates the leak monitor, " +
+                         "and that the plasma was on during the capture";
+            else if (absolute && d.LowSnr == 0)
+                reason = "no frame produced a usable value while the gate was open — check the " +
+                         "logger's trigger threshold and that the plasma was on during the capture";
             else if (!absolute && d.ReferenceMissing == d.Frames)
                 reason = $"the reference line {def.Denominator.Label} ({def.Denominator.CenterNm:0.#} nm) " +
                          "never registered — the plasma was off, or the line is outside the spectrum";
@@ -1118,6 +1180,8 @@ public sealed class LeakMonitorEngine : IDisposable
         public int NumeratorMissing;
         /// <summary>Frames whose reference line was NaN or ≤ 0 (no plasma at that line).</summary>
         public int ReferenceMissing;
+        /// <summary>Frames the plasma-present gate rejected — plasma off, or a blank frame.</summary>
+        public int GateClosed;
         /// <summary>Frames with plasma + both lines present but below the SNR floor (near noise).</summary>
         public int LowSnr;
         /// <summary>Frames that contributed a sample to the baseline.</summary>

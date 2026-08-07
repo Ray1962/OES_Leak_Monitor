@@ -150,11 +150,12 @@ td code{white-space:nowrap;}
 <a class="l3" href="#93-峰形變寬峰位偏移">9.3 峰形變寬、峰位偏移</a>
 <a class="l3" href="#94-一直顯示-low-signal">9.4 一直顯示 Low Signal</a>
 <a class="l3" href="#95-golden-run-錄完後某條比值沒有基準線">9.5 Golden Run 錄完後某條比值沒有基準線</a>
-<a class="l3" href="#96-進不了-configuration-分頁">9.6 進不了 Configuration 分頁</a>
-<a class="l3" href="#97-改了-ratio-setup-但沒反應">9.7 改了 Ratio Setup 但沒反應</a>
-<a class="l3" href="#98-沒有產生-ratio-csv">9.8 沒有產生 Ratio CSV</a>
-<a class="l3" href="#99-測試模式下警報不會跳">9.9 測試模式下警報不會跳</a>
-<a class="l3" href="#910-guest-關不掉程式">9.10 Guest 關不掉程式</a>
+<a class="l3" href="#96-日誌出現-spectrumframedropout">9.6 日誌出現 SpectrumFrameDropout</a>
+<a class="l3" href="#97-進不了-configuration-分頁">9.7 進不了 Configuration 分頁</a>
+<a class="l3" href="#98-改了-ratio-setup-但沒反應">9.8 改了 Ratio Setup 但沒反應</a>
+<a class="l3" href="#99-沒有產生-ratio-csv">9.9 沒有產生 Ratio CSV</a>
+<a class="l3" href="#910-測試模式下警報不會跳">9.10 測試模式下警報不會跳</a>
+<a class="l3" href="#911-guest-關不掉程式">9.11 Guest 關不掉程式</a>
 <a class="l2" href="#10-附錄參數預設值">10. 附錄：參數預設值</a>
 <a class="l3" href="#101-硬體參數">10.1 硬體參數</a>
 <a class="l3" href="#102-記錄器觸發建議值">10.2 記錄器觸發（建議值）</a>
@@ -654,7 +655,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><code>AbsoluteIntensity</code></td><td>訊號線的絕對強度（扣背景後）&lt;br&gt;<strong>完全不使用參考線</strong></td><td>訊號線很弱、接近雜訊底時。兩個小數字相除會劇烈擺盪，拿掉除法就少一個雜訊來源</td></tr>
 </tbody></table></div>
 <p><code>AbsoluteIntensity</code> 的代價：<strong>不再抵消電漿條件漂移</strong>（功率／壓力／流量變化會直接反映在讀值上）。因此使用它時必須維持穩定的操作點，並更頻繁地重錄基準線。</p>
-<blockquote><p><strong>絕對強度模式的「電漿存在」判定來自記錄器的儲存觸發</strong>（Configuration 分頁的 trigger 波長與 save-start 門檻，建議值見 <strong>§10.2</strong>），不再看參考譜線 —— 選了這個模式，右側就不會出現 Reference line 欄位。</p>
+<blockquote><p><strong>「電漿存在」判定來自記錄器的儲存觸發</strong>（Configuration 分頁的 trigger 波長與 save-start 門檻，建議值見 <strong>§10.2</strong>）。<code>AbsoluteIntensity</code> 模式完全只看它 —— 選了這個模式，右側就不會出現 Reference line 欄位；<code>Ratio</code> 模式則是<strong>兩個條件都要成立</strong>：儲存觸發過門檻，而且參考譜線本身可用。</p>
 <p>這樣改的原因：絕對強度模式本來就不對參考線做除法，所以那條線根本不必存在；而一條不存在的譜線扣完背景後只剩在 0 附近正負跳動的雜訊，於是「參考線 &gt; 0」變成一枚硬幣，決定這一幀要不要計算。更糟的是，若參考線落在彎曲的連續光上（兩側基準視窗拉出的直線會高於凸型連續光），扣出來會<strong>系統性為負</strong>，該比值就一幀也不會被評估 —— CSV 欄位整片空白，畫面永遠停在 No Plasma。同理，參考線的 SNR 也不再影響 <code>Low Signal</code> 判定，只看被監控的那條線。</p></blockquote>
 <blockquote><p><strong>% 趨勢的單位由「擷取方式」決定，不是由監控方式決定</strong>：只有 <code>AbsoluteIntensity</code> + <code>RawMean</code>（讀值帶連續光基座）才改用 σ 正規化分數（基準線 = 100、高一個 warn-σ = 120，斜率以 σ/min 計）。<code>AbsoluteIntensity</code> 搭配 <code>PeakHeight</code> / <code>Integral</code> 時，讀值已經扣掉背景，基準均值本身就是訊號，所以照常用 <code>值 ÷ 基準均值 × 100</code>（斜率 %/min）。</p></blockquote>
 <p><strong>Signal line（訊號譜線）／ Reference line（參考譜線）</strong>（Reference line 只在 <code>Ratio</code> 模式出現）</p>
@@ -982,6 +983,7 @@ vcruntime140_cor3.dll</code></pre>
 </ul>
 <h3 id="92-光譜幀出現斷裂撕裂">9.2 光譜幀出現斷裂／撕裂</h3>
 <p>Configuration → <strong>Acquire Mode</strong> 改成 <code>Oneshot</code> → <strong>Apply</strong>。常見於 Z5／乙太網路機種在長積分時間下。</p>
+<blockquote><p>同一個設定也是<strong>整幀全暗</strong>（掉幀）的第一個處理方向 —— 那種狀況日誌會記 <code>SpectrumFrameDropout</code>，見 §9.6。</p></blockquote>
 <h3 id="93-峰形變寬峰位偏移">9.3 峰形變寬、峰位偏移</h3>
 <p>Configuration → <strong>Average Mode</strong> 改成 <code>Software</code> → <strong>Apply</strong>。某些機種的硬體平均器在多次讀取時會錯位。代價是速度變慢約 N 倍（N = Average Count）。</p>
 <h3 id="94-一直顯示-low-signal">9.4 一直顯示 Low Signal</h3>
@@ -1004,15 +1006,27 @@ vcruntime140_cor3.dll</code></pre>
 <p>系統日誌會有 <code>GoldenRunRatioLowSnr</code> 記錄。原因是該比值可評估的幀當中，通過 SNR 下限的<strong>不到一半</strong>，基準線被主動拒絕了。</p>
 <p>若日誌寫的是 <strong><code>GoldenRunRatioUnstableBaseline</code></strong>，原因不同：基準均值本身不夠遠離 0（例如 <code>−25 ± 95</code>）。這代表該波長沒有峰，扣背景後只剩雜訊 —— 把 <strong>Extraction</strong> 改成 <code>RawMean</code> 再錄一次。</p>
 <p>若日誌寫的是 <strong><code>LeakMonitorBaselineMismatch</code></strong>，基準線是好的，但你之後改了某個讓它失效的設定（參考譜線、監控方式、擷取方式、或升級後積分單位改變）—— 重錄即可。</p>
+<h3 id="96-日誌出現-spectrumframedropout">9.6 日誌出現 <code>SpectrumFrameDropout</code></h3>
+<p>代表<strong>光譜儀送回了整幀全暗的資料</strong>（正常幀最亮處約數萬 counts，全暗幀只有幾十）。這不是製程事件 —— 真正的電漿熄滅會持續超過一秒，而這種掉幀通常只有一到兩幀、約 0.3 秒。</p>
+<p>程式的電漿閘門會把這些幀丟掉，所以<strong>讀值不會被汙染</strong>；記這筆日誌是因為丟得無聲無息，你需要知道儀器有沒有在出這種狀況。實測曾在 13 分鐘內出現 20 幀，其中<strong>一幀落在 Golden Run 擷取視窗內就足以讓該比值的基準線被拒絕</strong>（σ 變成均值的 2.4 倍）。</p>
+<p>處理方式：</p>
+<ol>
+<li>到 Configuration 分頁把 <strong>Acquire Mode</strong> 從 <code>HardwareAverage</code> 改成 <strong><code>Oneshot</code></strong> → Apply → Save，這是 Z5 / Ethernet 模組出現分段或撕裂幀時的既有解法。
+</li>
+<li>跑一段一樣長的時間，比較日誌裡 <code>SpectrumFrameDropout</code> 的 <code>FramesThisSession</code> 數字有沒有下降。
+</li>
+<li>若沒有改善，檢查 USB／網路線材與接頭，並考慮降低積分時間。
+</li>
+</ol>
 <p>處理方式同 §9.4 —— 先把訊號救起來，再重錄。</p>
-<h3 id="96-進不了-configuration-分頁">9.6 進不了 Configuration 分頁</h3>
+<h3 id="97-進不了-configuration-分頁">9.7 進不了 Configuration 分頁</h3>
 <p>正常行為 —— 該分頁需要 <strong>Engineer</strong> 以上。點進去會跳出登入視窗，取消就退回原本的分頁。請用 Engineer 或 Admin 帳號登入。</p>
 <p>若登入後角色又掉回 Engineer 以下（例如閒置自動鎖定），畫面會自動跳回 Monitor 分頁。</p>
 <blockquote><p>📌 <strong>歷史問題（已修正）</strong>：舊版用硬編的分頁索引做這道檢查，在插入 Wavelength Calibration 分頁後指到了錯誤的分頁，導致 Configuration 一度<strong>完全沒有權限保護</strong>。現已改為以分頁名稱（<code>x:Name</code>）比對，插入新分頁不會再讓權限檢查失準。若你手上的版本早於此修正，請升級。</p></blockquote>
-<h3 id="97-改了-ratio-setup-但沒反應">9.7 改了 Ratio Setup 但沒反應</h3>
+<h3 id="98-改了-ratio-setup-但沒反應">9.8 改了 Ratio Setup 但沒反應</h3>
 <p>Ratio Setup 與 Wavelength Calibration 的修改是<strong>暫存</strong>的。按完 <strong>Save</strong> 之後，必須到 Monitor 分頁 <strong>Stop → Start</strong> 重啟擷取才會生效。</p>
 <p>（Leak Calibration 例外 —— 它存檔後立即生效。）</p>
-<h3 id="98-沒有產生-ratio-csv">9.8 沒有產生 Ratio CSV</h3>
+<h3 id="99-沒有產生-ratio-csv">9.9 沒有產生 Ratio CSV</h3>
 <p>依序確認：</p>
 <p>比值 CSV <strong>不需要</strong>記錄器武裝，也不看觸發門檻 —— 只要 OES 在擷取就該有檔案。所以依序確認：</p>
 <ol>
@@ -1025,9 +1039,9 @@ vcruntime140_cor3.dll</code></pre>
 <li>檔案位置跟強度 CSV 同一個資料夾，但<strong>檔名時間戳不同</strong> —— 別拿強度檔的時間去找它。
 </li>
 </ol>
-<h3 id="99-測試模式下警報不會跳">9.9 測試模式下警報不會跳</h3>
+<h3 id="910-測試模式下警報不會跳">9.10 測試模式下警報不會跳</h3>
 <p>這是預期行為（<code>SuppressAlarmsInTestMode</code> 預設為 <code>true</code>）。若要在測試模式下演練警報，需要改這個設定，或改用真實／異常資料。</p>
-<h3 id="910-guest-關不掉程式">9.10 Guest 關不掉程式</h3>
+<h3 id="911-guest-關不掉程式">9.11 Guest 關不掉程式</h3>
 <p>這也是刻意設計 —— 必須先 <strong>Sign In</strong>（任何非 Guest 角色都可以）才能關閉視窗。X 鈕、Alt+F4、系統選單都會被擋。</p>
 <hr>
 <h2 id="10-附錄參數預設值">10. 附錄：參數預設值</h2>
@@ -1092,8 +1106,9 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>寫出 Ratio CSV</td><td>是</td></tr>
 <tr><td>基準線接受門檻</td><td>可評估幀中至少 50% 通過 SNR</td></tr>
 <tr><td>基準均值穩定度門檻</td><td>均值 &gt; 10 σ 且 &gt; 0</td></tr>
-<tr><td>電漿存在判定（<code>Ratio</code> 模式）</td><td>參考譜線基準均值的 20%</td></tr>
-<tr><td>電漿存在判定（<code>AbsoluteIntensity</code> 模式）</td><td>記錄器的儲存觸發量 &gt; save-start 門檻</td></tr>
+<tr><td>電漿存在判定（兩種模式共用）</td><td>記錄器的儲存觸發量 &gt; save-start 門檻</td></tr>
+<tr><td>電漿存在判定（<code>Ratio</code> 模式額外要求）</td><td>參考譜線 &gt; 基準均值的 20%</td></tr>
+<tr><td>掉幀判定上限</td><td>1 秒（更久視為電漿真的關閉）</td></tr>
 <tr><td>比值數量上限</td><td>10</td></tr>
 <tr><td>波長修正上限</td><td>±5 nm</td></tr>
 </tbody></table></div>

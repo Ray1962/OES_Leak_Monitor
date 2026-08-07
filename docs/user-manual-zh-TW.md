@@ -496,7 +496,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 `AbsoluteIntensity` 的代價：**不再抵消電漿條件漂移**（功率／壓力／流量變化會直接反映在讀值上）。因此使用它時必須維持穩定的操作點，並更頻繁地重錄基準線。
 
-> **絕對強度模式的「電漿存在」判定來自記錄器的儲存觸發**（Configuration 分頁的 trigger 波長與 save-start 門檻，建議值見 **§10.2**），不再看參考譜線 —— 選了這個模式，右側就不會出現 Reference line 欄位。
+> **「電漿存在」判定來自記錄器的儲存觸發**（Configuration 分頁的 trigger 波長與 save-start 門檻，建議值見 **§10.2**）。`AbsoluteIntensity` 模式完全只看它 —— 選了這個模式，右側就不會出現 Reference line 欄位；`Ratio` 模式則是**兩個條件都要成立**：儲存觸發過門檻，而且參考譜線本身可用。
 >
 > 這樣改的原因：絕對強度模式本來就不對參考線做除法，所以那條線根本不必存在；而一條不存在的譜線扣完背景後只剩在 0 附近正負跳動的雜訊，於是「參考線 > 0」變成一枚硬幣，決定這一幀要不要計算。更糟的是，若參考線落在彎曲的連續光上（兩側基準視窗拉出的直線會高於凸型連續光），扣出來會**系統性為負**，該比值就一幀也不會被評估 —— CSV 欄位整片空白，畫面永遠停在 No Plasma。同理，參考線的 SNR 也不再影響 `Low Signal` 判定，只看被監控的那條線。
 
@@ -850,6 +850,8 @@ Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,Le
 
 Configuration → **Acquire Mode** 改成 `Oneshot` → **Apply**。常見於 Z5／乙太網路機種在長積分時間下。
 
+> 同一個設定也是**整幀全暗**（掉幀）的第一個處理方向 —— 那種狀況日誌會記 `SpectrumFrameDropout`，見 §9.6。
+
 ### 9.3 峰形變寬、峰位偏移
 
 Configuration → **Average Mode** 改成 `Software` → **Apply**。某些機種的硬體平均器在多次讀取時會錯位。代價是速度變慢約 N 倍（N = Average Count）。
@@ -873,9 +875,21 @@ Configuration → **Average Mode** 改成 `Software` → **Apply**。某些機�
 
 若日誌寫的是 **`LeakMonitorBaselineMismatch`**，基準線是好的，但你之後改了某個讓它失效的設定（參考譜線、監控方式、擷取方式、或升級後積分單位改變）—— 重錄即可。
 
+### 9.6 日誌出現 `SpectrumFrameDropout`
+
+代表**光譜儀送回了整幀全暗的資料**（正常幀最亮處約數萬 counts，全暗幀只有幾十）。這不是製程事件 —— 真正的電漿熄滅會持續超過一秒，而這種掉幀通常只有一到兩幀、約 0.3 秒。
+
+程式的電漿閘門會把這些幀丟掉，所以**讀值不會被汙染**；記這筆日誌是因為丟得無聲無息，你需要知道儀器有沒有在出這種狀況。實測曾在 13 分鐘內出現 20 幀，其中**一幀落在 Golden Run 擷取視窗內就足以讓該比值的基準線被拒絕**（σ 變成均值的 2.4 倍）。
+
+處理方式：
+
+1. 到 Configuration 分頁把 **Acquire Mode** 從 `HardwareAverage` 改成 **`Oneshot`** → Apply → Save，這是 Z5 / Ethernet 模組出現分段或撕裂幀時的既有解法。
+2. 跑一段一樣長的時間，比較日誌裡 `SpectrumFrameDropout` 的 `FramesThisSession` 數字有沒有下降。
+3. 若沒有改善，檢查 USB／網路線材與接頭，並考慮降低積分時間。
+
 處理方式同 §9.4 —— 先把訊號救起來，再重錄。
 
-### 9.6 進不了 Configuration 分頁
+### 9.7 進不了 Configuration 分頁
 
 正常行為 —— 該分頁需要 **Engineer** 以上。點進去會跳出登入視窗，取消就退回原本的分頁。請用 Engineer 或 Admin 帳號登入。
 
@@ -883,13 +897,13 @@ Configuration → **Average Mode** 改成 `Software` → **Apply**。某些機�
 
 > 📌 **歷史問題（已修正）**：舊版用硬編的分頁索引做這道檢查，在插入 Wavelength Calibration 分頁後指到了錯誤的分頁，導致 Configuration 一度**完全沒有權限保護**。現已改為以分頁名稱（`x:Name`）比對，插入新分頁不會再讓權限檢查失準。若你手上的版本早於此修正，請升級。
 
-### 9.7 改了 Ratio Setup 但沒反應
+### 9.8 改了 Ratio Setup 但沒反應
 
 Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save** 之後，必須到 Monitor 分頁 **Stop → Start** 重啟擷取才會生效。
 
 （Leak Calibration 例外 —— 它存檔後立即生效。）
 
-### 9.8 沒有產生 Ratio CSV
+### 9.9 沒有產生 Ratio CSV
 
 依序確認：
 
@@ -900,11 +914,11 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 3. 看 **Logs** 分頁有沒有 `RatioCsvSkipped`（設定被關）或 `RatioCsv_Open_Failed`（路徑寫不進去，例如磁碟滿或無權限）記錄，裡面會寫原因。
 4. 檔案位置跟強度 CSV 同一個資料夾，但**檔名時間戳不同** —— 別拿強度檔的時間去找它。
 
-### 9.9 測試模式下警報不會跳
+### 9.10 測試模式下警報不會跳
 
 這是預期行為（`SuppressAlarmsInTestMode` 預設為 `true`）。若要在測試模式下演練警報，需要改這個設定，或改用真實／異常資料。
 
-### 9.10 Guest 關不掉程式
+### 9.11 Guest 關不掉程式
 
 這也是刻意設計 —— 必須先 **Sign In**（任何非 Guest 角色都可以）才能關閉視窗。X 鈕、Alt+F4、系統選單都會被擋。
 
@@ -976,8 +990,9 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 | 寫出 Ratio CSV | 是 |
 | 基準線接受門檻 | 可評估幀中至少 50% 通過 SNR |
 | 基準均值穩定度門檻 | 均值 > 10 σ 且 > 0 |
-| 電漿存在判定（`Ratio` 模式） | 參考譜線基準均值的 20% |
-| 電漿存在判定（`AbsoluteIntensity` 模式） | 記錄器的儲存觸發量 > save-start 門檻 |
+| 電漿存在判定（兩種模式共用） | 記錄器的儲存觸發量 > save-start 門檻 |
+| 電漿存在判定（`Ratio` 模式額外要求） | 參考譜線 > 基準均值的 20% |
+| 掉幀判定上限 | 1 秒（更久視為電漿真的關閉） |
 | 比值數量上限 | 10 |
 | 波長修正上限 | ±5 nm |
 
