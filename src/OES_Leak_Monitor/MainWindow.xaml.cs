@@ -97,10 +97,9 @@ public partial class MainWindow : Window
         LogoutButton.Visibility       = role >  UserRole.Guest ? Visibility.Visible : Visibility.Collapsed;
         ManageUsersButton.Visibility  = role == UserRole.Admin ? Visibility.Visible : Visibility.Collapsed;
 
-        // If the role just dropped below Engineer while on the Configuration tab,
+        // If the role just dropped below Engineer while on one of the gated tabs,
         // snap back to Monitor so the user can't keep editing parameters.
-        if (role < UserRole.Engineer
-            && ReferenceEquals(MainTabControl.SelectedItem, ConfigurationTab))
+        if (role < UserRole.Engineer && IsEngineerGated(MainTabControl.SelectedItem))
         {
             _suppressTabChange = true;
             MainTabControl.SelectedItem = MonitorTab;
@@ -138,8 +137,16 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Gate the Configuration tab on Engineer or higher. If the active user lacks
-    /// the role, prompt for login; on cancel, snap the tab back to Monitor.
+    /// Tabs that require Engineer or higher, compared by reference so inserting a tab can
+    /// never move the gate onto the wrong one. Replay joins Configuration because it drives
+    /// the recorders and the leak-monitor alarm gate.
+    /// </summary>
+    private bool IsEngineerGated(object? tab) =>
+        ReferenceEquals(tab, ConfigurationTab) || ReferenceEquals(tab, ReplayTab);
+
+    /// <summary>
+    /// Gate the Engineer-only tabs. If the active user lacks the role, prompt for login;
+    /// on cancel, snap the tab back to where it was.
     /// </summary>
     private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -148,7 +155,7 @@ public partial class MainWindow : Window
 
         var newIndex = MainTabControl.SelectedIndex;
 
-        if (ReferenceEquals(MainTabControl.SelectedItem, ConfigurationTab)
+        if (IsEngineerGated(MainTabControl.SelectedItem)
             && Vm.AccessControl.CurrentRole < UserRole.Engineer)
         {
             if (!TryRequireEngineer())

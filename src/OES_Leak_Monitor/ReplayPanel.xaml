@@ -1,0 +1,113 @@
+<UserControl x:Class="OES_Leak_Monitor.ReplayPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:OES_Leak_Monitor"
+             xmlns:oxy="http://oxyplot.org/wpf">
+
+    <DockPanel Background="#F4F6FA">
+
+        <!-- Source recording -->
+        <Border DockPanel.Dock="Top" Background="#FAFAFA"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Recording:" FontWeight="Bold" VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <Button Content="Choose CSV…" Command="{Binding ChooseFileCommand}"
+                            Padding="12,4" MinWidth="110" Margin="0,0,8,0"
+                            ToolTip="Pick a recorded full-spectrum CSV (the wide format the intensity logger writes) to replay through the live pipeline. Frames are delivered on the recording's own wavelength axis, so the leak monitor sees exactly what it would see on hardware."/>
+                    <Button Content="Clear" Command="{Binding ClearFileCommand}"
+                            Padding="12,4" MinWidth="70" Margin="0,0,12,0"
+                            ToolTip="Forget the selected recording; test mode reverts to the built-in synthetic spectra."/>
+                    <TextBlock Text="{Binding FileText}" VerticalAlignment="Center"
+                               Foreground="#445" TextTrimming="CharacterEllipsis" MaxWidth="560"
+                               ToolTip="{Binding FileText}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding AxisText}" Foreground="#777" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Transport -->
+        <Border DockPanel.Dock="Top" Background="White"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Border Background="{Binding StateBrush}" CornerRadius="3" Padding="8,2"
+                            MinWidth="84" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="{Binding StateText}" Foreground="White"
+                                   FontWeight="Bold" FontSize="11" HorizontalAlignment="Center"/>
+                    </Border>
+
+                    <Button Content="Play" Command="{Binding PlayCommand}"
+                            Padding="14,4" MinWidth="80" Margin="0,0,6,0"
+                            ToolTip="Start (or resume) playback. The virtual clock starts now and advances by the recording's own frame intervals, so the EMA, confirmation times and slopes behave exactly as they did on the tool."/>
+                    <Button Content="Pause" Command="{Binding PauseCommand}"
+                            Padding="14,4" MinWidth="80" Margin="0,0,6,0"
+                            ToolTip="Freeze playback. No frames are delivered while paused, and no gap appears in the frame timestamps when you resume."/>
+                    <Button Content="Restart" Command="{Binding RestartCommand}"
+                            Padding="14,4" MinWidth="80" Margin="0,0,6,0"
+                            ToolTip="Rewind to the first frame and play again — the usual loop when re-running the same data after changing a threshold."/>
+                    <Button Content="Stop" Command="{Binding StopCommand}"
+                            Padding="14,4" MinWidth="80" Margin="0,0,16,0"
+                            ToolTip="End playback and hand the stream back to the built-in synthetic spectra."/>
+
+                    <TextBlock Text="Speed:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox ItemsSource="{x:Static local:ReplayViewModel.SpeedOptions}"
+                              SelectedItem="{Binding SelectedSpeed}"
+                              Width="70" VerticalAlignment="Center" Margin="0,0,16,0"
+                              ToolTip="Fast-forward factor. The frame timestamps scale with it, so the algorithms behave identically — 20× just delivers the same evidence in a twentieth of the wall time. The recorders write at the same multiple, which is what limits it.">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding StringFormat={}{0}×}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Text="{Binding PositionText}" VerticalAlignment="Center"
+                               FontFamily="Consolas" Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding FrameText}" VerticalAlignment="Center"
+                               Foreground="#777"/>
+                </StackPanel>
+
+                <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100"
+                             Height="6" Margin="0,8,0,0"/>
+
+                <TextBlock Text="{Binding SpeedWarning}" Foreground="#B8860B"
+                           FontWeight="SemiBold" Margin="0,6,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SpeedWarning}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- Run conditions -->
+        <Border DockPanel.Dock="Top" Background="#FAFAFA"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <CheckBox Content="Raise leak alarms during replay"
+                              IsChecked="{Binding AlarmsEnabledInTestMode}"
+                              VerticalAlignment="Center" Margin="0,0,10,0"
+                              ToolTip="Test-mode frames normally raise no alarm transitions, because synthetic spectra would fill the system log with meaningless ones. Replaying a real recording is the case where the alarms are exactly what you are checking, so switch them on here. Persisted immediately."/>
+                    <TextBlock Text="{Binding AlarmGateNote}" VerticalAlignment="Center"
+                               Foreground="#445"/>
+                </StackPanel>
+                <TextBlock Text="{Binding StatusText}" Margin="0,6,0,0" Foreground="#334"
+                           TextWrapping="Wrap"/>
+                <TextBlock Margin="0,6,0,0" Foreground="#777" TextWrapping="Wrap"
+                           Text="Playback needs the OES connected and acquiring in test mode (Monitor tab → Connect → Start). While a replay runs, the recorders write with a SIM file prefix into today's data folder, so replayed data is never mistaken for a real run. Note that a Golden Run captured on synthetic spectra does not apply to a recording — capture a new baseline from the replay itself."/>
+            </StackPanel>
+        </Border>
+
+        <!-- Frame preview, on the recording's own axis -->
+        <oxy:PlotView Model="{Binding PlotModel}" Background="White"/>
+    </DockPanel>
+</UserControl>

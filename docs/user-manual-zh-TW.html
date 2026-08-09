@@ -131,9 +131,10 @@ td code{white-space:nowrap;}
 <a class="l3" href="#64-ratio-setup比值設定">6.4 Ratio Setup（比值設定）</a>
 <a class="l3" href="#65-wavelength-calibration波長校正">6.5 Wavelength Calibration（波長校正）</a>
 <a class="l3" href="#66-leak-calibration洩漏率校正">6.6 Leak Calibration（洩漏率校正）</a>
-<a class="l3" href="#67-recordings光譜回放">6.7 Recordings（光譜回放）</a>
-<a class="l3" href="#68-ratio-review比值回放">6.8 Ratio Review（比值回放）</a>
-<a class="l3" href="#69-logs系統日誌">6.9 Logs（系統日誌）</a>
+<a class="l3" href="#67-replay重播驗證">6.7 Replay（重播驗證）</a>
+<a class="l3" href="#68-recordings光譜回放">6.8 Recordings（光譜回放）</a>
+<a class="l3" href="#69-ratio-review比值回放">6.9 Ratio Review（比值回放）</a>
+<a class="l3" href="#610-logs系統日誌">6.10 Logs（系統日誌）</a>
 <a class="l2" href="#7-檔案與資料夾">7. 檔案與資料夾</a>
 <a class="l3" href="#71-位置">7.1 位置</a>
 <a class="l3" href="#72-檔名規則">7.2 檔名規則</a>
@@ -145,6 +146,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#82-換配方">8.2 換配方</a>
 <a class="l3" href="#83-警報發生時">8.3 警報發生時</a>
 <a class="l3" href="#84-定期維護">8.4 定期維護</a>
+<a class="l3" href="#85-演算法驗證抓基線-重播-比對轉態時間">8.5 演算法驗證：抓基線 → 重播 → 比對轉態時間</a>
 <a class="l2" href="#9-疑難排解">9. 疑難排解</a>
 <a class="l3" href="#91-按-connect-後掉進測試模式明明接了硬體">9.1 按 Connect 後掉進測試模式（明明接了硬體）</a>
 <a class="l3" href="#92-光譜幀出現斷裂撕裂">9.2 光譜幀出現斷裂／撕裂</a>
@@ -157,6 +159,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#99-沒有產生-ratio-csv">9.9 沒有產生 Ratio CSV</a>
 <a class="l3" href="#910-測試模式下警報不會跳">9.10 測試模式下警報不會跳</a>
 <a class="l3" href="#911-guest-關不掉程式">9.11 Guest 關不掉程式</a>
+<a class="l3" href="#912-重播的結果和實機當時不一樣">9.12 重播的結果和實機當時不一樣</a>
 <a class="l2" href="#10-附錄參數預設值">10. 附錄：參數預設值</a>
 <a class="l3" href="#101-硬體參數">10.1 硬體參數</a>
 <a class="l3" href="#102-記錄器觸發建議值">10.2 記錄器觸發（建議值）</a>
@@ -170,7 +173,7 @@ td code{white-space:nowrap;}
 </nav>
 <main>
 <h1 id="oes-leak-monitor-操作手冊">OES Leak Monitor 操作手冊</h1>
-<blockquote><p>版本對應：<code>Aqst.OesSpectrometer 0.4.6</code> / <code>Aqst.OesApp.Core 0.1.7</code> / <code>Aqst.OesApp.Wpf 0.1.11</code> 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）</p></blockquote>
+<blockquote><p>版本對應：<code>Aqst.OesSpectrometer 0.4.6</code> / <code>Aqst.OesApp.Core 0.1.7</code> / <code>Aqst.OesApp.Wpf 0.1.12</code> 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）</p></blockquote>
 <hr>
 <h2 id="目錄">目錄</h2>
 <ol>
@@ -269,11 +272,11 @@ vcruntime140_cor3.dll</code></pre>
 <p>沒接到光譜儀時，按 <strong>Connect</strong> 會自動退回<strong>測試模式</strong>，產生合成光譜（正弦波＋雜訊，約 200–800 nm、1000 點）。整個 UI 都能操作，適合教育訓練與功能驗證。</p>
 <p>在測試模式下：</p>
 <ul>
-<li>Leak Monitor 分頁會顯示 <strong>"test mode"</strong> 註記。
+<li>Leak Monitor 分頁會顯示 <strong>"test mode"</strong> 註記，並註明目前的光譜來源是合成波形還是重播的錄檔、警報是否生效。
 </li>
-<li><strong>警報預設被抑制</strong>（<code>SuppressAlarmsInTestMode</code>），比值照算照畫，但不會真的跳 ALARM。
+<li><strong>警報預設被抑制</strong>（<code>SuppressAlarmsInTestMode</code>），比值照算照畫，但不會真的跳 ALARM。要演練警報，在 <strong>Replay</strong> 分頁勾 <strong>Raise leak alarms during replay</strong>。
 </li>
-<li>可以在 Configuration 分頁用 <strong>Choose CSV…</strong> 選一個已錄製的全光譜 CSV 來取代合成波形（見 §6.2.4）。
+<li>可以在 <strong>Replay</strong> 分頁選一個已錄製的全光譜 CSV 來取代合成波形，用真實電漿資料驗證偵測演算法（見 §6.7 與 §8.5）。
 </li>
 </ul>
 <hr>
@@ -304,7 +307,7 @@ vcruntime140_cor3.dll</code></pre>
 <p>若在 Configuration 分頁時角色掉到 Engineer 以下，畫面會自動跳回 Monitor 分頁。</p>
 <hr>
 <h2 id="4-畫面總覽">4. 畫面總覽</h2>
-<p>視窗上方是工具列（標題、狀態訊息、使用者／角色），下方是九個分頁：</p>
+<p>視窗上方是工具列（標題、狀態訊息、使用者／角色），下方是十個分頁：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>分頁</th><th>用途</th><th>權限</th></tr></thead>
 <tbody>
@@ -313,12 +316,13 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>3</td><td><strong>Ratio Setup</strong></td><td>設定要監控哪些譜線比值、門檻</td><td>Engineer+ 存檔</td></tr>
 <tr><td>4</td><td><strong>Wavelength Calibration</strong></td><td>波長漂移補償（校正整個 catalog 的譜線位置）</td><td>Engineer+ 存檔</td></tr>
 <tr><td>5</td><td><strong>Leak Calibration</strong></td><td>用已知漏率的標準漏孔，把比值上升換算成 mbar·L/s</td><td>Engineer+ 存檔</td></tr>
-<tr><td>6</td><td><strong>Configuration</strong></td><td>光譜儀硬體參數 + 資料記錄器設定</td><td>Engineer+</td></tr>
-<tr><td>7</td><td><strong>Recordings</strong></td><td>回放已存的光譜 CSV（線圖／熱圖／單幀光譜）</td><td>全開放</td></tr>
-<tr><td>8</td><td><strong>Ratio Review</strong></td><td>回放已存的比值 CSV（% 基準／原始比值／洩漏率）</td><td>全開放</td></tr>
-<tr><td>9</td><td><strong>Logs</strong></td><td>系統稽核日誌</td><td>全開放</td></tr>
+<tr><td>6</td><td><strong>Replay</strong></td><td>把已錄製的光譜重播進整條偵測流程，無硬體驗證演算法</td><td>Engineer+</td></tr>
+<tr><td>7</td><td><strong>Configuration</strong></td><td>光譜儀硬體參數 + 資料記錄器設定</td><td>Engineer+</td></tr>
+<tr><td>8</td><td><strong>Recordings</strong></td><td>回放已存的光譜 CSV（線圖／熱圖／單幀光譜）</td><td>全開放</td></tr>
+<tr><td>9</td><td><strong>Ratio Review</strong></td><td>回放已存的比值 CSV（% 基準／原始比值／洩漏率）</td><td>全開放</td></tr>
+<tr><td>10</td><td><strong>Logs</strong></td><td>系統稽核日誌</td><td>全開放</td></tr>
 </tbody></table></div>
-<blockquote><p>Configuration 分頁在切入時會檢查角色；權限不足會跳出登入視窗，取消就退回原本的分頁。</p></blockquote>
+<blockquote><p><strong>Configuration</strong> 與 <strong>Replay</strong> 分頁在切入時會檢查角色；權限不足會跳出登入視窗，取消就退回原本的分頁。</p></blockquote>
 <hr>
 <h2 id="5-快速上手從零到監控">5. 快速上手：從零到監控</h2>
 <p>第一次在一台新機台上導入，依序做完這六步：</p>
@@ -551,16 +555,8 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 </ul>
 <p><strong>Logger Status</strong> 區塊顯示狀態機目前狀態（<code>Idle</code> / <code>WaitingToStart</code> / <code>Saving</code> / <code>WaitingToStop</code>）與目前檔名。本專案是單一 OES，所以只會看到一列 <strong>"OES #1 file"</strong>。</p>
-<h4 id="624-test-mode-sim測試模式光譜播放">6.2.4 Test-mode sim（測試模式光譜播放）</h4>
-<p>底部動作列右側：</p>
-<ul>
-<li><strong>Choose CSV…</strong> — 選一個已錄製的<strong>全光譜 CSV</strong>（就是記錄器寫出的那種寬格式），在測試模式下當成模擬電漿播放，播完自動循環。路徑會被記住，下次開機自動載入。
-</li>
-<li><strong>Clear</strong> — 回到內建的合成光譜。
-</li>
-</ul>
-<p>用途：不用接硬體就能重現真實製程資料，驗證比值設定、門檻、記錄流程是否正確。</p>
-<blockquote><p>⚠️ 播放受限於測試模式的波長軸（約 200–800 nm、1000 點）。<strong>軸外的波長會被丟棄</strong>（例如 Ar 811.5 nm），細節也會被內插掉。</p></blockquote>
+<h4 id="624-測試模式光譜播放">6.2.4 測試模式光譜播放</h4>
+<p>已經搬到專屬的 <strong>Replay</strong> 分頁（見 §6.7）。驗證演算法需要的是播放控制、倍速與進度，不是一個選檔按鈕。底部動作列這裡只留一行提示。</p>
 <hr>
 <h3 id="63-leak-monitor洩漏監控主畫面">6.3 Leak Monitor（洩漏監控主畫面）</h3>
 <p>這是日常監看時盯著的畫面。由上而下四層：</p>
@@ -792,7 +788,44 @@ vcruntime140_cor3.dll</code></pre>
 <p>若某個比值的 <code>x</code> 單位在校正之後被改過（改了監控方式或擷取方式，使讀值從「帶基座」變成「不帶基座」或反之），該比值的擬合會被拒用 —— 兩種單位的斜率不能互相套用。這也代表<strong>升級到本版之後，絕對強度比值的舊校正一律要重做</strong>。</p>
 <blockquote><p>完整的數學模型與設計文件見 <code>docs/leak-rate-calibration.md</code>。</p></blockquote>
 <hr>
-<h3 id="67-recordings光譜回放">6.7 Recordings（光譜回放）</h3>
+<h3 id="67-replay重播驗證">6.7 Replay（重播驗證）</h3>
+<blockquote><p>權限：<strong>Engineer 以上</strong>。</p></blockquote>
+<p>把一份<strong>已錄製的全光譜 CSV</strong> 當成即時光譜餵進整條流程 —— Leak Monitor、兩張趨勢圖、以及兩個記錄器都會收到 —— 用來在<strong>沒有硬體</strong>的情況下驗證偵測演算法。與 §6.8 Recordings 的差別：Recordings 是把資料畫出來給人看，Replay 是把資料<strong>重新跑一遍給程式判斷</strong>。</p>
+<p><strong>控制項</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>控制</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Choose CSV…</strong></td><td>選一份全光譜錄檔（記錄器寫出的寬格式）。載入不等於開始播</td></tr>
+<tr><td><strong>Clear</strong></td><td>放掉錄檔，測試模式回到內建合成光譜</td></tr>
+<tr><td><strong>Play</strong></td><td>開始播放，或從暫停繼續。在 <code>READY</code> / <code>FINISHED</code> 狀態按會<strong>從第一幀重來</strong></td></tr>
+<tr><td><strong>Pause</strong></td><td>凍結。暫停期間不送出任何幀，續播時幀時間戳<strong>不會出現斷點</strong></td></tr>
+<tr><td><strong>Restart</strong></td><td>倒回第一幀重播（等於重新做一次同樣的驗證）</td></tr>
+<tr><td><strong>Stop</strong></td><td>結束重播，串流交還內建合成光譜</td></tr>
+<tr><td><strong>Speed</strong></td><td><code>1×</code> / <code>5×</code> / <code>20×</code> 快轉倍率</td></tr>
+<tr><td><strong>Raise leak alarms during replay</strong></td><td>讓測試模式的幀也產生警報轉態並寫進系統日誌</td></tr>
+<tr><td>狀態徽章</td><td><code>NO FILE</code> / <code>READY</code> / <code>PLAYING</code> / <code>PAUSED</code> / <code>FINISHED</code></td></tr>
+<tr><td>進度列與 <code>mm:ss / mm:ss</code>、<code>frame N / M</code></td><td>播放進度</td></tr>
+<tr><td>下方圖</td><td>目前正在送出的那一幀，畫在<strong>錄檔自己的波長軸</strong>上</td></tr>
+</tbody></table></div>
+<p><strong>必須知道的六件事</strong></p>
+<ol>
+<li><strong>要先讓 OES 在跑。</strong> 重播是靠裝置的取樣節拍推動的，所以順序是 Monitor 分頁 <strong>Connect → Start</strong>（無硬體會自動進測試模式），再回來按 Play。
+</li>
+<li><strong>用錄檔自己的波長軸。</strong> 例如 1896 點、179.8–850.3 nm，而不是測試模式那條 1000 點、200–800 nm 的合成軸。Ar 811.5 nm 這種超出合成軸的譜線才不會被丟掉，比值、σ、SNR、洩漏率才會和真機一致。
+</li>
+<li><strong>幀間隔照錄檔。</strong> 播放用虛擬時鐘：起點是按下 Play 的時刻，之後每一幀推進錄檔原本的間隔。倍速只縮短<strong>實際等待時間</strong>，演算法看到的時間軸等比例縮放，判斷結果不變 —— 20× 只是同一份證據送得快 20 倍。
+</li>
+<li><strong>只播一次。</strong> 播到最後一幀就停在那裡（<code>FINISHED</code>），不會循環。循環會把檔尾接回檔頭，下游的基線與警報會把那個接縫當成真實的階躍變化。
+</li>
+<li><strong>產出檔名帶 <code>SIM</code>。</strong> 重播期間兩個記錄器都改寫 <code>SIMP_OES1_*</code> / <code>SIMP_Ratio_*</code>，落在<strong>今天</strong>的資料夾。Recordings 與 Ratio Review 照樣列得出來，但一眼就分得出不是量測資料。
+</li>
+<li><strong>真實硬體的幀永遠不會被取代。</strong> 只有測試模式的幀會被換掉。
+</li>
+</ol>
+<blockquote><p>⚠️ <strong>重播的第一秒會跳一次 <code>LeakMonitorAcquisitionMismatch</code>。</strong> 按下 Start 時裝置回報的還是合成軸（1000 點），基線若是從重播抓的（1896 點）就對不上。等重播的幀開始流動，比對對象換成錄檔的軸，警告就不再出現。只要基線與待驗證的錄檔來自同一台機、同一組曝光參數，這一次警告可以忽略。</p></blockquote>
+<blockquote><p>⚠️ <strong>不要拿實機抓的 Golden Run 去驗證重播。</strong> 錄檔裡沒有當初的曝光參數，重播的幀帶的是裝置目前的設定。基線請從重播本身抓 —— 完整做法見 §8.5。</p></blockquote>
+<hr>
+<h3 id="68-recordings光譜回放">6.8 Recordings（光譜回放）</h3>
 <p>回放記錄器寫出的光譜 CSV。<strong>已被壓縮的日期也會列出</strong>（標示 <code>zip</code>），選取時直接從壓縮檔讀取，不必先解壓縮（見 §7.4）。</p>
 <p><strong>工具列</strong></p>
 <div class="tablewrap"><table>
@@ -819,7 +852,7 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 </ul>
 <hr>
-<h3 id="68-ratio-review比值回放">6.8 Ratio Review（比值回放）</h3>
+<h3 id="69-ratio-review比值回放">6.9 Ratio Review（比值回放）</h3>
 <p>回放記錄器寫出的比值 CSV（<code>{prefix}_Ratio_*.csv</code>）。<strong>已被壓縮的日期一併列出</strong>（標示 <code>zip</code>），直接從壓縮檔讀取。</p>
 <p><strong>三種檢視模式</strong>（同樣以綠框標示目前模式）：</p>
 <div class="tablewrap"><table>
@@ -833,7 +866,7 @@ vcruntime140_cor3.dll</code></pre>
 <blockquote><p>📝 <strong>Leak rate</strong> 模式只有在該 CSV 含有 <code>LeakRate</code> / <code>LeakRateSigma</code> 欄位時才有東西可畫。校正功能上線前錄的舊檔沒有這兩欄，仍然可以正常開啟與檢視前兩種模式。</p></blockquote>
 <p>其餘按鈕（Refresh / Open Base / Open Folder / Open File / Zoom All / Save PNG / Copy Image / Search）用法同 Recordings。</p>
 <hr>
-<h3 id="69-logs系統日誌">6.9 Logs（系統日誌）</h3>
+<h3 id="610-logs系統日誌">6.10 Logs（系統日誌）</h3>
 <p>顯示系統稽核日誌，記錄：</p>
 <ul>
 <li>裝置連線／中斷、擷取啟停
@@ -894,9 +927,18 @@ vcruntime140_cor3.dll</code></pre>
 </ul>
 <blockquote><p>⚠️ 看到 <code>SpectrumAxisChanged</code> 就代表這一爐的資料被切成<strong>兩段不同波長軸</strong>的檔案。若它是因為你改了曝光相關參數而產生，<strong>請重錄 Golden Run</strong> —— 舊基準線是在舊曝光條件下錄的。</p></blockquote>
 <h3 id="73-比值-csv-格式">7.3 比值 CSV 格式</h3>
-<pre><code>Timestamp,R_O,R_O_pctBaseline,R_OH,R_OH_pctBaseline,…,OverallState,LeakRate,LeakRateSigma</code></pre>
+<pre><code>Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBaseline,…,OverallState,LeakRate,LeakRateSigma</code></pre>
 <p>每個比值兩欄（原始值 + % 基準），最後三欄是整體狀態與洩漏率估計。欄位是<strong>依標題名稱</strong>尋址的，所以舊版沒有 <code>LeakRate</code> 欄位的檔案仍可正常解析。</p>
-<blockquote><p>第二欄的名稱會說明它裝的是什麼：一般是 <code>R_x_pctBaseline</code>（% 基準）；若該比值採 <code>AbsoluteIntensity</code> + <code>RawMean</code>，就會是 <strong><code>R_x_sigmaScore</code></strong>（σ 分數）。兩者都畫在同一組 100/120/150 標尺上，但<strong>不是同一個量</strong>，所以 Ratio Review 會在圖例標上 <code>(σ-score)</code>。</p></blockquote>
+<p><strong>欄名同時帶著名字與代號</strong>：<code>{顯示名稱} [{key}]</code>。</p>
+<ul>
+<li><strong>名字</strong>是你在 Ratio Setup 取的顯示名稱，讓檔案自己說明它記的是哪條譜線 —— 用 Excel 打開就看得懂，不必回去對 <code>settings.json</code>。
+</li>
+<li><strong><code>key</code></strong>（例如 <code>R_7c40d2f9</code>）是這條比值建立時產生的隨機識別碼，<strong>永遠不會變</strong>。改名字、換門檻、換抽取模式它都不動，Golden Run 基準線與洩漏率校正才不會因為你改了個名字就失效。程式一律認這個碼。
+</li>
+</ul>
+<blockquote><p>📝 <strong>舊檔（欄名只有 <code>R_xxxxxxxx</code>）照樣讀得開</strong>，只是 Ratio Review 的圖例會顯示代號而不是名字 —— 那些檔案裡沒有名字可用。</p></blockquote>
+<blockquote><p>第二欄的名稱會說明它裝的是什麼：一般是 <code>…_pctBaseline</code>（% 基準）；若該比值採 <code>AbsoluteIntensity</code> + <code>RawMean</code>，就會是 <strong><code>…_sigmaScore</code></strong>（σ 分數）。兩者都畫在同一組 100/120/150 標尺上，但<strong>不是同一個量</strong>，所以 Ratio Review 會在圖例標上 <code>(σ-score)</code>。</p></blockquote>
+<blockquote><p>⚠️ 顯示名稱裡的逗號會被寫成分號、中括號會被寫成小括號 —— 否則會把 CSV 的欄位切壞。取名字時盡量只用物種、波長與斜線，例如 <code>N2 337.1 / Ar 750.4</code>、<code>N2 337.1 (abs)</code>。</p></blockquote>
 <p><strong>比值檔與強度檔是各自獨立的記錄器</strong>，只共用同一個輸出資料夾與檔名前綴：</p>
 <div class="tablewrap"><table>
 <thead><tr><th></th><th>強度 CSV（<code>_OES1_</code>）</th><th>比值 CSV（<code>_Ratio_</code>）</th></tr></thead>
@@ -998,6 +1040,86 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>定期</td><td>檢視 <code>Data\</code> 資料夾用量（見 §7.4）。程式<strong>不會刪除</strong>量測資料 —— 需要時開啟自動壓縮，或自行轉存到伺服器</td></tr>
 </tbody></table></div>
 <hr>
+<h3 id="85-演算法驗證抓基線-重播-比對轉態時間">8.5 演算法驗證：抓基線 → 重播 → 比對轉態時間</h3>
+<blockquote><p>權限：<strong>Engineer 以上</strong>。不需要硬體，也不會動到正在生產的機台。</p></blockquote>
+<p><strong>什麼時候做</strong>：改過比值設定、抽取模式、警報門檻或波長校正之後，要回答「這組新設定拿去跑當初那一次真實洩漏，抓不抓得到、以及慢多久」。這是唯一能在不製造洩漏的情況下量化偵測靈敏度與延遲的方法。</p>
+<h4 id="準備兩段來自同一次製程的錄檔">準備：兩段來自同一次製程的錄檔</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>段別</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td><strong>基線段</strong></td><td>全程 <code>Normal</code>、確定沒有洩漏的一段。通常就是當初在機台上錄 Golden Run 的那一段</td></tr>
+<tr><td><strong>事件段</strong></td><td>已知有洩漏、實機當時真的跳過警報的一段</td></tr>
+</tbody></table></div>
+<p>兩段必須是<strong>同一次連續電漿、同一組曝光參數</strong>，否則基線對事件段不成立。確認方式：</p>
+<ul>
+<li>Logs 分頁看兩段之間有沒有 <code>Acquisition_Stop</code> 之外的中斷；換過積分時間或平均次數就不算同一次。
+</li>
+<li>Ratio Review 把兩段接起來看，接縫處的比值應該是連續的（差幾個 % 以內）。
+</li>
+<li>注意錄檔會<strong>輪替</strong>：一次採集可能被切成 <code>_0807211351</code> / <code>_0807212620</code> / <code>_0807213124</code> 好幾個檔，它們共用同一份 <code>P_Ratio_*</code> 比值檔。用 Logs 裡的 <code>IntensityLogger_FilesChanged</code> 對出每個檔涵蓋的時間。
+</li>
+</ul>
+<h4 id="步驟-1-用基線段抓-golden-run">步驟 1 — 用基線段抓 Golden Run</h4>
+<ol>
+<li><strong>Replay</strong> 分頁 → <strong>Choose CSV…</strong> → 選<strong>基線段</strong>。
+</li>
+<li><strong>Monitor</strong> 分頁 → <strong>Connect</strong> → <strong>Start</strong>（無硬體會進測試模式）。
+</li>
+<li>回 <strong>Replay</strong> → <strong>Play</strong>（這一步用 <code>1×</code>，讓平滑與 SNR 有正常的時間行為）。
+</li>
+<li>等 Leak Monitor 的各比值 SNR 與讀值平穩後，按 <strong>Capture Golden Run</strong>，取一個看得出來源的名字，例如 <code>Replay 0807-2109</code>。
+</li>
+<li>捕捉完成後檢查日誌：出現 <code>GoldenRunCaptured</code> 才算成功。若出現 <code>GoldenRunRatioUnstableBaseline</code> 或 <code>GoldenRunRatioLowSnr</code>，代表那條比值的基線被拒絕，先處理再往下（見 §9.5）。
+</li>
+<li>按 <strong>Save</strong>。
+</li>
+</ol>
+<blockquote><p>⚠️ <strong>絕對不要拿事件段抓基線。</strong> 基線若落在洩漏已經發生的區間，同一份資料之後就會顯得正常，警報延後甚至完全不跳。實測過一次：把基線抓在告警期間，同一份事件檔的 <strong>Warning 延後 181 秒、Alarm 延後 212 秒</strong>，而原始比值一模一樣 —— 純粹是基線的位置造成的。</p></blockquote>
+<h4 id="步驟-2-重播事件段">步驟 2 — 重播事件段</h4>
+<ol>
+<li><strong>Replay</strong> → <strong>Stop</strong>（若還在播）→ <strong>Choose CSV…</strong> → 選<strong>事件段</strong>。
+</li>
+<li>勾 <strong>Raise leak alarms during replay</strong>。<strong>沒勾就不會有 <code>LeakMonitorState</code> 進日誌</strong>，只有畫面看得到。
+</li>
+<li>確認 Leak Monitor 用的是步驟 1 存的那個 Golden Run。
+</li>
+<li><strong>Play</strong>。趕時間可以用 <code>5×</code> / <code>20×</code>，時間軸等比例縮放，判斷結果不變。
+</li>
+<li>讓它播到底（狀態變 <code>FINISHED</code>）。中途按 Stop 的話日誌會寫 <code>stopped by the operator</code>，那一輪的資料不完整、不能拿來比。
+</li>
+</ol>
+<h4 id="步驟-3-比對轉態時間">步驟 3 — 比對轉態時間</h4>
+<p>資料有兩個來源，兩個都看：</p>
+<ul>
+<li>系統日誌的 <code>LeakMonitorState</code>（<code>From=Normal,To=Warning</code> 這種）。
+</li>
+<li>這一輪寫出的 <code>SIMP_Ratio_*.csv</code> 的 <code>OverallState</code> 欄位（Ratio Review 也可以直接開）。
+</li>
+</ul>
+<p><strong>換算方式</strong>：重播的幀時間戳 = 按下 Play 的時刻 + 錄檔中該幀的相對時間。所以只要換算成「<strong>距離播放開始幾秒</strong>」，就能直接和實機當年「距離該錄檔第一幀幾秒」對齊 —— 不必管日期。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>比對項目</th><th>期望結果</th></tr></thead>
+<tbody>
+<tr><td><code>SIMP_Ratio_*.csv</code> 列數</td><td>等於錄檔幀數（日誌 <code>ReplayStarted</code> 的 <code>Frames=</code> 值）</td></tr>
+<tr><td>首次 <code>Warning</code> 的相對秒數</td><td>與實機同一段相同（差幾幀之內）</td></tr>
+<tr><td>首次 <code>Alarm</code> 的相對秒數</td><td>同上</td></tr>
+<tr><td><code>Idle</code>（電漿瞬斷）出現的位置</td><td>落在<strong>同一幀</strong> —— 這是資料驅動的事件，可以當成對齊是否正確的檢查點</td></tr>
+<tr><td>未改動的比值原始值</td><td>與實機逐幀相同（CSV 只有六位有效數字，差 0.001 % 以內屬正常）</td></tr>
+</tbody></table></div>
+<p>把每次驗證的結果記下來（設定版本、基線名稱、Warning / Alarm 的相對秒數），下次改設定就有得比。可以寫在 Recordings 分頁的 <strong>Notes</strong>（會存成 CSV 旁的 <code>.notes.txt</code>）。</p>
+<h4 id="差異怎麼解讀">差異怎麼解讀</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>現象</th><th>通常原因</th></tr></thead>
+<tbody>
+<tr><td><strong>原始比值本身就不一樣</strong></td><td>比值定義被改過。抽取模式在 <code>PeakHeight</code> ↔ <code>RawMean</code> 之間切換會讓數值差 2–4 倍（<code>RawMean</code> 含連續光背景）；或波長校正 overlay 動過</td></tr>
+<tr><td>原始比值相同、<strong>% of baseline 不同</strong></td><td>基線不同 —— 換了 Golden Run，或基線抓的位置不同</td></tr>
+<tr><td><strong>轉態整體延後</strong></td><td>基線偏高（多半是抓在洩漏已經開始的區間），或 warn / alarm 門檻被調高</td></tr>
+<tr><td><strong>完全不跳警報</strong></td><td>先確認有勾 Raise leak alarms during replay；再看主力比值是不是被 SNR gate 擋成 <code>LowSignal</code></td></tr>
+<tr><td>日誌沒有任何 <code>LeakMonitorState</code></td><td>沒勾 Raise leak alarms during replay（狀態其實有變，只是沒寫進日誌）</td></tr>
+<tr><td>欄名從 <code>_pctBaseline</code> 變成 <code>_sigmaScore</code></td><td>該比值改成了絕對強度 + <code>RawMean</code>，監控的量已經換成 σ 分數，不能和舊檔的百分比直接比</td></tr>
+</tbody></table></div>
+<blockquote><p>💡 比對兩份比值 CSV 時，<strong>認欄名中括號裡的 <code>key</code></strong>（例如 <code>[R_7c40d2f9]</code>），不要認名字 —— 名字可以被改，key 不會（見 §7.3）。</p></blockquote>
+<hr>
 <h2 id="9-疑難排解">9. 疑難排解</h2>
 <h3 id="91-按-connect-後掉進測試模式明明接了硬體">9.1 按 Connect 後掉進測試模式（明明接了硬體）</h3>
 <p>最常見原因：<strong>原生 DLL 不在 <code>.exe</code> 旁邊</strong>。</p>
@@ -1070,9 +1192,23 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 </ol>
 <h3 id="910-測試模式下警報不會跳">9.10 測試模式下警報不會跳</h3>
-<p>這是預期行為（<code>SuppressAlarmsInTestMode</code> 預設為 <code>true</code>）。若要在測試模式下演練警報，需要改這個設定，或改用真實／異常資料。</p>
+<p>這是預期行為（<code>SuppressAlarmsInTestMode</code> 預設為 <code>true</code>）：合成光譜會把系統日誌灌滿沒有意義的警報。要演練警報，在 <strong>Replay</strong> 分頁勾 <strong>Raise leak alarms during replay</strong> —— 那正是要檢查警報的場合。</p>
+<p>注意這個開關管的是<strong>警報轉態有沒有被記錄與latch</strong>；Leak Monitor 分頁的狀態不管勾不勾都照算照顯示，<code>SIMP_Ratio_*.csv</code> 的 <code>OverallState</code> 欄也照寫。所以「日誌裡一行 <code>LeakMonitorState</code> 都沒有」不等於「沒偵測到」，先去比值 CSV 看那一欄。</p>
 <h3 id="911-guest-關不掉程式">9.11 Guest 關不掉程式</h3>
 <p>這也是刻意設計 —— 必須先 <strong>Sign In</strong>（任何非 Guest 角色都可以）才能關閉視窗。X 鈕、Alt+F4、系統選單都會被擋。</p>
+<h3 id="912-重播的結果和實機當時不一樣">9.12 重播的結果和實機當時不一樣</h3>
+<p>先分清楚是<strong>光譜</strong>不同還是<strong>判讀</strong>不同 —— 重播送出的光譜是逐幀原樣的，所以幾乎都是後者。</p>
+<ol>
+<li>打開這一輪的 <code>SIMP_Ratio_*.csv</code> 和實機當時的 <code>P_Ratio_*.csv</code>，比<strong>原始比值欄</strong>（不是百分比欄）。若相同（差 0.001 % 以內），光譜路徑沒問題，往下看第 2 點；若不同，是比值定義或波長校正被改過。
+</li>
+<li>比 <strong>% of baseline</strong> 欄。原始值相同而百分比不同，就是基線不同 —— 檢查目前作用中的 Golden Run 是哪一個、什麼時候抓的、抓的時候在放哪一段。基線抓在洩漏區間是最常見的原因。
+</li>
+<li>檢查 <code>SIMP_Ratio_*.csv</code> 的列數等不等於錄檔幀數。少了就是那一輪被中途按了 Stop（日誌會寫 <code>stopped by the operator</code>），不能拿來比。
+</li>
+<li>確認錄檔對得起來：一次採集常被切成好幾個輪替檔，比較的兩段要涵蓋同一段時間。
+</li>
+</ol>
+<p>完整的比對程序見 §8.5。</p>
 <hr>
 <h2 id="10-附錄參數預設值">10. 附錄：參數預設值</h2>
 <h3 id="101-硬體參數">10.1 硬體參數</h3>

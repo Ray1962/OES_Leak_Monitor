@@ -16,6 +16,13 @@ namespace OES_Leak_Monitor;
 public sealed class RatioTrendData
 {
     public IReadOnlyList<string> RatioKeys { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Per ratio: the human-readable name the run was configured with, taken from the header
+    /// column <c>{label} [{key}]</c>. Empty for a file written before the label was carried in
+    /// the header, where the key is all there is. Keyed by <see cref="RatioKeys"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> RatioLabels { get; init; } = new Dictionary<string, string>();
     public IReadOnlyList<DateTime> Timestamps { get; init; } = Array.Empty<DateTime>();
     public IReadOnlyDictionary<string, double[]> Raw { get; init; } = new Dictionary<string, double[]>();
     public IReadOnlyDictionary<string, double[]> Pct { get; init; } = new Dictionary<string, double[]>();
@@ -81,8 +88,18 @@ public static class RatioCsvReader
         int rateIdx  = Array.FindIndex(cols, c => c.Trim().Equals("LeakRate", StringComparison.OrdinalIgnoreCase));
         int sigmaIdx = Array.FindIndex(cols, c => c.Trim().Equals("LeakRateSigma", StringComparison.OrdinalIgnoreCase));
 
+        // A ratio column is "{label} [{key}]", or a bare key in a file written before the label
+        // was carried there. Split them so the plot can show the name while everything else
+        // still keys on the identifier that Golden Runs and calibrations are bound to.
         var keys = new string[ratioCount];
-        for (int i = 0; i < ratioCount; i++) keys[i] = cols[1 + 2 * i].Trim();
+        var labels = new Dictionary<string, string>(ratioCount);
+        for (int i = 0; i < ratioCount; i++)
+        {
+            var col = cols[1 + 2 * i].Trim();
+            var (key, label) = SplitColumn(col);
+            keys[i] = key;
+            labels[key] = label;
+        }
 
         var timestamps = new List<DateTime>();
         var states = new List<string>();
@@ -131,6 +148,7 @@ public static class RatioCsvReader
         return new RatioTrendData
         {
             RatioKeys = keys,
+            RatioLabels = labels,
             Timestamps = timestamps,
             Raw = rawDict,
             Pct = pctDict,
@@ -140,6 +158,27 @@ public static class RatioCsvReader
             LeakRateSigma = sigma.ToArray(),
             HasLeakRate = rateIdx >= 0 && anyRate,
         };
+    }
+
+    /// <summary>
+    /// Splits a ratio column header into (key, label). <c>"N2 337.1 / Ar 750.4 [R_ec3adb8f]"</c>
+    /// gives the key inside the brackets and the name before them; anything else — an older
+    /// file, or a name a user managed to get a bracket into — is treated as a bare key with no
+    /// label, so the column still identifies its ratio.
+    /// </summary>
+    private static (string Key, string Label) SplitColumn(string col)
+    {
+        if (col.EndsWith("]", StringComparison.Ordinal))
+        {
+            int open = col.LastIndexOf('[');
+            if (open > 0)
+            {
+                var key = col.Substring(open + 1, col.Length - open - 2).Trim();
+                var label = col.Substring(0, open).Trim();
+                if (key.Length > 0) return (key, label);
+            }
+        }
+        return (col, "");
     }
 
     private static string? Field(string[] f, int i) => i >= 0 && i < f.Length ? f[i] : null;

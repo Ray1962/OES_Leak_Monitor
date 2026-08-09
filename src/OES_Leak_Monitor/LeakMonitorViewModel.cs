@@ -180,8 +180,26 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         private set { if (Set(ref _testMode, value)) OnPropertyChanged(nameof(TestModeNote)); }
     }
 
+    private string _testModeSourceNote = "synthetic spectra";
+    private bool _testModeAlarmsSuppressed = true;
+
+    /// <summary>
+    /// Tells the banner what the test-mode frames actually are and whether alarms are being
+    /// raised for them. Both halves change during a recorded-spectrum replay: the spectra are
+    /// a real recording, and the alarm gate is switchable from the Replay tab — a banner
+    /// hard-coded to "synthetic spectra; alarms are suppressed" would then be wrong twice over,
+    /// on the one screen an operator reads to decide whether an alarm means anything.
+    /// </summary>
+    public void SetTestModeContext(string sourceNote, bool alarmsSuppressed)
+    {
+        _testModeSourceNote = string.IsNullOrWhiteSpace(sourceNote) ? "synthetic spectra" : sourceNote;
+        _testModeAlarmsSuppressed = alarmsSuppressed;
+        OnPropertyChanged(nameof(TestModeNote));
+    }
+
     public string TestModeNote => _testMode
-        ? "TEST MODE — synthetic spectra; alarms are suppressed."
+        ? $"TEST MODE — {_testModeSourceNote}; alarms are " +
+          (_testModeAlarmsSuppressed ? "suppressed." : "active.")
         : "";
 
     private string _signalWarningNote = "";

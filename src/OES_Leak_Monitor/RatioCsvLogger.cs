@@ -58,6 +58,8 @@ public sealed class RatioCsvLogger : IDisposable
     // Re-derived at the start of every session so a Ratio Setup edit applied between
     // sessions is reflected in the next file's columns.
     private string[] _ratioKeys = Array.Empty<string>();
+    // Aligned with _ratioKeys: the ratio's display name, written into the header beside the key.
+    private string[] _ratioLabels = Array.Empty<string>();
     // Aligned with _ratioKeys: whether that ratio's percent column is a σ-score (see the header).
     private bool[] _pedestal = Array.Empty<bool>();
 
@@ -190,6 +192,7 @@ public sealed class RatioCsvLogger : IDisposable
                 $"{_filePrefix}_Ratio_{sessionStart.ToString("MMddHHmmss", Inv)}");
             var monitored = _engine.MonitoredRatios;
             _ratioKeys = monitored.Select(r => r.Key).ToArray();
+            _ratioLabels = monitored.Select(r => r.DisplayName ?? "").ToArray();
             _pedestal = monitored.Select(r => r.ValueHasPedestal).ToArray();
             _writer = new StreamWriter(_currentPath, append: false, Utf8Bom) { AutoFlush = true };
             _sessionDate = sessionStart.Date;
@@ -200,11 +203,23 @@ public sealed class RatioCsvLogger : IDisposable
             // the baseline, or — where the value carries a continuum pedestal — a σ-score on the
             // same 100/120/150 scale. Both are plotted the same way, but they are not the same
             // number, and a file that doesn't say which is a file nobody can re-read in a year.
+            //
+            // Each column carries both names: what it is, then the key that identifies it —
+            // "N2 337.1 / Ar 750.4 [R_ec3adb8f]". The key is a random GUID stub minted when the
+            // ratio was created (RatioEditViewModel.GenerateKey) and deliberately never changes,
+            // so Golden Run baselines and leak-rate fits survive a rename or a retune — but on
+            // its own it makes the file unreadable without the settings.json that produced it,
+            // which is exactly the file least likely to still be around, or still to say the same
+            // thing, when someone opens this CSV months later. Readers still key on the column
+            // name as a whole and split the label off for display.
             var header = new StringBuilder("Timestamp");
             for (int i = 0; i < _ratioKeys.Length; i++)
-                header.Append(',').Append(_ratioKeys[i])
-                      .Append(',').Append(_ratioKeys[i])
+            {
+                var col = ColumnName(_ratioLabels[i], _ratioKeys[i]);
+                header.Append(',').Append(col)
+                      .Append(',').Append(col)
                       .Append(_pedestal[i] ? "_sigmaScore" : "_pctBaseline");
+            }
             header.Append(",OverallState,LeakRate,LeakRateSigma");
             _writer.WriteLine(header.ToString());
 
@@ -245,6 +260,19 @@ public sealed class RatioCsvLogger : IDisposable
         for (int n = 1; File.Exists(path) && n < 1000; n++)
             path = Path.Combine(folder, $"{stem}_{n.ToString(Inv)}.csv");
         return path;
+    }
+
+    /// <summary>
+    /// Builds one ratio's column name: <c>{label} [{key}]</c>, falling back to the bare key when
+    /// the ratio has no display name. The label is sanitised because it is operator-typed free
+    /// text landing in a comma-separated header — a comma in it would silently shift every
+    /// column after it, and a bracket would break the key back out of the wrong place.
+    /// </summary>
+    private static string ColumnName(string label, string key)
+    {
+        var clean = (label ?? "").Replace(',', ';').Replace('[', '(').Replace(']', ')')
+                                 .Replace('"', '\'').Trim();
+        return string.IsNullOrEmpty(clean) ? key : $"{clean} [{key}]";
     }
 
     private static RatioSnapshot? FindRatio(LeakMonitorSnapshot snap, string key)

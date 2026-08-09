@@ -140,6 +140,13 @@
                 <local:LeakCalibrationPanel DataContext="{Binding LeakCalibration}"/>
             </TabItem>
 
+            <!-- Replays a recorded full-spectrum CSV through the live pipeline (test mode
+                 only). Engineer-gated with the Configuration tab: it drives the recorders
+                 and the alarm gate, which is not an Operator action. -->
+            <TabItem Header="Replay" x:Name="ReplayTab">
+                <local:ReplayPanel DataContext="{Binding Replay}"/>
+            </TabItem>
+
             <TabItem Header="Configuration" x:Name="ConfigurationTab">
                 <Grid Background="#F4F6FA">
                     <Grid.RowDefinitions>
@@ -226,19 +233,12 @@
 
                             <Rectangle Width="1" Fill="#CCC" Margin="0,2,16,2"/>
 
-                            <TextBlock Text="Test-mode sim:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <Button Content="Choose CSV…"
-                                    Command="{Binding ChooseSimulationFileCommand}"
-                                    Padding="14,6" MinWidth="110" Margin="0,0,8,0"
-                                    ToolTip="Pick a full-spectrum CSV (the format the intensity logger writes) to play back as the simulated plasma spectrum while in Test Mode. Loops at the end. Persisted for next launch."/>
-                            <Button Content="Clear"
-                                    Command="{Binding ClearSimulationFileCommand}"
-                                    Padding="14,6" MinWidth="70" Margin="0,0,10,0"
-                                    ToolTip="Stop using the simulation file and revert to the built-in synthetic spectra."/>
-                            <TextBlock Text="{Binding SimulationFileText}"
-                                       VerticalAlignment="Center" Foreground="#445"
-                                       TextTrimming="CharacterEllipsis" MaxWidth="320"
-                                       ToolTip="{Binding SimulationFileText}"/>
+                            <!-- Test-mode playback used to be chosen here. It now has its own
+                                 tab, because validating the leak algorithms against a recording
+                                 needs transport controls, a speed, and a progress readout —
+                                 not a file picker. -->
+                            <TextBlock VerticalAlignment="Center" Foreground="#777"
+                                       Text="Test-mode spectrum replay lives on the Replay tab."/>
                         </StackPanel>
                       </StackPanel>
                     </Border>

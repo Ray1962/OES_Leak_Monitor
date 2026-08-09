@@ -352,7 +352,7 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
                     bool sigmaScore = pct && d.PctIsSigmaScore.TryGetValue(key, out var s) && s;
                     var series = new LineSeries
                     {
-                        Title = sigmaScore ? FriendlyName(key) + " (σ-score)" : FriendlyName(key),
+                        Title = sigmaScore ? FriendlyName(d, key) + " (σ-score)" : FriendlyName(d, key),
                         Color = Palette[idx % Palette.Length],
                         StrokeThickness = 1.5,
                         CanTrackerInterpolatePoints = false,
@@ -490,7 +490,7 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         {
             var src = pct ? d.Pct[key] : d.Raw[key];
             var vals = src.Where(v => !double.IsNaN(v)).ToList();
-            sb.Append("   ·   ").Append(FriendlyName(key)).Append(": ");
+            sb.Append("   ·   ").Append(FriendlyName(d, key)).Append(": ");
             sb.Append(vals.Count == 0
                 ? "(no data)"
                 : $"min {vals.Min():G4} / max {vals.Max():G4} / last {vals[vals.Count - 1]:G4}");
@@ -498,15 +498,25 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         MetaText = sb.ToString();
     }
 
-    /// <summary>Short legend label for a ratio key; falls back to the key itself.</summary>
-    private static string FriendlyName(string key) => key switch
+    /// <summary>
+    /// Legend label for a ratio. Prefers the name the run was configured with, which newer files
+    /// carry in the header beside the key — a user-defined ratio's key is a random GUID stub, and
+    /// a chart legend reading "R_7c40d2f9" tells the reader nothing about which line it is. Falls
+    /// back to the four factory keys' names, then to the key itself.
+    /// </summary>
+    private static string FriendlyName(RatioTrendData d, string key)
     {
-        "R_O"  => "O 777",
-        "R_OH" => "OH 309",
-        "R_NO" => "NO 237",
-        "R_Ar" => "Ar 750",
-        _      => key,
-    };
+        if (d.RatioLabels.TryGetValue(key, out var label) && !string.IsNullOrWhiteSpace(label))
+            return label;
+        return key switch
+        {
+            "R_O"  => "O 777",
+            "R_OH" => "OH 309",
+            "R_NO" => "NO 237",
+            "R_Ar" => "Ar 750",
+            _      => key,
+        };
+    }
 
     // --- folder / file open ---------------------------------------------------
 

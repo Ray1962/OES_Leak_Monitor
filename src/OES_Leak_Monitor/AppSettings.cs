@@ -52,6 +52,13 @@ public sealed class AppSettings : IJsonOnDeserialized
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SimulationCsvPath { get; set; }
 
+    /// <summary>
+    /// Fast-forward factor the Replay tab last used. Persisted so re-running the same
+    /// validation does not start at 1× every time. Clamped on load to the range
+    /// <see cref="SpectrumReplaySource"/> accepts.
+    /// </summary>
+    public double ReplaySpeed { get; set; } = 1;
+
     // Pre-list schema kept for one-shot migration from v0.x settings.json.
     // Deserializer fills these; OnDeserialized folds them into Devices and nulls them
     // so the next Save emits only the new `devices` array.
@@ -85,6 +92,10 @@ public sealed class AppSettings : IJsonOnDeserialized
         TrendRetentionMinutes = TrendRetentionMinutes <= 0
             ? DefaultTrendRetentionMinutes
             : Math.Clamp(TrendRetentionMinutes, MinTrendRetentionMinutes, MaxTrendRetentionMinutes);
+        // Same treatment for a file predating the Replay tab (deserializes to 0).
+        ReplaySpeed = ReplaySpeed <= 0
+            ? 1
+            : Math.Clamp(ReplaySpeed, SpectrumReplaySource.MinSpeed, SpectrumReplaySource.MaxSpeed);
     }
 
     private void EnsureAt(int idx)

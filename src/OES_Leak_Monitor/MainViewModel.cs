@@ -6,7 +6,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using Aqst.OesSpectrometer.Models;
-using Microsoft.Win32;
 using OxyPlot;
 
 namespace OES_Leak_Monitor;
@@ -23,10 +22,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly RatioCsvLogger _ratioCsvLogger;
     private readonly List<DeviceViewModel> _devices;
 
-    // Test-mode plasma-spectrum playback: when an operator picks a full-spectrum CSV it
-    // replaces the device's built-in synthetic frames (a no-op for real hardware or when
-    // no file is loaded). Every device frame is routed through this before the consumers.
-    private readonly SpectrumSimulationSource _simulation = new();
+    // Test-mode replay of a recorded plasma spectrum (Replay tab): while it runs, it replaces
+    // the device's synthetic frames with the recording's own — on the recording's wavelength
+    // axis and at its own frame intervals — so the leak-monitor algorithms can be validated
+    // against real data with no spectrometer attached. A no-op for real-hardware frames.
+    private readonly SpectrumReplaySource _replay = new();
+
+    // Set by the spectrum mapper on every device tick: true while the replay is driving that
+    // slot's stream, in which case the mapper has already fanned the replayed frames out and
+    // the device's own frame must not be forwarded again. Written and read on the acquisition
+    // thread within one frame's call chain (mapper first, then SpectrumAvailable) — per slot,
+    // so a second device's frames could never clear the flag between the two.
+    private bool[] _replayHandledFrame = Array.Empty<bool>();
+
+    // True while the recorders are pointed at replay output (SIM file prefix), so a replayed
+    // run can never be mistaken for a real one in the Recordings / Ratio Review lists.
+    private bool _replayOutputActive;
 
     // Tracks the OES acquisition state so a Stop→Start transition applies a staged
     // Ratio Setup configuration. Single-device app, so one flag suffices.
@@ -117,12 +128,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // settings themselves were loaded above, before the review tabs were built.)
         ApplySettingsToDevices(settings);
 
-        // Restore the last-used Test-mode simulation file (if it still exists on disk).
-        // A missing/unparseable file silently falls back to the synthetic generator.
+        // Restore the last-used replay recording (if it still exists on disk). Loading it does
+        // not start it — the Replay tab's Play does. A missing/unparseable file leaves test
+        // mode on the built-in synthetic generator.
+        _replay.Speed = settings.ReplaySpeed;
         if (!string.IsNullOrWhiteSpace(settings.SimulationCsvPath) && File.Exists(settings.SimulationCsvPath))
         {
-            try { _simulation.Load(settings.SimulationCsvPath); }
-            catch (Exception ex) { _systemLogger.LogError("SimulationFile_Load_Failed", ex, settings.SimulationCsvPath); }
+            try { _replay.Load(settings.SimulationCsvPath); }
+            catch (Exception ex) { _systemLogger.LogError("Replay_Load_Failed", ex, settings.SimulationCsvPath); }
         }
 
         // Monitor tab: a live intensity time-trend at the "selected" wavelength — i.e. the
@@ -152,13 +165,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         LeakMonitor = new LeakMonitorViewModel(_leakMonitorEngine, _systemLogger);
         LeakMonitor.SetRetention(TimeSpan.FromMinutes(_trendRetentionMinutes));
 
-        // Single fan-out: each device frame is mapped through the Test-mode simulation
-        // (a no-op unless a CSV is loaded and the frame is synthetic) and then handed to
-        // the intensity logger, the leak engine, and the Monitor-tab trend — so all three
-        // always see the same effective spectrum.
+        // Single fan-out. Two hooks per device, in this order on every frame:
+        //   1. SpectrumMapper  — replaces the frame while a replay is running, and delivers
+        //      the replayed frames itself (a fast-forwarding tick owes the consumers several
+        //      frames, but the device asks for exactly one to draw).
+        //   2. SpectrumAvailable — the normal path when no replay is running.
+        // The mapper runs before the plot and the event, so a replayed frame reaches the
+        // DevicePanel's own live spectrum plot too — which is why the substitution can carry
+        // the recording's wavelength axis instead of being squeezed onto the synthetic one.
+        _replayHandledFrame = new bool[_devices.Count];
         for (int i = 0; i < _devices.Count; i++)
         {
             int slot = i;
+            _devices[i].SpectrumMapper = raw => MapDeviceFrame(slot, raw);
             _devices[i].SpectrumAvailable += (_, sample) => OnDeviceSpectrum(slot, sample);
         }
 
@@ -193,6 +212,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _ratioCsvLogger = new RatioCsvLogger(_leakMonitorEngine, _paths.DataDirectory, _systemLogger);
         _ratioCsvLogger.Configure(loggerSettings);
 
+        // Replay tab: play a recorded full-spectrum CSV through the live pipeline to validate
+        // the leak-monitor algorithms without hardware. It owns the transport; this class owns
+        // what the replay does to the recorders and the alarm gate.
+        Replay = new ReplayViewModel(_replay, _leakMonitorEngine.Settings,
+            () => PersistLeakMonitorSettings("ReplayAlarmGate"),
+            () => _lastDataDirectory, _systemLogger);
+        Replay.ReplayStarting += (_, _) => BeginReplayOutput();
+        Replay.ReplayStopped  += (_, _) => EndReplayOutput(finished: false);
+        Replay.FileChanged    += (_, path) => PersistReplaySelection(path);
+        Replay.PropertyChanged += OnReplayPropertyChanged;
+        // Reaching the end of the recording is handled in MapDeviceFrame, after that tick's
+        // frames have been delivered — see ReplayTick.Finished.
+        UpdateTestModeContext();
+
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
             related: $"Path={_settingsService.ConfigFilePath}",
@@ -219,9 +252,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ResetExperimentCommand = new RelayCommand(ResetExperiment, () => IsOperatorOrHigher);
         ArchiveNowCommand      = new RelayCommand(() => StartRetentionPass(manual: true),
                                                   () => IsEngineerOrHigher && _retentionRunning == 0);
-        ChooseSimulationFileCommand = new RelayCommand(ChooseSimulationFile, () => IsEngineerOrHigher);
-        ClearSimulationFileCommand  = new RelayCommand(ClearSimulationFile,
-            () => IsEngineerOrHigher && _simulation.IsLoaded);
 
         // Initial role is Guest → propagate the action gate so the per-device buttons
         // start out disabled until the user signs in.
@@ -230,6 +260,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup.SetRole(IsEngineerOrHigher);
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
+        Replay.SetRole(IsEngineerOrHigher);
 
         UpdateRecorderStatus();
 
@@ -271,6 +302,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else if (!now && _wasAcquiring)
         {
+            // A replay is fed by the device's ticks, so stopping acquisition stops it dead.
+            // End it properly rather than leaving the tab claiming to be playing.
+            if (_replay.IsActive)
+            {
+                _replay.Stop();
+                EndReplayOutput(finished: false);
+            }
             // Close both recorders' sessions so a Stop genuinely ends the recording — the
             // next Start gets new files. They are closed independently now: the Intensity
             // CSV is threshold-driven, the Ratio CSV runs for the whole acquisition.
@@ -283,14 +321,51 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// The single fan-out for every device spectrum frame. Maps the raw frame through the
-    /// Test-mode simulation (returns it unchanged unless a playback CSV is loaded and the
-    /// frame is synthetic), then forwards the effective frame to the intensity logger, the
-    /// leak engine, and the Monitor-tab trend. Runs on the device's acquisition thread.
+    /// Frame substitution, called by the device before it plots the frame or raises
+    /// <see cref="DeviceViewModel.SpectrumAvailable"/>. While a replay is running it delivers
+    /// every recorded frame that has come due to the consumers itself — fast-forward means one
+    /// device tick can owe them several — and returns the newest one for the live plot. With no
+    /// replay running the frame is passed through untouched and the normal
+    /// <see cref="OnDeviceSpectrum"/> path fans it out. Runs on the acquisition thread.
     /// </summary>
-    private void OnDeviceSpectrum(int slot, SpectrumSample raw)
+    private SpectrumSample MapDeviceFrame(int slot, SpectrumSample raw)
     {
-        var sample = _simulation.Map(raw);
+        var tick = _replay.Advance(raw);
+        if ((uint)slot < (uint)_replayHandledFrame.Length) _replayHandledFrame[slot] = tick.Handled;
+        if (!tick.Handled) return raw;
+
+        for (int i = 0; i < tick.Frames.Count; i++)
+            FanOutSpectrum(slot, tick.Frames[i]);
+
+        // Only now that the last frames have reached the recorders is it safe to tear the
+        // replay's session down — closing first left them to open a session of their own.
+        if (tick.Finished)
+            _dispatcher.BeginInvoke(() =>
+            {
+                EndReplayOutput(finished: true);
+                Replay.NotifyFinished();
+            });
+
+        // Paused, or the device ticking faster than the recording: hold the last replayed
+        // frame on the plot rather than letting the synthetic spectrum flash back on screen.
+        return tick.Display ?? raw;
+    }
+
+    /// <summary>
+    /// The single fan-out for every device spectrum frame. Skipped while a replay is running,
+    /// because <see cref="MapDeviceFrame"/> has already delivered that tick's frames — the
+    /// device's own synthetic frame must not be added on top. Runs on the acquisition thread.
+    /// </summary>
+    private void OnDeviceSpectrum(int slot, SpectrumSample sample)
+    {
+        if ((uint)slot < (uint)_replayHandledFrame.Length && _replayHandledFrame[slot]) return;
+        FanOutSpectrum(slot, sample);
+    }
+
+    /// <summary>Hands one effective frame to the intensity logger, the leak engine, and the
+    /// Monitor-tab trend, so all three always see the same spectrum.</summary>
+    private void FanOutSpectrum(int slot, SpectrumSample sample)
+    {
         _intensityLogger.ProcessSample(slot, sample);
         _leakMonitorEngine.ProcessSample(sample);
         WavelengthTrend.OnSpectrum(sample);
@@ -320,6 +395,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup.SetRole(IsEngineerOrHigher);
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
+        Replay.SetRole(IsEngineerOrHigher);
 
         RaiseCanExec();
     }
@@ -333,9 +409,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Logger.ApplyCommand.Execute(null);
         // Re-point the Monitor-tab trend at the (possibly edited) trigger + monitored wavelengths.
         var ls = Logger.ToSettings();
-        // The ratio CSV shares the intensity logger's folder and prefix — an edited path
-        // takes effect on its next session, not mid-file.
-        _ratioCsvLogger.Configure(ls);
+        // Both recorders take the logger's folder and prefix — an edited path takes effect on
+        // their next session, not mid-file. This also re-imposes the replay marker on the
+        // intensity logger, which the Apply above just configured with the unmarked prefix.
+        ConfigureRecorderOutput();
         // The absolute-intensity plasma gate follows the same trigger the logger just took, so
         // the gate and the recorder can't disagree for the rest of the run. Hot-applied on
         // purpose: it is a logger setting, not part of the staged ratio configuration.
@@ -410,73 +487,119 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             related: $"User={AccessControl.CurrentUsername ?? "(guest)"}");
     }
 
+    // --- replay output -------------------------------------------------------------------
+    //
+    // A replay drives the same recorders a real run does — deliberately, since a replayed run
+    // has to be reviewable in the Recordings / Ratio Review tabs to be worth anything. What
+    // marks it is the file prefix: while a replay runs, both recorders write SIM-prefixed
+    // files, so replayed data is never mistaken for measurement in today's data folder.
+
+    /// <summary>Prefix a replayed run's files carry. Kept in front of the configured prefix so
+    /// the filename still parses as <c>{prefix}_{tag}_{MMddHHmmss}</c> and the review tabs list
+    /// it as usual.</summary>
+    private const string ReplayPrefixMarker = "SIM";
+
     /// <summary>
-    /// Lets the operator pick a full-spectrum CSV (same format the intensity logger writes)
-    /// to play back as the spectrum stream while in Test Mode. The chosen path is loaded
-    /// immediately and persisted so it is reused on the next launch. A parse failure leaves
-    /// the previous source untouched. Real-hardware frames ignore the simulation entirely.
+    /// Switch the recorders over to replay output. Both are force-closed first: the prefix is
+    /// captured when a session opens, so a run that began before the replay would otherwise
+    /// keep writing real-looking rows into a real-looking file for the whole replay.
     /// </summary>
-    private void ChooseSimulationFile()
+    private void BeginReplayOutput()
     {
-        var dlg = new OpenFileDialog
-        {
-            Title = "Select a full-spectrum CSV to play back in Test Mode",
-            Filter = "Spectrum CSV (*.csv)|*.csv|All files (*.*)|*.*",
-            CheckFileExists = true,
-        };
-        if (Directory.Exists(_paths.DataDirectory)) dlg.InitialDirectory = _paths.DataDirectory;
-        if (dlg.ShowDialog() != true) return;
+        _intensityLogger.Stop();
+        _ratioCsvLogger.Stop();
+        _replayOutputActive = true;
+        ConfigureRecorderOutput();
+        UpdateTestModeContext();
 
-        try
-        {
-            _simulation.Load(dlg.FileName);
-            PersistSimulationPath();
-            OnPropertyChanged(nameof(SimulationFileText));
-            ClearSimulationFileCommand.RaiseCanExecuteChanged();
-            StatusMessage = $"Test-mode simulation loaded: {Path.GetFileName(dlg.FileName)} " +
-                            $"({_simulation.FrameCount} frames, loops).";
-            _systemLogger.LogSystemEvent(LogSeverity.Information, "SimulationFileSelected",
-                "Test-mode plasma-spectrum playback file selected",
-                related: $"User={AccessControl.CurrentUsername ?? "(guest)"}",
-                value: $"Path={dlg.FileName},Frames={_simulation.FrameCount}");
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = "Could not load simulation file: " + ex.Message;
-            _systemLogger.LogError("SimulationFile_Load_Failed", ex, dlg.FileName);
-        }
-    }
-
-    /// <summary>Drops the loaded Test-mode simulation file (reverting to the built-in
-    /// synthetic generator) and persists the cleared selection.</summary>
-    private void ClearSimulationFile()
-    {
-        _simulation.Clear();
-        PersistSimulationPath();
-        OnPropertyChanged(nameof(SimulationFileText));
-        ClearSimulationFileCommand.RaiseCanExecuteChanged();
-        StatusMessage = "Test-mode simulation cleared — using built-in synthetic spectra.";
-        _systemLogger.LogSystemEvent(LogSeverity.Information, "SimulationFileCleared",
-            "Test-mode plasma-spectrum playback file cleared",
-            related: $"User={AccessControl.CurrentUsername ?? "(guest)"}");
+        StatusMessage = $"Replay running — recorders are writing {ReplayPrefixMarker}-prefixed files.";
+        _systemLogger.LogSystemEvent(LogSeverity.Information, "ReplayStarted",
+            "Recorded-spectrum replay started; recorders switched to replay output",
+            related: $"User={AccessControl.CurrentUsername ?? "(guest)"}",
+            value: $"Path={_replay.FilePath},Frames={_replay.FrameCount}");
     }
 
     /// <summary>
-    /// Persists the simulation-file path immediately — re-reads on-disk settings and swaps
-    /// in only that field, so an unsaved Configuration-tab edit is not clobbered (mirrors
-    /// how AccessControl and leak-monitor edits are persisted).
+    /// Hand the recorders back to normal output. Called when the operator stops playback and
+    /// when the recording runs out, closing the replay's files there and then rather than
+    /// leaving them open for whatever arrives next.
     /// </summary>
-    private void PersistSimulationPath()
+    private void EndReplayOutput(bool finished)
+    {
+        if (!_replayOutputActive) return;
+        _intensityLogger.Stop();
+        _ratioCsvLogger.Stop();
+        _replayOutputActive = false;
+        ConfigureRecorderOutput();
+        // Close again: the acquisition thread can deliver a frame between the two calls above,
+        // which would open a session that then sits there — with whichever prefix was current
+        // — holding a row nobody asked for. Cheap, and it makes the end of a replay a clean
+        // edge whatever the timing.
+        _intensityLogger.Stop();
+        _ratioCsvLogger.Stop();
+        UpdateTestModeContext();
+
+        StatusMessage = finished
+            ? "Replay finished — the whole recording has been played through."
+            : "Replay stopped.";
+        _systemLogger.LogSystemEvent(LogSeverity.Information, "ReplayEnded",
+            finished
+                ? "Recorded-spectrum replay reached the end of the file; recorders closed"
+                : "Recorded-spectrum replay stopped by the operator; recorders closed",
+            value: $"Path={_replay.FilePath}");
+    }
+
+    /// <summary>
+    /// Point both recorders at the logger's current output settings, with the replay marker
+    /// folded into the file prefix while a replay is running. Called whenever either side can
+    /// have changed: replay start/stop, and every Apply (which pushes the unmarked prefix
+    /// straight into the intensity logger).
+    /// </summary>
+    private void ConfigureRecorderOutput()
+    {
+        var ls = Logger.ToSettings();
+        if (_replayOutputActive && !ls.FilePrefix.StartsWith(ReplayPrefixMarker, StringComparison.OrdinalIgnoreCase))
+            ls.FilePrefix = ReplayPrefixMarker + ls.FilePrefix;
+        _intensityLogger.Configure(ls);
+        _ratioCsvLogger.Configure(ls);
+    }
+
+    private void OnReplayPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ReplayViewModel.AlarmsEnabledInTestMode))
+            UpdateTestModeContext();
+    }
+
+    /// <summary>
+    /// Keeps the Leak Monitor tab's test-mode banner honest: what the spectra actually are
+    /// (a recording or the synthetic generator) and whether alarms are being raised for them.
+    /// A banner that always reads "synthetic spectra; alarms are suppressed" is wrong in both
+    /// halves during a replay with the alarm gate open.
+    /// </summary>
+    private void UpdateTestModeContext() =>
+        LeakMonitor.SetTestModeContext(
+            _replayOutputActive
+                ? $"replaying {Path.GetFileName(_replay.FilePath) ?? "a recording"}"
+                : "synthetic spectra",
+            _leakMonitorEngine.Settings.SuppressAlarmsInTestMode);
+
+    /// <summary>
+    /// Persists the replay selection (file + speed) immediately — re-reads on-disk settings and
+    /// swaps in only those fields, so an unsaved Configuration-tab edit is not clobbered
+    /// (mirrors how AccessControl and leak-monitor edits are persisted).
+    /// </summary>
+    private void PersistReplaySelection(string? path)
     {
         try
         {
             var onDisk = _settingsService.Load();
-            onDisk.SimulationCsvPath = _simulation.FilePath;
+            onDisk.SimulationCsvPath = path;
+            onDisk.ReplaySpeed = _replay.Speed;
             _settingsService.Save(onDisk);
         }
         catch (Exception ex)
         {
-            _systemLogger.LogError("SimulationPath_Persist_Failed", ex, _simulation.FilePath ?? "(none)");
+            _systemLogger.LogError("ReplaySelection_Persist_Failed", ex, path ?? "(none)");
         }
     }
 
@@ -494,7 +617,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             AccessControl = AccessControl.SnapshotConfig(), // preserve user list across saves
             DataRetention = _retention,
             TrendRetentionMinutes = TrendRetentionMinutes,
-            SimulationCsvPath = _simulation.FilePath, // keep the Test-mode playback selection
+            SimulationCsvPath = _replay.FilePath, // keep the Replay tab's recording selection
+            ReplaySpeed = _replay.Speed,
         };
         _settingsService.Save(settings);
         // The armed flag now matches what is on disk, so the Monitor strip's
@@ -527,20 +651,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public WavelengthCorrectionViewModel WavelengthCorrection { get; }
     public LeakCalibrationViewModel LeakCalibration { get; }
     public WavelengthTrendViewModel WavelengthTrend { get; }
+    public ReplayViewModel Replay { get; }
 
     public RelayCommand ApplyAllCommand { get; }
     public RelayCommand SaveAllCommand { get; }
     public RelayCommand LoadDefaultsAllCommand { get; }
     public RelayCommand ResetExperimentCommand { get; }
-    public RelayCommand ChooseSimulationFileCommand { get; }
-    public RelayCommand ClearSimulationFileCommand { get; }
-
-    /// <summary>Configuration-tab readout for the Test-mode simulation source: the loaded
-    /// CSV's name and frame count, or a note that the built-in synthetic generator is used.</summary>
-    public string SimulationFileText =>
-        _simulation.IsLoaded
-            ? $"{Path.GetFileName(_simulation.FilePath)} · {_simulation.FrameCount} frames (loops)"
-            : "(built-in synthetic spectra)";
 
     private string _statusMessage = "Ready";
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
@@ -835,8 +951,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         LoadDefaultsAllCommand.RaiseCanExecuteChanged();
         ResetExperimentCommand.RaiseCanExecuteChanged();
         ArchiveNowCommand.RaiseCanExecuteChanged();
-        ChooseSimulationFileCommand.RaiseCanExecuteChanged();
-        ClearSimulationFileCommand.RaiseCanExecuteChanged();
     }
 
     public void Dispose()
@@ -854,12 +968,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.AlarmStateChanged -= OnLeakAlarmStateChanged;
         _leakMonitorEngine.GoldenRunCaptured -= OnGoldenRunCaptured;
         _leakMonitorEngine.ConfigurationChanged -= OnLeakConfigChanged;
+        Replay.PropertyChanged -= OnReplayPropertyChanged;
+        Replay.Dispose();
         _ratioCsvLogger.Dispose();
         WavelengthTrend.Dispose();
         _intensityLogger.Stop();
         foreach (var d in _devices)
         {
             d.PropertyChanged -= OnDevicePropertyChanged;
+            d.SpectrumMapper = null;
             d.Dispose();
         }
         Recordings.Dispose();
