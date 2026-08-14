@@ -75,6 +75,7 @@ public sealed class RatioDefinition
     /// A ratio, or an absolute reading of a baseline-subtracted line, has no pedestal: its mean
     /// <em>is</em> the signal, so the ordinary multiplicative forms apply.
     /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]   // derived; see LineRegion.MeasurementKey
     public bool ValueHasPedestal =>
         MonitorMode == MonitorMode.AbsoluteIntensity && Numerator.Mode == LineExtractMode.RawMean;
 
