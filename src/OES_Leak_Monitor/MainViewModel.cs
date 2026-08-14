@@ -39,6 +39,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // run can never be mistaken for a real one in the Recordings / Ratio Review lists.
     private bool _replayOutputActive;
 
+    // One teardown at a time when hardware frames arrive during a replay — see
+    // AbortReplayForHardware. Set on the acquisition thread, cleared on the UI thread.
+    private volatile bool _replayAbortPending;
+
     // Tracks the OES acquisition state so a Stop→Start transition applies a staged
     // Ratio Setup configuration. Single-device app, so one flag suffices.
     private bool _wasAcquiring;
@@ -225,6 +229,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // Reaching the end of the recording is handled in MapDeviceFrame, after that tick's
         // frames have been delivered — see ReplayTick.Finished.
         UpdateTestModeContext();
+        UpdateReplayAvailability();   // a device may already be connected when settings reload
 
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
@@ -290,6 +295,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // Whether a real spectrometer is attached decides whether the Replay tab can do
+        // anything at all, so it is tracked on both properties that can change it.
+        if (e.PropertyName is nameof(DeviceViewModel.IsConnected)
+                           or nameof(DeviceViewModel.IsTestMode))
+            UpdateReplayAvailability();
+
         if (e.PropertyName != nameof(DeviceViewModel.IsAcquiring)) return;
         if (sender is not DeviceViewModel d) return;
 
@@ -321,6 +332,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Tells the Replay tab whether a real spectrometer is attached. Replay substitutes only
+    /// test-mode frames, so with hardware connected Play can deliver nothing — it is refused
+    /// with a reason rather than left to look as though it is running.
+    /// </summary>
+    private void UpdateReplayAvailability() =>
+        Replay.SetHardwareAttached(_devices.Any(d => d.IsConnected && !d.IsTestMode));
+
+    /// <summary>
     /// Frame substitution, called by the device before it plots the frame or raises
     /// <see cref="DeviceViewModel.SpectrumAvailable"/>. While a replay is running it delivers
     /// every recorded frame that has come due to the consumers itself — fast-forward means one
@@ -330,6 +349,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private SpectrumSample MapDeviceFrame(int slot, SpectrumSample raw)
     {
+        // A hardware frame always wins — SpectrumReplaySource refuses to substitute one. If the
+        // recorders are pointed at replay output when such a frame arrives, the replay cannot
+        // deliver anything and the SIM prefix is now filing *measurement* as replay output,
+        // which is the safeguard used exactly backwards. Tear it down on the first such frame.
+        if (!raw.IsTestMode && _replayOutputActive) AbortReplayForHardware();
+
         var tick = _replay.Advance(raw);
         if ((uint)slot < (uint)_replayHandledFrame.Length) _replayHandledFrame[slot] = tick.Handled;
         if (!tick.Handled) return raw;
@@ -518,6 +543,36 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             "Recorded-spectrum replay started; recorders switched to replay output",
             related: $"User={AccessControl.CurrentUsername ?? "(guest)"}",
             value: $"Path={_replay.FilePath},Frames={_replay.FrameCount}");
+    }
+
+    /// <summary>
+    /// Stops a replay that a real-hardware frame has just made impossible, and hands the
+    /// recorders back. Runs on the acquisition thread, so the work is marshalled; the flag stops
+    /// every subsequent frame queuing another teardown while the first is still pending.
+    /// </summary>
+    private void AbortReplayForHardware()
+    {
+        if (_replayAbortPending) return;
+        _replayAbortPending = true;
+        _dispatcher.BeginInvoke(() =>
+        {
+            try
+            {
+                if (!_replayOutputActive) return;
+                _replay.Stop();
+                EndReplayOutput(finished: false);
+                StatusMessage = "Replay stopped — a spectrometer is connected, and hardware " +
+                                "frames are never replaced.";
+                _systemLogger.LogSystemEvent(LogSeverity.Warning, "ReplayAbortedByHardware",
+                    "Replay stopped because real-hardware frames arrived: replay only substitutes " +
+                    "test-mode frames, so nothing was being replayed, and the recorders were " +
+                    "writing measured data under the replay prefix. Recorders are back on the " +
+                    "normal prefix. Disconnect the spectrometer, or connect with Force test mode, " +
+                    "to replay a recording.",
+                    value: $"Path={_replay.FilePath}");
+            }
+            finally { _replayAbortPending = false; }
+        });
     }
 
     /// <summary>

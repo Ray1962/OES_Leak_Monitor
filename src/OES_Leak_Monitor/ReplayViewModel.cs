@@ -69,7 +69,7 @@ public sealed class ReplayViewModel : INotifyPropertyChanged, IDisposable
 
         ChooseFileCommand = new RelayCommand(ChooseFile, () => _isEngineer && !IsTransportBusy);
         ClearFileCommand  = new RelayCommand(ClearFile,  () => _isEngineer && _replay.IsLoaded && !IsTransportBusy);
-        PlayCommand       = new RelayCommand(Play,       () => _isEngineer && _replay.IsLoaded && _state != ReplayState.Playing);
+        PlayCommand       = new RelayCommand(Play,       () => _isEngineer && _replay.IsLoaded && _state != ReplayState.Playing && !RealHardwareAttached);
         PauseCommand      = new RelayCommand(Pause,      () => _isEngineer && _state == ReplayState.Playing);
         RestartCommand    = new RelayCommand(Restart,    () => _isEngineer && _replay.IsLoaded);
         StopCommand       = new RelayCommand(Stop,       () => _isEngineer && IsTransportBusy);
@@ -106,6 +106,39 @@ public sealed class ReplayViewModel : INotifyPropertyChanged, IDisposable
         _isEngineer = isEngineerOrHigher;
         RaiseCanExec();
     }
+
+    private bool _realHardwareAttached;
+
+    /// <summary>
+    /// True while the device is connected to a real spectrometer. Replay only ever substitutes
+    /// <em>test-mode</em> frames — a hardware frame always wins — so with hardware attached
+    /// pressing Play delivered nothing at all while the tab said "Playing", and (worse) the host
+    /// still switched the recorders to the SIM prefix, filing real measurement as replay output.
+    /// Play is refused instead, and <see cref="BlockedNote"/> says why.
+    /// </summary>
+    public bool RealHardwareAttached
+    {
+        get => _realHardwareAttached;
+        private set
+        {
+            if (_realHardwareAttached == value) return;
+            _realHardwareAttached = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(BlockedNote));
+            OnPropertyChanged(nameof(IsBlocked));
+            RaiseCanExec();
+        }
+    }
+
+    /// <summary>Host tells the tab whether a real spectrometer is currently attached.</summary>
+    public void SetHardwareAttached(bool attached) => RealHardwareAttached = attached;
+
+    public bool IsBlocked => RealHardwareAttached;
+
+    public string BlockedNote => RealHardwareAttached
+        ? "A spectrometer is connected, so replay is unavailable — hardware frames are never " +
+          "replaced. Disconnect it (or tick Force test mode in Configuration) and connect again."
+        : "";
 
     // --- transport -----------------------------------------------------------------
 
@@ -150,6 +183,21 @@ public sealed class ReplayViewModel : INotifyPropertyChanged, IDisposable
 
     private void Play()
     {
+        // Checked here as well as in CanExecute: the command can be invoked from a keyboard
+        // gesture or fire on a stale CanExecute, and starting is what switches the recorders
+        // over — a start that cannot deliver a single frame must not get that far.
+        if (RealHardwareAttached)
+        {
+            StatusText = BlockedNote;
+            _systemLogger?.LogSystemEvent(LogSeverity.Warning, "ReplayBlockedByHardware",
+                "Replay was not started: a real spectrometer is connected, and replay only " +
+                "substitutes test-mode frames. Disconnect the spectrometer, or connect with " +
+                "Force test mode, then play the recording.",
+                value: $"Path={_replay.FilePath}");
+            Refresh();
+            return;
+        }
+
         bool resuming = _state == ReplayState.Paused;
         if (!resuming) ReplayStarting?.Invoke(this, EventArgs.Empty);
         _replay.Play();

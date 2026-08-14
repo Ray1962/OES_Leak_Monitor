@@ -4,6 +4,10 @@
              xmlns:local="clr-namespace:OES_Leak_Monitor"
              xmlns:oxy="http://oxyplot.org/wpf">
 
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+
     <DockPanel Background="#F4F6FA">
 
         <!-- Source recording -->
@@ -102,6 +106,16 @@
                 </StackPanel>
                 <TextBlock Text="{Binding StatusText}" Margin="0,6,0,0" Foreground="#334"
                            TextWrapping="Wrap"/>
+
+                <!-- Why Play is disabled. Without it the tab looked identical to a loaded-and-
+                     ready one, and pressing Play appeared to start a replay that could never
+                     deliver a frame. -->
+                <Border Margin="0,6,0,0" Padding="8,6"
+                        Background="#FFF6E5" BorderBrush="#E8C889" BorderThickness="1"
+                        Visibility="{Binding IsBlocked, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding BlockedNote}" Foreground="#6B4E00"
+                               TextWrapping="Wrap"/>
+                </Border>
                 <TextBlock Margin="0,6,0,0" Foreground="#777" TextWrapping="Wrap"
                            Text="Playback needs the OES connected and acquiring in test mode (Monitor tab → Connect → Start). While a replay runs, the recorders write with a SIM file prefix into today's data folder, so replayed data is never mistaken for a real run. Note that a Golden Run captured on synthetic spectra does not apply to a recording — capture a new baseline from the replay itself."/>
             </StackPanel>
