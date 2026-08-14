@@ -23,6 +23,39 @@ namespace OES_Leak_Monitor;
 public enum RecordingsViewMode { Line, Heatmap }
 
 /// <summary>
+/// One wavelength plotted on the Recordings line view, with the colour it was dealt. The colour
+/// is positional, so the list and the plot legend cannot disagree about which trace is which.
+/// </summary>
+public sealed class TrendWavelengthViewModel : INotifyPropertyChanged
+{
+    public TrendWavelengthViewModel(double nm, OxyColor color)
+    {
+        Nm = nm;
+        SetColor(color);
+    }
+
+    public double Nm { get; }
+    public string Text => $"{Nm:0.###} nm";
+
+    public OxyColor Color { get; private set; }
+
+    /// <summary>Swatch for the list, so the colour is legible away from the plot legend.</summary>
+    public System.Windows.Media.Brush Swatch { get; private set; } =
+        System.Windows.Media.Brushes.Transparent;
+
+    public void SetColor(OxyColor color)
+    {
+        Color = color;
+        Swatch = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(color.R, color.G, color.B));
+        Swatch.Freeze();
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Swatch)));
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
+
+/// <summary>
 /// Backs the Recordings tab. Scans the logger's base directory for completed CSV files,
 /// turns each into a single-device session, and surfaces line / heatmap / frame-spectrum
 /// views of the selected session(s). Supports compare-mode (2 sessions overlaid), notes,
@@ -35,10 +68,12 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
     private readonly DualIntensityLogger _intensityLogger;
     private readonly string _defaultDataDirectory;
 
-    // Line plot — primary session uses solid; compare session uses dashed.
+    // Line plot. Colour encodes the wavelength and line style encodes the session (primary
+    // solid, compare dashed) — the two questions being asked, "which line moved" and "how does
+    // this run differ from that one", are separate, so they get separate visual channels rather
+    // than being made mutually exclusive.
     private readonly PlotModel _linePlotModel;
-    private readonly LineSeries _series1A;
-    private readonly LineSeries _series1B;
+    private readonly LinearAxis _lineValueAxis;
 
     // Heatmap plot — built lazily when ViewMode flips.
     private readonly PlotModel _heatmapPlotModel;
@@ -61,6 +96,19 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
 
     private const int HeatmapMaxAxis = 1500;
 
+    /// <summary>How many wavelengths the line view can hold. Six is one palette's worth of
+    /// distinguishable colours — and twice that many series once a compare session is on.</summary>
+    public const int MaxTrendWavelengths = 6;
+
+    /// <summary>Half-width of the optional peak window, nm.</summary>
+    private const double PeakWindowNm = 0.5;
+
+    private static readonly OxyColor[] TrendPalette =
+    {
+        OxyColors.SteelBlue, OxyColors.Firebrick, OxyColors.ForestGreen,
+        OxyColors.DarkOrange, OxyColors.MediumPurple, OxyColors.Teal,
+    };
+
     public RecordingsViewModel(LoggerViewModel logger, DualIntensityLogger intensityLogger, string defaultDataDirectory)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -69,19 +117,32 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
             throw new ArgumentException("Default data directory is required.", nameof(defaultDataDirectory));
         _defaultDataDirectory = defaultDataDirectory;
 
+        // One wavelength to start with — the same one this tab has always opened on, so the
+        // change is purely additive: what you saw before, plus the ability to add to it.
         // Fallback to the N2 337.1 nm band head (one decimal place) when no trigger is set.
-        _wavelengthNm = _logger.TriggerWavelength > 0 ? _logger.TriggerWavelength : 337.1f;
+        TrendWavelengths = new ObservableCollection<TrendWavelengthViewModel>();
+        AddWavelength(_logger.TriggerWavelength > 0 ? _logger.TriggerWavelength : 337.1);
+
+        // Species-grouped catalog for the line picker — built-in and user-defined lines
+        // together, the same view the Ratio Setup and Configuration pickers offer.
+        _catalogOptions = new ObservableCollection<SpectralLineOption>(
+            SpectralLineCatalog.All.Select(l => new SpectralLineOption(l)));
+        var catalogView = new System.Windows.Data.CollectionViewSource { Source = _catalogOptions };
+        catalogView.GroupDescriptions.Add(
+            new System.Windows.Data.PropertyGroupDescription(nameof(SpectralLineOption.Species)));
+        catalogView.SortDescriptions.Add(
+            new SortDescription(nameof(SpectralLineOption.Species), ListSortDirection.Ascending));
+        catalogView.SortDescriptions.Add(
+            new SortDescription(nameof(SpectralLineOption.WavelengthNm), ListSortDirection.Ascending));
+        LineCatalog = catalogView.View;
 
         // --- line plot ---
         _linePlotModel = NewBaseModel(
-            "Intensity @ Trigger Wavelength vs Time",
+            "Intensity vs Time",
             xTitle: "Elapsed (s)",
             yTitle: "Intensity (a.u.)");
-        _series1A = new LineSeries { Title = "Primary",       Color = OxyColors.SteelBlue, StrokeThickness = 1.2 };
-        _series1B = new LineSeries { Title = "Compare",       Color = OxyColors.OrangeRed, StrokeThickness = 1.2,
-                                     LineStyle = LineStyle.Dash, IsVisible = false };
-        _linePlotModel.Series.Add(_series1A);
-        _linePlotModel.Series.Add(_series1B);
+        _lineValueAxis = _linePlotModel.Axes.OfType<LinearAxis>()
+            .First(a => a.Position == AxisPosition.Left);
         _linePlotModel.Legends.Add(new Legend
         {
             LegendPosition = LegendPosition.RightTop,
@@ -142,6 +203,12 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
         ClearCompareCommand        = new RelayCommand(() => SetSelection(Primary, null), () => Compare is not null);
         SaveNotesCommand           = new RelayCommand(SaveNotes, () => Primary is not null);
         ClearFrameCommand          = new RelayCommand(ClearFrameSpectrum, () => _frameSeries1.Points.Count > 0);
+        AddCatalogLineCommand      = new RelayCommand(AddCatalogLine,
+            () => _selectedCatalogLine is not null && TrendWavelengths.Count < MaxTrendWavelengths);
+        AddTypedWavelengthCommand  = new RelayCommand(AddTypedWavelength,
+            () => TrendWavelengths.Count < MaxTrendWavelengths);
+        RemoveWavelengthCommand    = new RelayCommand(RemoveWavelength,
+            () => _selectedTrendWavelength is not null && TrendWavelengths.Count > 1);
 
         _intensityLogger.FilesChanged += OnFilesChanged;
 
@@ -217,12 +284,166 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
         set { if (Set(ref _searchText, value ?? "")) ApplyFilter(); }
     }
 
-    private float _wavelengthNm;
-    /// <summary>Wavelength projected onto the line view; falls through to the closest header column.</summary>
-    public float WavelengthNm
+    /// <summary>Wavelengths projected onto the line view, up to <see cref="MaxTrendWavelengths"/>.</summary>
+    public ObservableCollection<TrendWavelengthViewModel> TrendWavelengths { get; }
+
+    /// <summary>Species-grouped emission-line catalog feeding the picker.</summary>
+    public System.ComponentModel.ICollectionView LineCatalog { get; }
+
+    private readonly ObservableCollection<SpectralLineOption> _catalogOptions;
+
+    private SpectralLineOption? _selectedCatalogLine;
+    public SpectralLineOption? SelectedCatalogLine
     {
-        get => _wavelengthNm;
-        set { if (Set(ref _wavelengthNm, value)) RebuildPlots(); }
+        get => _selectedCatalogLine;
+        set { if (Set(ref _selectedCatalogLine, value)) AddCatalogLineCommand.RaiseCanExecuteChanged(); }
+    }
+
+    private TrendWavelengthViewModel? _selectedTrendWavelength;
+    public TrendWavelengthViewModel? SelectedTrendWavelength
+    {
+        get => _selectedTrendWavelength;
+        set { if (Set(ref _selectedTrendWavelength, value)) RemoveWavelengthCommand.RaiseCanExecuteChanged(); }
+    }
+
+    private string _newWavelengthText = "";
+    /// <summary>Free-typed wavelength — a position with no line on it (a stretch of continuum
+    /// used as a control) is exactly what the catalog cannot offer.</summary>
+    public string NewWavelengthText
+    {
+        get => _newWavelengthText;
+        set => Set(ref _newWavelengthText, value ?? "");
+    }
+
+    private bool _normalizeTrend;
+    /// <summary>
+    /// Divides each trace by its own mean over the whole recording, so lines that differ by
+    /// orders of magnitude can be compared by shape. The mean, not the first frame: a recording
+    /// usually starts before the plasma is lit, and dividing by ~0 would blow the trace up.
+    /// Distinct from the Leak Monitor's "% of baseline", whose divisor is a Golden Run.
+    /// </summary>
+    public bool NormalizeTrend
+    {
+        get => _normalizeTrend;
+        set { if (Set(ref _normalizeTrend, value)) RebuildPlots(); }
+    }
+
+    private bool _usePeakWindow;
+    /// <summary>
+    /// Off by default: the trace is the value at the nearest pixel, which is what was actually
+    /// measured there. On, it takes the maximum within ±0.5 nm, matching the Monitor tab's live
+    /// trend — useful against axis drift, but it biases a weak line upward (it picks the largest
+    /// sample in a window) and inflates its scatter, which is the very judgement this tab exists
+    /// to support. Hence a switch, not a default.
+    /// </summary>
+    public bool UsePeakWindow
+    {
+        get => _usePeakWindow;
+        set { if (Set(ref _usePeakWindow, value)) RebuildPlots(); }
+    }
+
+    /// <summary>Raised when the wavelength list changes, so the host can persist it.</summary>
+    public event EventHandler? TrendWavelengthsChanged;
+
+    /// <summary>The current list, for persistence.</summary>
+    public IReadOnlyList<double> TrendWavelengthValues =>
+        TrendWavelengths.Select(w => w.Nm).ToList();
+
+    /// <summary>Replaces the list — used once at start-up to restore the persisted selection.
+    /// Silent: restoring what was already chosen is not a change worth persisting again.</summary>
+    public void RestoreTrendWavelengths(IEnumerable<double>? wavelengths)
+    {
+        var list = (wavelengths ?? Enumerable.Empty<double>())
+            .Where(w => w > 0).Distinct().Take(MaxTrendWavelengths).ToList();
+        if (list.Count == 0) return;
+        TrendWavelengths.Clear();
+        foreach (var w in list) AddWavelength(w);
+        RebuildPlots();
+    }
+
+    /// <summary>Re-reads the catalog so lines added on the Wavelength Calibration tab appear
+    /// in the picker without a restart.</summary>
+    public void RefreshLineCatalog()
+    {
+        var have = new HashSet<(string, double)>(
+            _catalogOptions.Select(o => (o.Species, Math.Round(o.WavelengthNm, 3))));
+        foreach (var line in SpectralLineCatalog.All)
+        {
+            if (have.Add((line.Species, Math.Round(line.WavelengthNm, 3))))
+                _catalogOptions.Add(new SpectralLineOption(line));
+        }
+        var keep = new HashSet<(string, double)>(
+            SpectralLineCatalog.All.Select(l => (l.Species, Math.Round(l.WavelengthNm, 3))));
+        for (int i = _catalogOptions.Count - 1; i >= 0; i--)
+        {
+            var o = _catalogOptions[i];
+            if (!keep.Contains((o.Species, Math.Round(o.WavelengthNm, 3))))
+                _catalogOptions.RemoveAt(i);
+        }
+        LineCatalog.Refresh();
+    }
+
+    private void AddWavelength(double nm)
+    {
+        int index = TrendWavelengths.Count;
+        TrendWavelengths.Add(new TrendWavelengthViewModel(nm, TrendPalette[index % TrendPalette.Length]));
+    }
+
+    private void AddCatalogLine()
+    {
+        if (_selectedCatalogLine is not { } opt) return;
+        AddWavelengthChecked(opt.WavelengthNm, $"{opt.Species} {opt.WavelengthNm:0.###} nm");
+    }
+
+    private void AddTypedWavelength()
+    {
+        if (!double.TryParse(NewWavelengthText.Trim(),
+                             System.Globalization.NumberStyles.Float,
+                             System.Globalization.CultureInfo.InvariantCulture, out double nm) || nm <= 0)
+        {
+            StatusText = $"“{NewWavelengthText}” is not a wavelength.";
+            return;
+        }
+        if (AddWavelengthChecked(nm, $"{nm:0.###} nm")) NewWavelengthText = "";
+    }
+
+    private bool AddWavelengthChecked(double nm, string label)
+    {
+        if (TrendWavelengths.Any(w => Math.Abs(w.Nm - nm) < 0.05))
+        {
+            StatusText = $"{label} is already plotted.";
+            return false;
+        }
+        if (TrendWavelengths.Count >= MaxTrendWavelengths)
+        {
+            StatusText = $"The line view holds {MaxTrendWavelengths} wavelengths; remove one first.";
+            return false;
+        }
+        AddWavelength(nm);
+        AfterWavelengthsChanged($"Added {label}.");
+        return true;
+    }
+
+    private void RemoveWavelength()
+    {
+        if (_selectedTrendWavelength is not { } row || TrendWavelengths.Count <= 1) return;
+        TrendWavelengths.Remove(row);
+        SelectedTrendWavelength = null;
+        // Colours are positional, so they have to be re-dealt after a removal or the legend
+        // and the swatches in the list would disagree with the plot.
+        for (int i = 0; i < TrendWavelengths.Count; i++)
+            TrendWavelengths[i].SetColor(TrendPalette[i % TrendPalette.Length]);
+        AfterWavelengthsChanged($"Removed {row.Text}.");
+    }
+
+    private void AfterWavelengthsChanged(string status)
+    {
+        StatusText = status;
+        RebuildPlots();
+        AddCatalogLineCommand.RaiseCanExecuteChanged();
+        AddTypedWavelengthCommand.RaiseCanExecuteChanged();
+        RemoveWavelengthCommand.RaiseCanExecuteChanged();
+        TrendWavelengthsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private RecordingsViewMode _viewMode = RecordingsViewMode.Line;
@@ -275,6 +496,9 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand ClearCompareCommand        { get; }
     public RelayCommand SaveNotesCommand           { get; }
     public RelayCommand ClearFrameCommand          { get; }
+    public RelayCommand AddCatalogLineCommand      { get; }
+    public RelayCommand AddTypedWavelengthCommand  { get; }
+    public RelayCommand RemoveWavelengthCommand    { get; }
 
     /// <summary>Called by the DataGrid's selection-changed handler in code-behind.</summary>
     public void SetSelection(RecordingGroup? primary, RecordingGroup? compare)
@@ -486,29 +710,77 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
 
     private void BuildLinePlot()
     {
+        _linePlotModel.Series.Clear();
         var infos = new List<string>();
-        Project(_primaryOes1, _series1A, "primary", infos);
 
-        bool hasCompare = _compareOes1 is not null;
-        _series1B.IsVisible = hasCompare;
-        if (hasCompare)
-            Project(_compareOes1, _series1B, "compare", infos);
-        else
-            _series1B.Points.Clear();
+        foreach (var w in TrendWavelengths)
+        {
+            Project(_primaryOes1, w, compare: false, infos);
+            if (_compareOes1 is not null) Project(_compareOes1, w, compare: true, infos);
+        }
+
+        _lineValueAxis.Title = _normalizeTrend ? "Intensity (× own mean)" : "Intensity (a.u.)";
         WavelengthInfoText = string.Join("   |   ", infos);
     }
 
-    private void Project(FullRecording? rec, LineSeries series, string label, List<string> infos)
+    /// <summary>
+    /// Adds one wavelength's trace for one session. Colour comes from the wavelength, dashing
+    /// from the session, so both can be read off the same plot.
+    /// </summary>
+    private void Project(FullRecording? rec, TrendWavelengthViewModel w, bool compare, List<string> infos)
     {
-        series.Points.Clear();
-        if (rec is null || rec.FrameCount == 0) return;
-        int col = rec.FindClosestWavelength(_wavelengthNm);
+        if (rec is null || rec.FrameCount == 0 || rec.Wavelengths.Length == 0) return;
+
+        int col = rec.FindClosestWavelength((float)w.Nm);
         if (col < 0) return;
 
-        series.Points.Capacity = Math.Max(series.Points.Capacity, rec.FrameCount);
+        // The peak window, when enabled, is resolved once per recording — the axis does not
+        // move between frames, so re-scanning it per frame would buy nothing.
+        int lo = col, hi = col;
+        if (_usePeakWindow)
+        {
+            while (lo > 0 && rec.Wavelengths[lo - 1] >= w.Nm - PeakWindowNm) lo--;
+            while (hi < rec.Wavelengths.Length - 1 && rec.Wavelengths[hi + 1] <= w.Nm + PeakWindowNm) hi++;
+        }
+
+        var values = new double[rec.FrameCount];
+        double sum = 0;
+        int counted = 0;
         for (int i = 0; i < rec.FrameCount; i++)
-            series.Points.Add(new DataPoint(rec.ElapsedSec[i], rec.Intensities[i][col]));
-        infos.Add($"{label} @ {rec.Wavelengths[col]:F2} nm · {rec.FrameCount} frames");
+        {
+            var row = rec.Intensities[i];
+            double v = row[col];
+            if (_usePeakWindow)
+            {
+                for (int c = lo; c <= hi && c < row.Length; c++)
+                    if (row[c] > v) v = row[c];
+            }
+            values[i] = v;
+            if (!double.IsNaN(v)) { sum += v; counted++; }
+        }
+
+        double mean = counted > 0 ? sum / counted : 0.0;
+        // A trace whose mean is at or below zero cannot be normalized by it — that would flip
+        // or explode it. Left in raw counts and said so, rather than drawn as nonsense.
+        bool normalize = _normalizeTrend && mean > 0;
+
+        var series = new LineSeries
+        {
+            Title = $"{w.Text} · {(compare ? "compare" : "primary")}",
+            Color = w.Color,
+            StrokeThickness = 1.2,
+            LineStyle = compare ? LineStyle.Dash : LineStyle.Solid,
+        };
+        series.Points.Capacity = rec.FrameCount;
+        for (int i = 0; i < rec.FrameCount; i++)
+            series.Points.Add(new DataPoint(rec.ElapsedSec[i], normalize ? values[i] / mean : values[i]));
+        _linePlotModel.Series.Add(series);
+
+        string where = _usePeakWindow
+            ? $"peak {rec.Wavelengths[lo]:F2}–{rec.Wavelengths[hi]:F2} nm"
+            : $"{rec.Wavelengths[col]:F2} nm";
+        string note = _normalizeTrend && !normalize ? " · not normalized (mean ≤ 0)" : "";
+        infos.Add($"{(compare ? "compare" : "primary")} {w.Text} @ {where} · mean {mean:G4}{note}");
     }
 
     private void BuildHeatmap()
@@ -580,7 +852,7 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
     {
         if (Primary is null)
         {
-            _linePlotModel.Title = "Intensity @ Trigger Wavelength vs Time";
+            _linePlotModel.Title = "Intensity vs Time";
             _heatmapPlotModel.Title = "Heatmap";
             return;
         }
@@ -592,9 +864,7 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
 
     private void ClearAllPlots()
     {
-        _series1A.Points.Clear();
-        _series1B.Points.Clear();
-        _series1B.IsVisible = false;
+        _linePlotModel.Series.Clear();
         for (int i = _heatmapPlotModel.Series.Count - 1; i >= 0; i--)
             _heatmapPlotModel.Series.RemoveAt(i);
         ClearFrameSpectrum();

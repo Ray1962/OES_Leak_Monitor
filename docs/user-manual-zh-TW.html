@@ -894,12 +894,28 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><strong>Save PNG</strong> / <strong>Copy Image</strong></td><td>匯出目前圖表</td></tr>
 <tr><td><strong>Clear Compare</strong></td><td>移除比較用的第二個 session</td></tr>
 </tbody></table></div>
-<p><strong>篩選</strong>：Search（日期／時間／檔名關鍵字）、From / To 日期、<strong>Wavelength (nm)</strong>（投影到線圖的波長；按 Enter 或點到別處才套用）。</p>
+<p><strong>篩選</strong>：Search（日期／時間／檔名關鍵字）、From / To 日期。</p>
+<h4 id="681-線圖的波長可多條">6.8.1 線圖的波長（可多條）</h4>
+<p>線圖上方有一排波長控制，<strong>最多同時畫 6 條波長</strong>（Heatmap 模式時會收起來）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>控制</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>色塊清單</td><td>目前畫的波長，每條配一個顏色 —— <strong>顏色代表波長</strong>，與圖例一致</td></tr>
+<tr><td>下拉 ＋ <strong>Add line</strong></td><td>從<strong>譜線目錄</strong>選（物種分組，內定線與 <code>u…</code> 自訂線都在，見 §6.5.1）</td></tr>
+<tr><td><strong>or nm:</strong> ＋ <strong>Add</strong></td><td>直接打任一波長（按 Enter 也可）。<strong>判斷一條線有沒有反應時，通常要拿旁邊一段沒有峰的連續光當對照</strong>，那個位置不在目錄裡，只能手打</td></tr>
+<tr><td>下拉 ＋ <strong>Remove</strong></td><td>移除某一條（至少保留一條）</td></tr>
+<tr><td><strong>Normalize (÷ own mean)</strong></td><td>每條線除以<strong>自己在整段錄檔的平均值</strong>，全部落在 1.0 附近，比的是<strong>形狀</strong>。不同譜線的強度常差好幾個數量級，不正規化的話弱的那條會被壓成貼底的直線</td></tr>
+<tr><td><strong>Peak ±0.5 nm</strong></td><td>改取 ±0.5 nm 內的<strong>最大值</strong>（與 Monitor 分頁的即時趨勢一致，可吸收軸漂移）。<strong>預設關閉</strong></td></tr>
+</tbody></table></div>
+<blockquote><p><strong>開啟時預設就是記錄器的 trigger wavelength 那一條</strong>，和以前一樣；清單會被記住，下次開啟沿用。</p>
+<p>⚠️ <strong><code>Normalize</code> 不是 Leak Monitor 的「% of baseline」。</strong> 這裡的分母是<strong>該條線自己的全段平均</strong>，那裡的分母是 <strong>Golden Run 基線</strong>。圖上 Y 軸會寫 <code>Intensity (× own mean)</code> 以示區別。若某條線的平均值 ≤ 0（例如扣過背景的雜訊），該條會維持原始 counts 並在下方狀態列註明。</p>
+<p>⚠️ <strong><code>Peak ±0.5 nm</code> 預設關閉是刻意的。</strong> 取窗內最大值會對<strong>弱線</strong>造成系統性向上偏差，同時抬高它的平均與散度 —— 而 §1.1 的判準正是「變化是雜訊的幾倍」。回顧分析要的是那個位置<strong>實際量到</strong>的值；真的碰到軸漂移，請用 §6.5.2 的漂移修正對症處理。</p></blockquote>
+<p><strong>比較模式</strong>：選兩個 session 時，<strong>線型代表 session</strong>（主 session 實線、比較 session 虛線），顏色仍代表波長 —— 所以 3 條波長 × 2 個 session = 6 條線，圖例寫成 <code>337.1 nm · primary</code> / <code>337.1 nm · compare</code>。</p>
 <p><strong>版面</strong></p>
 <ul>
 <li>左側：session 清單（Date / Time / Rot / Size）。<strong>可以多選兩個 session 做疊圖比較。</strong>
 </li>
-<li>右上：主圖（線圖或熱圖）。
+<li>右上：波長控制列 ＋ 主圖（線圖或熱圖）。
 </li>
 <li>右下左：單幀光譜 —— 在主圖上點一下就會顯示該時間點的完整光譜。
 </li>

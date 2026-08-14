@@ -59,6 +59,14 @@ public sealed class AppSettings : IJsonOnDeserialized
     /// </summary>
     public double ReplaySpeed { get; set; } = 1;
 
+    /// <summary>
+    /// Wavelengths the Recordings line view last plotted. A review preference rather than a
+    /// measurement setting — which is why it lives here and not in <see cref="LeakMonitor"/> —
+    /// persisted because §1.1's line-selection procedure means opening several recordings in a
+    /// row to compare the same handful of candidate lines. Empty → the trigger wavelength.
+    /// </summary>
+    public List<double> RecordingsWavelengths { get; set; } = new();
+
     // Pre-list schema kept for one-shot migration from v0.x settings.json.
     // Deserializer fills these; OnDeserialized folds them into Devices and nulls them
     // so the next Save emits only the new `devices` array.
@@ -86,6 +94,7 @@ public sealed class AppSettings : IJsonOnDeserialized
         LeakMonitor.GoldenRuns ??= new();
         LeakMonitor.WavelengthCorrections ??= new();
         LeakMonitor.UserSpectralLines ??= new();
+        RecordingsWavelengths ??= new();
         DataRetention ??= new();
         // A settings.json predating this key deserializes to 0, which would leave both trend
         // charts empty. Clamp rather than reject: any out-of-range value has an obvious

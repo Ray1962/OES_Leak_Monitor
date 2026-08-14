@@ -112,6 +112,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             settings.Logger.BaseDirectory, _paths.DataDirectory);
 
         Recordings  = new RecordingsViewModel(Logger, _intensityLogger, _paths.DataDirectory);
+        // The line view's wavelength set is a review preference, so it is restored and then
+        // persisted as it changes rather than waiting for the Configuration tab's Save — the
+        // person comparing recordings is not on that tab and has no reason to visit it.
+        Recordings.RestoreTrendWavelengths(settings.RecordingsWavelengths);
+        Recordings.TrendWavelengthsChanged += (_, _) => PersistRecordingsWavelengths();
         RatioReview = new RatioReviewViewModel(Logger, _intensityLogger, _paths.DataDirectory);
 
         _devices = new List<DeviceViewModel>(DeviceProfiles.Length);
@@ -221,6 +226,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             RatioSetup.RefreshLineCatalog();
             LinePicker.RefreshCatalog();
+            Recordings.RefreshLineCatalog();
         };
         WavelengthCorrection.CorrectionsSaved += (_, _) => LinePicker.RefreshCatalog();
 
@@ -676,6 +682,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             _systemLogger.LogError("ReplaySelection_Persist_Failed", ex, path ?? "(none)");
+        }
+    }
+
+    /// <summary>Persists the Recordings line view's wavelength set, same read-modify-write
+    /// idiom as the replay selection so no unsaved Configuration edit is clobbered.</summary>
+    private void PersistRecordingsWavelengths()
+    {
+        try
+        {
+            var onDisk = _settingsService.Load();
+            onDisk.RecordingsWavelengths = Recordings.TrendWavelengthValues.ToList();
+            _settingsService.Save(onDisk);
+        }
+        catch (Exception ex)
+        {
+            _systemLogger.LogError("RecordingsWavelengths_Persist_Failed", ex, "");
         }
     }
 

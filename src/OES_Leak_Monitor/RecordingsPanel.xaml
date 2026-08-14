@@ -53,14 +53,6 @@
                     <DatePicker SelectedDate="{Binding StartDate}" Margin="0,0,8,0"/>
                     <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#444"/>
                     <DatePicker SelectedDate="{Binding EndDate}"   Margin="0,0,16,0"/>
-                    <TextBlock Text="Wavelength (nm):" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#444"/>
-                    <!-- LostFocus, not PropertyChanged: updating the float source on every keystroke
-                         makes the binding rewrite the text ("777." converts back to "777"), so the
-                         decimal point can never be typed. KeyDown commits on Enter. -->
-                    <TextBox Width="70" Padding="4,2"
-                             Text="{Binding WavelengthNm, UpdateSourceTrigger=LostFocus}"
-                             KeyDown="WavelengthBox_KeyDown"
-                             ToolTip="Wavelength projected onto the line view; closest header column wins. Press Enter or click away to apply."/>
                 </StackPanel>
 
                 <!-- Left side: actions + view mode -->
@@ -163,13 +155,99 @@
             <Border Grid.Column="2" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="6"/>
                         <RowDefinition Height="280" MinHeight="120"/>
                     </Grid.RowDefinitions>
 
+                    <!-- Wavelengths on the line view. Colour identifies the wavelength and the
+                         dash pattern the session, so a compare run doubles the traces without
+                         doubling the things to keep track of. -->
+                    <Border Grid.Row="0" Background="#F7F9FC" BorderBrush="#EEE"
+                            BorderThickness="0,0,0,1" Padding="8,6"
+                            Visibility="{Binding IsLineMode, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <WrapPanel>
+                                <TextBlock Text="Wavelengths:" FontWeight="SemiBold" Foreground="#1F3A66"
+                                           VerticalAlignment="Center" Margin="0,0,8,4"/>
+                                <ItemsControl ItemsSource="{Binding TrendWavelengths}"
+                                              VerticalAlignment="Center" Margin="0,0,10,4">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#FFF" BorderBrush="#DDD" BorderThickness="1"
+                                                    CornerRadius="2" Padding="5,1" Margin="0,0,4,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Rectangle Width="10" Height="10" Margin="0,0,5,0"
+                                                               VerticalAlignment="Center"
+                                                               Fill="{Binding Swatch}"/>
+                                                    <TextBlock Text="{Binding Text}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </WrapPanel>
+
+                            <WrapPanel Margin="0,2,0,0">
+                                <ComboBox ItemsSource="{Binding LineCatalog}"
+                                          SelectedItem="{Binding SelectedCatalogLine}"
+                                          IsSynchronizedWithCurrentItem="False"
+                                          IsTextSearchEnabled="True" TextSearch.TextPath="Display"
+                                          DisplayMemberPath="Display"
+                                          Width="210" Margin="0,0,4,4" VerticalAlignment="Center"
+                                          ToolTip="Emission lines from the catalog, grouped by species — built-in and your own (u…).">
+                                    <ComboBox.GroupStyle>
+                                        <GroupStyle>
+                                            <GroupStyle.HeaderTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                                               Foreground="#1F3A66" Margin="2,4,2,2"/>
+                                                </DataTemplate>
+                                            </GroupStyle.HeaderTemplate>
+                                        </GroupStyle>
+                                    </ComboBox.GroupStyle>
+                                </ComboBox>
+                                <Button Content="Add line" Command="{Binding AddCatalogLineCommand}"
+                                        Padding="9,3" Margin="0,0,10,4"
+                                        ToolTip="Plot the selected catalog line."/>
+
+                                <TextBlock Text="or nm:" VerticalAlignment="Center"
+                                           Foreground="#444" Margin="0,0,4,4"/>
+                                <TextBox Width="66" Padding="4,2" Margin="0,0,4,4" VerticalAlignment="Center"
+                                         Text="{Binding NewWavelengthText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Any wavelength, including a stretch of continuum with no line on it — useful as a control when judging whether a line responded.">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Enter" Command="{Binding AddTypedWavelengthCommand}"/>
+                                    </TextBox.InputBindings>
+                                </TextBox>
+                                <Button Content="Add" Command="{Binding AddTypedWavelengthCommand}"
+                                        Padding="9,3" Margin="0,0,10,4"/>
+
+                                <ComboBox ItemsSource="{Binding TrendWavelengths}"
+                                          SelectedItem="{Binding SelectedTrendWavelength}"
+                                          DisplayMemberPath="Text" IsSynchronizedWithCurrentItem="False"
+                                          Width="96" Margin="0,0,4,4" VerticalAlignment="Center"
+                                          ToolTip="Pick a plotted wavelength to remove."/>
+                                <Button Content="Remove" Command="{Binding RemoveWavelengthCommand}"
+                                        Padding="9,3" Margin="0,0,14,4"
+                                        ToolTip="Remove the selected wavelength. The last one stays."/>
+
+                                <CheckBox Content="Normalize (÷ own mean)" IsChecked="{Binding NormalizeTrend}"
+                                          VerticalAlignment="Center" Margin="0,0,12,4"
+                                          ToolTip="Divide each trace by its own mean over the whole recording, so lines that differ by orders of magnitude can be compared by shape. Not the same as the Leak Monitor's % of baseline, whose divisor is a Golden Run."/>
+                                <CheckBox Content="Peak ±0.5 nm" IsChecked="{Binding UsePeakWindow}"
+                                          VerticalAlignment="Center" Margin="0,0,0,4"
+                                          ToolTip="Take the maximum within ±0.5 nm instead of the value at the nearest pixel — matches the Monitor tab's live trend and absorbs axis drift, but biases a weak line upward and inflates its scatter. Off by default."/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Main plot (line OR heatmap) -->
-                    <oxy:PlotView Grid.Row="0" x:Name="MainPlotView"
+                    <oxy:PlotView Grid.Row="1" x:Name="MainPlotView"
                                   Model="{Binding ActivePlotModel}"
                                   Controller="{Binding PlotController}"
                                   Background="White"
@@ -190,14 +268,14 @@
                         </oxy:PlotView.ContextMenu>
                     </oxy:PlotView>
 
-                    <GridSplitter Grid.Row="1"
+                    <GridSplitter Grid.Row="2"
                                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                   Background="#DDD"
                                   ResizeBehavior="PreviousAndNext"
                                   ResizeDirection="Rows"/>
 
                     <!-- Bottom: frame spectrum | notes -->
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="6"/>
