@@ -19,8 +19,10 @@
     <Grid Margin="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*" MinHeight="180"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="3*" MinHeight="160"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -28,8 +30,117 @@
                    FontSize="16" FontWeight="Bold" Foreground="#1F3A66"
                    Margin="6,4,6,8"/>
 
+        <!-- ===================== Emission line table ===================== -->
+        <!-- The fixed catalog and the site's own lines in one list: the question anyone has
+             before adding a line is whether it is already there, and that is answered by
+             searching one table rather than by choosing which of two tables to look in. -->
+        <Border Grid.Row="1" Background="White" BorderBrush="#DDD" BorderThickness="1"
+                CornerRadius="4" DataContext="{Binding LineTable}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="#F7F9FC"
+                        BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="8,6">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Emission lines" FontWeight="SemiBold" Foreground="#1F3A66"
+                                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <TextBlock Text="Search:" VerticalAlignment="Center" Foreground="#555"
+                                       Margin="0,0,4,0"/>
+                            <TextBox Width="130" VerticalAlignment="Center" Padding="4,2"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Filter by species or wavelength."/>
+                            <CheckBox Content="User lines only" IsChecked="{Binding UserOnly}"
+                                      VerticalAlignment="Center" Margin="10,0,12,0"/>
+                            <Button Content="Add" Command="{Binding AddCommand}"
+                                    Padding="10,3" MinWidth="60" Margin="0,0,4,0"
+                                    ToolTip="Add a line of your own. The species name is stored with a leading “u”, so it can never be confused with a built-in line."/>
+                            <Button Content="Remove" Command="{Binding RemoveCommand}"
+                                    Padding="10,3" MinWidth="70" Margin="0,0,12,0"
+                                    ToolTip="Remove the selected user line. Refused while a ratio or a wavelength correction still points at it."/>
+                            <Button Content="Import CSV…" Command="{Binding ImportCommand}"
+                                    Padding="10,3" MinWidth="90" Margin="0,0,4,0"
+                                    ToolTip="Merge a Species,WavelengthNm CSV into your lines. Lines already present are skipped; nothing is ever removed."/>
+                            <Button Content="Export CSV…" Command="{Binding ExportCommand}"
+                                    Padding="10,3" MinWidth="90" Margin="0,0,12,0"
+                                    ToolTip="Write your own lines out as CSV, to carry to another tool."/>
+                            <Button Content="Save lines" Command="{Binding SaveCommand}"
+                                    Padding="12,3" MinWidth="90" Margin="0,0,4,0"
+                                    ToolTip="Persist the user lines to settings.json (Engineer+). They are selectable in Ratio Setup immediately — no acquisition restart."/>
+                            <Button Content="Revert" Command="{Binding RevertCommand}"
+                                    Padding="10,3" MinWidth="70"
+                                    ToolTip="Discard unsaved line edits."/>
+                        </StackPanel>
+                        <TextBlock Margin="0,5,0,0" Foreground="#666" FontSize="11" TextWrapping="Wrap">
+                            <Run Text="{Binding CountText, Mode=OneWay}"/>
+                            <Run Text=" · Built-in lines are read-only. Saved lines take effect immediately."
+                                 Foreground="#888"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding StatusMessage}" Margin="0,3,0,0"
+                                   Foreground="#444" FontSize="11" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <DataGrid ItemsSource="{Binding Rows}"
+                          SelectedItem="{Binding SelectedRow}"
+                          AutoGenerateColumns="False" CanUserAddRows="False"
+                          CanUserDeleteRows="False" CanUserResizeRows="False"
+                          HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                          HorizontalGridLinesBrush="#EEE" BorderThickness="0"
+                          RowHeaderWidth="0" SelectionMode="Single">
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Style.Triggers>
+                                <!-- Read-only rows sit on a tint, so what can and cannot be
+                                     edited is visible before anyone clicks a cell. -->
+                                <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                                    <Setter Property="Background" Value="#F7F7F5"/>
+                                    <Setter Property="Foreground" Value="#555"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Source" Binding="{Binding Source}"
+                                            Width="70" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Species" Binding="{Binding Species}"
+                                            Width="110" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Name (u is added for you)"
+                                            Binding="{Binding SpeciesBody, UpdateSourceTrigger=LostFocus}"
+                                            Width="180">
+                            <DataGridTextColumn.CellStyle>
+                                <Style TargetType="DataGridCell">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Wavelength (nm)"
+                                            Binding="{Binding WavelengthNm, StringFormat={}{0:0.###}, UpdateSourceTrigger=LostFocus}"
+                                            Width="140">
+                            <DataGridTextColumn.CellStyle>
+                                <Style TargetType="DataGridCell">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center" Background="Transparent"
+                      ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"/>
+
+        <!-- ===================== Wavelength corrections ===================== -->
         <!-- Apply-on-restart notice -->
-        <Border Grid.Row="1" Background="#FFF6E0" BorderBrush="#E8C870" BorderThickness="1"
+        <Border Grid.Row="3" Background="#FFF6E0" BorderBrush="#E8C870" BorderThickness="1"
                 CornerRadius="4" Padding="10,7" Margin="0,0,0,8">
             <TextBlock TextWrapping="Wrap" Foreground="#7A5A10">
                 Each row shifts one catalog <Run FontWeight="Bold">(element, wavelength)</Run> line by
@@ -42,7 +153,7 @@
         </Border>
 
         <!-- Correction table -->
-        <Border Grid.Row="2" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+        <Border Grid.Row="4" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
             <DockPanel>
                 <!-- Add / Remove footer -->
                 <Border DockPanel.Dock="Bottom" Background="#FAFAFA"
@@ -143,7 +254,7 @@
         </Border>
 
         <!-- Bottom bar -->
-        <Border Grid.Row="3" Background="#EEF2F7" BorderBrush="#CCC" BorderThickness="1"
+        <Border Grid.Row="5" Background="#EEF2F7" BorderBrush="#CCC" BorderThickness="1"
                 CornerRadius="4" Padding="10,8" Margin="0,8,0,0">
             <DockPanel LastChildFill="True">
                 <Button DockPanel.Dock="Left" Content="Save"

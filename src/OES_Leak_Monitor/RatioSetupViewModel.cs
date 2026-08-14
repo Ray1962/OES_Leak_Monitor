@@ -30,8 +30,9 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
 
     // Backing list of the shared line pickers — the option instances are long-lived so that
     // RefreshCorrections can update their offsets in place without disturbing any selection.
-    private readonly IReadOnlyList<SpectralLineOption> _lineOptions =
-        SpectralLineCatalog.All.Select(l => new SpectralLineOption(l)).ToList();
+    // Observable because the catalog gains and loses user-defined lines while the tab is alive.
+    private readonly ObservableCollection<SpectralLineOption> _lineOptions =
+        new(SpectralLineCatalog.All.Select(l => new SpectralLineOption(l)));
 
     public RatioSetupViewModel(LeakMonitorEngine engine, Action persistSettings,
         SystemLogger? log = null)
@@ -79,6 +80,38 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
                     ? off
                     : 0.0;
         }
+    }
+
+    /// <summary>
+    /// Syncs the line pickers with the catalog after user-defined lines are saved, so a line
+    /// added on the Wavelength Calibration tab is selectable here without an acquisition restart
+    /// — a line is catalog data, not something the running engine is computing with. Existing
+    /// option instances are kept, so no picker loses its selection and no unsaved ratio edit is
+    /// disturbed; a line that is gone is dropped only if no ratio is pointing at it, which the
+    /// line table has already refused to allow.
+    /// </summary>
+    public void RefreshLineCatalog()
+    {
+        var wanted = SpectralLineCatalog.All;
+        var have = _lineOptions.ToDictionary(o => (o.Species, Math.Round(o.WavelengthNm, 3)));
+
+        foreach (var line in wanted)
+        {
+            if (!have.ContainsKey((line.Species, Math.Round(line.WavelengthNm, 3))))
+                _lineOptions.Add(new SpectralLineOption(line));
+        }
+
+        var keep = new HashSet<(string, double)>(
+            wanted.Select(l => (l.Species, Math.Round(l.WavelengthNm, 3))));
+        for (int i = _lineOptions.Count - 1; i >= 0; i--)
+        {
+            var o = _lineOptions[i];
+            if (!keep.Contains((o.Species, Math.Round(o.WavelengthNm, 3))))
+                _lineOptions.RemoveAt(i);
+        }
+
+        RefreshCorrections();
+        LineCatalog.Refresh();
     }
 
     public RelayCommand AddRatioCommand    { get; }

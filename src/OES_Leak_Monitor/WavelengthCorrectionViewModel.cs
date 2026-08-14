@@ -121,6 +121,11 @@ public sealed class WavelengthCorrectionViewModel : INotifyPropertyChanged
         _persistSettings = persistSettings ?? throw new ArgumentNullException(nameof(persistSettings));
         _log = log;
 
+        // The same tab also manages the emission-line catalog itself. Kept as a separate
+        // view-model with its own Save because the two differ in when they take effect: a
+        // correction is staged until acquisition restarts, a catalog line is live at once.
+        LineTable = new SpectralLineTableViewModel(engine, persistSettings, log);
+
         Corrections = new ObservableCollection<CorrectionRowViewModel>();
         Corrections.CollectionChanged += OnCorrectionsCollectionChanged;
 
@@ -133,6 +138,9 @@ public sealed class WavelengthCorrectionViewModel : INotifyPropertyChanged
     }
 
     public ObservableCollection<CorrectionRowViewModel> Corrections { get; }
+
+    /// <summary>The emission-line catalog editor shown above the correction table.</summary>
+    public SpectralLineTableViewModel LineTable { get; }
 
     /// <summary>Raised after the overlay has been persisted, so other editors that display
     /// per-line offsets (the Ratio Setup line pickers) can pick up the new values.</summary>
@@ -174,6 +182,7 @@ public sealed class WavelengthCorrectionViewModel : INotifyPropertyChanged
         AddCommand.RaiseCanExecuteChanged();
         RemoveCommand.RaiseCanExecuteChanged();
         SaveCommand.RaiseCanExecuteChanged();
+        LineTable.SetRole(engineerOrHigher);
     }
 
     // --- load / edit ---------------------------------------------------------

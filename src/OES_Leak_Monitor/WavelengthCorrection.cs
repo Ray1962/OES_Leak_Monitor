@@ -11,6 +11,22 @@ namespace OES_Leak_Monitor;
 /// <em>every</em> ratio (signal or reference) that uses that line, without re-picking the
 /// catalog entry. See <see cref="WavelengthCalibration"/> for how it is applied.
 /// </summary>
+/// <summary>
+/// One emission line the site added to the catalog because the built-in table doesn't carry it.
+/// <see cref="Species"/> is stored with its <see cref="SpectralLineCatalog.UserPrefix"/> already
+/// applied — the marker is part of the stored name, so a ratio, a Golden Run baseline label or a
+/// CSV column header that came from a user line says so on its face, with no lookup needed.
+/// </summary>
+public sealed class UserSpectralLine
+{
+    /// <summary>Species name including the "u" marker, e.g. "uN2", "uXeCl".</summary>
+    public string Species { get; set; } = "";
+
+    public double WavelengthNm { get; set; }
+
+    public UserSpectralLine Clone() => (UserSpectralLine)MemberwiseClone();
+}
+
 public sealed class WavelengthCorrection
 {
     /// <summary>Catalog species (ASCII, e.g. "O", "N2", "OH") the correction applies to.</summary>

@@ -372,6 +372,14 @@ public sealed class LeakMonitorSettings
 {
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Emission lines the site added to the fixed catalog, each already carrying the "u" species
+    /// marker. Stored here rather than in a file of their own because a ratio can reference one:
+    /// a settings.json without them would carry a ratio pointing at a line that does not exist,
+    /// and the manual promises this single file is a machine's whole configuration.
+    /// </summary>
+    public List<UserSpectralLine> UserSpectralLines { get; set; } = new();
+
     /// <summary>Name of the <see cref="GoldenRun"/> currently used as the baseline.</summary>
     public string? ActiveGoldenRun { get; set; }
 

@@ -96,6 +96,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // directory (so both tabs listed "0 files" until the user pressed Refresh) and
         // 337 nm instead of the configured trigger wavelength.
         var settings = _settingsService.Load();
+        // The site's own emission lines join the fixed catalog before anything reads it — the
+        // Ratio Setup pickers snapshot it at construction, and a ratio saved against a user
+        // line has to find that line again or the picker will match it to something else.
+        SpectralLineCatalog.SetUserLines(settings.LeakMonitor.UserSpectralLines?
+            .Select(l => new SpectralLine(l.Species, l.WavelengthNm)));
         Logger.LoadFrom(settings.Logger);
         _retention = settings.DataRetention ?? new DataRetentionSettings();
         _persistedLoggerEnabled = settings.Logger.Enabled;
@@ -203,6 +208,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // The Ratio Setup line pickers annotate each line with its offset, so refresh them
         // when the overlay changes — without reloading rows, which would drop unsaved edits.
         WavelengthCorrection.CorrectionsSaved += (_, _) => RatioSetup.RefreshCorrections();
+        // A saved user line is usable at once — the catalog is not something the running engine
+        // computes with, so unlike a correction it needs no acquisition restart. Push it into
+        // the Ratio Setup pickers rather than making the operator find that out by restarting.
+        WavelengthCorrection.LineTable.UserLinesSaved += (_, _) => RatioSetup.RefreshLineCatalog();
 
         // Leak Calibration tab: a guided wizard that captures "ratio rise ↔ known leak rate"
         // points and fits a per-ratio sensitivity, persisted to settings.json (Engineer+).

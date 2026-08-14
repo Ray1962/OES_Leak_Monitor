@@ -733,7 +733,37 @@ vcruntime140_cor3.dll</code></pre>
 <p>底部 <strong>Save</strong>（Engineer+）／ <strong>Revert</strong>（丟棄未存檔的修改）。</p>
 <hr>
 <h3 id="65-wavelength-calibration波長校正">6.5 Wavelength Calibration（波長校正）</h3>
-<p><strong>Engineer+ 才能存檔，同樣是暫存 → Stop/Start 才生效。</strong></p>
+<p><strong>Engineer+ 才能存檔。</strong> 這一頁有<strong>上下兩張表</strong>，兩者的生效時機不同，各有自己的 Save：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>表</th><th>內容</th><th>何時生效</th></tr></thead>
+<tbody>
+<tr><td>上：<strong>Emission lines</strong></td><td>譜線目錄本身（內定表＋你自己加的線）</td><td><strong>存檔後立即生效</strong>，Ratio Setup 馬上選得到</td></tr>
+<tr><td>下：<strong>Wavelength corrections</strong></td><td>每條譜線的漂移位移量</td><td><strong>暫存</strong> → Stop/Start 重啟擷取才生效</td></tr>
+</tbody></table></div>
+<h4 id="651-emission-lines譜線目錄">6.5.1 Emission lines（譜線目錄）</h4>
+<p>內定表有 60 個物種、約 500 條譜線，<strong>不可修改</strong> —— 它是共同的參考基準，改了會讓不同機台的設定失去可比性。你自己的機台若有一條內定表沒有的線，在這裡加。</p>
+<ul>
+<li><strong>搜尋框</strong>：輸入物種或波長即時過濾（例如打 <code>500</code> 會列出所有 500 附近的線）。要新增之前先搜一次，通常那條線已經在表裡了。
+</li>
+<li><strong>User lines only</strong>：只看自己加的線。
+</li>
+<li><strong>Source 欄</strong>：<code>built-in</code>（灰底、唯讀）或 <code>user</code>（可編輯）。
+</li>
+<li><strong>Add</strong>：新增一列。你只填<strong>名稱主體</strong>與<strong>波長</strong>，系統會自動在名稱前面加上 <strong><code>u</code></strong> —— 例如輸入 <code>N2</code>、500.0，存成 <strong><code>uN2 500.0</code></strong>。這個 <code>u</code> 是系統的標記，不是你取的名字的一部分，所以不必自己打，也不可能打錯位置。
+</li>
+<li><strong>可以沿用內定物種的名字</strong>：內定表已經有 <code>N2</code>，你仍然可以建 <code>uN2</code> —— 「內定的 N₂ 沒有我要的那條波長」正是最常見的動機。<code>uN2</code> 與 <code>N2</code> 在資料層面是兩個不同的物種，永遠不會相撞。
+</li>
+<li><strong>Remove</strong>：刪除選取的自訂線。<strong>若這條線正在被某個比值（訊號線或參考線）或某筆波長修正引用，會被擋下</strong>，訊息會直接告訴你是誰在用。同理，<strong>改動一條被引用的線的波長也會在存檔時被擋下</strong>。 &gt; 為什麼要擋：比值存的是譜線區域的<strong>副本</strong>，所以刪掉目錄裡的線，當下什麼都不會壞 —— 錯誤發生在幾週後有人打開 Ratio Setup 按了 Save，那時比值會被默默匹配到<strong>最接近的另一條線</strong>，而且沒有任何線索指回這次刪除。
+</li>
+<li><strong>Import CSV… / Export CSV…</strong>：匯入是<strong>合併</strong>（<code>Species,WavelengthNm</code> 兩欄，第一列表頭）；已存在的線會被略過，<strong>永遠不會刪掉任何東西</strong>，所以匯入不可能弄丟一條正在被引用的線。匯入後仍要按 <strong>Save lines</strong> 才會存檔。匯出寫出的是你自己的線（不含內定表）。
+</li>
+<li><strong>上限</strong>：100 條自訂線；波長需在 <strong>100–1200 nm</strong> 之間。
+</li>
+<li>自訂線和內定線一樣，可以在下方的修正表裡加漂移位移 —— 目錄裡的波長是「這條線在文獻上的位置」，位移是「我這台機器把它量到哪裡」，兩件事。
+</li>
+</ul>
+<h4 id="652-wavelength-corrections漂移修正">6.5.2 Wavelength corrections（漂移修正）</h4>
+<p><strong>同樣是暫存 → Stop/Start 才生效。</strong></p>
 <p>用途：補償光譜儀的<strong>波長軸漂移</strong>。每一列把 catalog 中的一條 <code>(元素, 波長)</code> 譜線加上一個位移量（nm）。</p>
 <p><strong>關鍵特性</strong>：因為 key 是 catalog 的 <code>(元素, 波長)</code>，所以修正一次就會<strong>同時套用到所有用到這條譜線的比值</strong>（不論它當訊號線還是參考線），不必逐一去改。</p>
 <div class="tablewrap"><table>
@@ -991,7 +1021,7 @@ vcruntime140_cor3.dll</code></pre>
 <p>唯一的差別是讀取時要即時解壓縮，比未壓縮的檔案略慢（實測 30 MB 全譜檔約 0.35 秒），而 Recordings 的日期範圍預設只看最近 7 天 —— 要看更早的資料記得把 <strong>From</strong> 日期往前調。</p></blockquote>
 <p><strong>磁碟警告</strong>（不論壓縮功能是否開啟都會發出）：程式<strong>開啟時與關閉時</strong>各檢查一次，<strong>只有在真的有磁碟問題時才會跳視窗</strong> —— 餘量低於 <strong>10%</strong>，或資料夾超過容量上限；低於 <strong>5%</strong> 視為嚴重。單純「沒開啟自動壓縮」不會跳提示（否則每次開關程式都要按一次確定，久了就沒人看了），該狀態在 Configuration 分頁本來就看得到。</p>
 <h3 id="75-備份建議">7.5 備份建議</h3>
-<p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、Golden Run 基準線、洩漏率校正、波長修正與資料保存設定。</p>
+<p>要保存一台機台的完整組態，備份 <strong><code>settings.json</code></strong> 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、<strong>自訂譜線</strong>、Golden Run 基準線、洩漏率校正、波長修正與資料保存設定。</p>
 <hr>
 <h2 id="8-日常操作-sop">8. 日常操作 SOP</h2>
 <h3 id="81-每天開機">8.1 每天開機</h3>
@@ -1297,6 +1327,8 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>掉幀判定上限</td><td>1 秒（更久視為電漿真的關閉）</td></tr>
 <tr><td>比值數量上限</td><td>10</td></tr>
 <tr><td>波長修正上限</td><td>±5 nm</td></tr>
+<tr><td>自訂譜線上限</td><td>100 條</td></tr>
+<tr><td>自訂譜線波長範圍</td><td>100–1200 nm</td></tr>
 </tbody></table></div>
 <h3 id="105-出廠預設比值">10.5 出廠預設比值</h3>
 <p>全部以 <strong>Ar 750.4 nm（PeakHeight）</strong> 為參考線；門檻倍數 Warn <strong>1.05</strong> / Alarm <strong>1.12</strong>，σ 3 / 6。</p>

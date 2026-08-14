@@ -85,6 +85,7 @@ public sealed class AppSettings : IJsonOnDeserialized
             LeakMonitor.Ratios = LeakMonitorSettings.CreateDefault().Ratios;
         LeakMonitor.GoldenRuns ??= new();
         LeakMonitor.WavelengthCorrections ??= new();
+        LeakMonitor.UserSpectralLines ??= new();
         DataRetention ??= new();
         // A settings.json predating this key deserializes to 0, which would leave both trend
         // charts empty. Clamp rather than reject: any out-of-range value has an obvious

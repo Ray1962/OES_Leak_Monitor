@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -10,14 +11,56 @@ public readonly record struct SpectralLine(string Species, double WavelengthNm);
 /// Static catalog of OES emission lines (atoms and molecular band heads) usable for
 /// leak-monitoring actinometry. Populates line-picker UI; the v1 ratios pick their
 /// lines from here. Wavelengths for molecular species are approximate band heads.
+/// <para>The built-in table is fixed and cannot be edited. A site whose process has a line
+/// this table doesn't carry adds its own on the Wavelength Calibration tab; those are held
+/// as an overlay (<see cref="SetUserLines"/>) whose species names all start with
+/// <see cref="UserPrefix"/>, so a user line can never collide with, shadow or be mistaken for
+/// a built-in one — in the pickers, in <c>settings.json</c>, or in a CSV column header read a
+/// year later.</para>
 /// </summary>
 public static class SpectralLineCatalog
 {
-    public static IReadOnlyList<SpectralLine> All { get; } = Build();
+    /// <summary>Marks a user-defined species. Applied by the editor, never typed by hand.</summary>
+    public const string UserPrefix = "u";
 
-    /// <summary>Distinct species names, in catalog order.</summary>
-    public static IReadOnlyList<string> Species { get; } =
-        All.Select(l => l.Species).Distinct().ToList();
+    /// <summary>The fixed table. Never changes at runtime.</summary>
+    public static IReadOnlyList<SpectralLine> BuiltIn { get; } = Build();
+
+    private static IReadOnlyList<SpectralLine> _user = Array.Empty<SpectralLine>();
+    private static IReadOnlyList<SpectralLine> _all = BuiltIn;
+    private static IReadOnlyList<string> _species = BuiltIn.Select(l => l.Species).Distinct().ToList();
+
+    /// <summary>Built-in lines followed by the user's own.</summary>
+    public static IReadOnlyList<SpectralLine> All => _all;
+
+    /// <summary>The user-defined lines currently in effect.</summary>
+    public static IReadOnlyList<SpectralLine> UserLines => _user;
+
+    /// <summary>Distinct species names, in catalog order (built-in first, then user-defined).</summary>
+    public static IReadOnlyList<string> Species => _species;
+
+    /// <summary>True for a species name the user defined rather than one from the fixed table.</summary>
+    public static bool IsUserSpecies(string? species) =>
+        !string.IsNullOrEmpty(species) && species.StartsWith(UserPrefix, StringComparison.Ordinal)
+        && !BuiltInSpeciesSet.Contains(species);
+
+    private static readonly HashSet<string> BuiltInSpeciesSet =
+        new(BuiltIn.Select(l => l.Species), StringComparer.Ordinal);
+
+    /// <summary>
+    /// Replaces the user overlay. Called at start-up from the persisted settings and again
+    /// whenever the line table is saved; the built-in table is untouched either way.
+    /// </summary>
+    public static void SetUserLines(IEnumerable<SpectralLine>? lines)
+    {
+        _user = (lines ?? Enumerable.Empty<SpectralLine>())
+            .Where(l => !string.IsNullOrWhiteSpace(l.Species))
+            .OrderBy(l => l.Species, StringComparer.Ordinal)
+            .ThenBy(l => l.WavelengthNm)
+            .ToList();
+        _all = _user.Count == 0 ? BuiltIn : BuiltIn.Concat(_user).ToList();
+        _species = _all.Select(l => l.Species).Distinct().ToList();
+    }
 
     /// <summary>Lines of one species, ascending by wavelength.</summary>
     public static IEnumerable<SpectralLine> ForSpecies(string species) =>
