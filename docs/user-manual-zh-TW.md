@@ -398,6 +398,11 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 - **Start Save** — *武裝*觸發器。並不是立刻開檔，而是等強度條件成立。
 - **Stop Save** — 解除武裝，並**立即**關閉所有開啟中的檔案。
 
+> **出廠預設是「已武裝」。** 全新安裝（以及按下 **Load Defaults**）之後，記錄器就是 armed 的狀態，
+> 不必先按 Start Save —— 一台不在錄的洩漏監控器，事後沒有任何東西可以回頭查，而武裝開關又在
+> Engineer 才進得去的 Configuration 分頁，Operator 根本看不到它。
+> 若 `settings.json` 裡寫的是 `"enabled": false`，那是有人**存過**的決定，程式會照著走，不會自作主張改回來。
+
 **Logger Status** 區塊顯示狀態機目前狀態（`Idle` / `WaitingToStart` / `Saving` / `WaitingToStop`）與目前檔名。本專案是單一 OES，所以只會看到一列 **"OES #1 file"**。
 
 #### 6.2.4 測試模式光譜播放
@@ -1177,6 +1182,8 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 
 | 參數 | 出廠預設 | **建議值** | 說明 |
 |---|---|---|---|
+| 記錄器武裝狀態 | **已武裝（armed）** | 已武裝 | 全新安裝即為 armed，不必先按 Start Save；已存過 `"enabled": false` 的機台維持原狀 |
+| Trigger Wavelength | 337.1 nm | 依 §1.1 挑線結果 | 覆寫框架的 387 nm 預設 |
 | Trigger Mode | `Wavelength` | `AnyMonitoredWavelength` | 保留譜線專一性，又能涵蓋不同步驟亮起的物種 |
 | Save Threshold Intensity | 1000 | **10000** | 見下方 |
 | Start Confirm Time | 2.0 s | 2.0 s | |

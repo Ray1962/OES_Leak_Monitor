@@ -531,6 +531,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         foreach (var d in _devices) d.LoadDefaultsCommand.Execute(null);
         Logger.LoadDefaults();
+        // LoadDefaults resets the logger to the framework's values, which are a general-purpose
+        // recorder's, not this app's: disarmed, and triggering on 387 nm. "Load Defaults" has to
+        // land where a fresh install lands, or the two meanings of "default" disagree.
+        Logger.Enabled = AppSettings.DefaultLoggerEnabled;
+        Logger.TriggerWavelength = AppSettings.DefaultTriggerWavelengthNm;
         TrendRetentionMinutes = AppSettings.DefaultTrendRetentionMinutes;
         GoldenRunCaptureSeconds = LeakMonitorSettings.DefaultGoldenRunCaptureSeconds;
         StatusMessage = "Defaults loaded — click Apply to push to devices and logger.";

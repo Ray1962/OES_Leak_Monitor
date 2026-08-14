@@ -567,6 +567,7 @@ vcruntime140_cor3.dll</code></pre>
 <li><strong>Stop Save</strong> — 解除武裝，並<strong>立即</strong>關閉所有開啟中的檔案。
 </li>
 </ul>
+<blockquote><p><strong>出廠預設是「已武裝」。</strong> 全新安裝（以及按下 <strong>Load Defaults</strong>）之後，記錄器就是 armed 的狀態， 不必先按 Start Save —— 一台不在錄的洩漏監控器，事後沒有任何東西可以回頭查，而武裝開關又在 Engineer 才進得去的 Configuration 分頁，Operator 根本看不到它。 若 <code>settings.json</code> 裡寫的是 <code>"enabled": false</code>，那是有人<strong>存過</strong>的決定，程式會照著走，不會自作主張改回來。</p></blockquote>
 <p><strong>Logger Status</strong> 區塊顯示狀態機目前狀態（<code>Idle</code> / <code>WaitingToStart</code> / <code>Saving</code> / <code>WaitingToStop</code>）與目前檔名。本專案是單一 OES，所以只會看到一列 <strong>"OES #1 file"</strong>。</p>
 <h4 id="624-測試模式光譜播放">6.2.4 測試模式光譜播放</h4>
 <p>已經搬到專屬的 <strong>Replay</strong> 分頁（見 §6.7）。驗證演算法需要的是播放控制、倍速與進度，不是一個選檔按鈕。底部動作列這裡只留一行提示。</p>
@@ -1307,6 +1308,8 @@ vcruntime140_cor3.dll</code></pre>
 <div class="tablewrap"><table>
 <thead><tr><th>參數</th><th>出廠預設</th><th><strong>建議值</strong></th><th>說明</th></tr></thead>
 <tbody>
+<tr><td>記錄器武裝狀態</td><td><strong>已武裝（armed）</strong></td><td>已武裝</td><td>全新安裝即為 armed，不必先按 Start Save；已存過 <code>"enabled": false</code> 的機台維持原狀</td></tr>
+<tr><td>Trigger Wavelength</td><td>337.1 nm</td><td>依 §1.1 挑線結果</td><td>覆寫框架的 387 nm 預設</td></tr>
 <tr><td>Trigger Mode</td><td><code>Wavelength</code></td><td><code>AnyMonitoredWavelength</code></td><td>保留譜線專一性，又能涵蓋不同步驟亮起的物種</td></tr>
 <tr><td>Save Threshold Intensity</td><td>1000</td><td><strong>10000</strong></td><td>見下方</td></tr>
 <tr><td>Start Confirm Time</td><td>2.0 s</td><td>2.0 s</td><td></td></tr>

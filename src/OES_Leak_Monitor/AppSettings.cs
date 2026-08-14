@@ -11,10 +11,26 @@ public sealed class AppSettings : IJsonOnDeserialized
 
     public List<DeviceSettings> Devices { get; set; } = new() { new(), new() };
 
-    // TriggerWavelength defaults to the N2 337.1 nm band head for a fresh settings.json —
-    // kept to one decimal place (the line is at 337.1, not a round 337); overrides the
-    // Aqst.OesApp.Core LoggerSettings default of 387 nm.
-    public LoggerSettings Logger  { get; set; } = new() { TriggerWavelength = 337.1f };
+    /// <summary>Trigger wavelength for a fresh settings.json — the N2 337.1 nm band head, kept
+    /// to one decimal place (the line is at 337.1, not a round 337). Overrides the
+    /// Aqst.OesApp.Core <c>LoggerSettings</c> default of 387 nm.</summary>
+    public const float DefaultTriggerWavelengthNm = 337.1f;
+
+    /// <summary>
+    /// The recorder is armed on a fresh settings.json. The framework default is disarmed, which
+    /// suits a general-purpose logger but not this one: a leak monitor that isn't recording has
+    /// nothing to show when someone asks what the tool was doing an hour ago, and the arming
+    /// switch lives on the Engineer-gated Configuration tab where an Operator never sees it.
+    /// Only the factory value changes — a settings.json that says <c>"enabled": false</c> is a
+    /// decision someone made and saved, and it is still honoured.
+    /// </summary>
+    public const bool DefaultLoggerEnabled = true;
+
+    public LoggerSettings Logger { get; set; } = new()
+    {
+        TriggerWavelength = DefaultTriggerWavelengthNm,
+        Enabled = DefaultLoggerEnabled,
+    };
     public AccessControlConfig AccessControl { get; set; } = new();
 
     /// <summary>Actinometry leak-monitoring model configuration and Golden Run baselines.</summary>
