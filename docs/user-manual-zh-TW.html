@@ -378,6 +378,8 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li>上方 <strong>Baseline</strong> 下拉會自動選到這條新基準線。
 </li>
+<li><strong>若跳出視窗，先看完再繼續</strong>：警告視窗代表有比值沒拿到基準線（那幾條不會參與警報）；錯誤視窗代表一條都沒拿到，這次擷取已被丟棄、舊基準線原封不動 —— 依視窗上的原因排除後重錄（見 §6.3.5 與 §9.5）。
+</li>
 </ol>
 <p>此時洩漏偵測就已經在運作了 —— 狀態列會顯示 <code>OK — within baseline</code>。</p>
 <h3 id="步驟-5選用-洩漏率定量校正">步驟 5（選用）— 洩漏率定量校正</h3>
@@ -635,9 +637,18 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li>按 <strong>Start Capture</strong>，預設平均 <strong>60 秒</strong>。
 </li>
-<li>完成後<strong>立即</strong>寫入 <code>settings.json</code>，並自動設為使用中的基準線。
+<li>只要<strong>至少有一條比值</strong>取得基準線，這次擷取就會<strong>立即</strong>寫入 <code>settings.json</code> 並自動設為使用中的基準線。
 </li>
 </ol>
+<p>擷取結果會當場告訴你：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>結果</th><th>畫面</th><th>發生什麼事</th></tr></thead>
+<tbody>
+<tr><td><strong>全部比值都拿到基準線</strong></td><td>狀態列顯示「captured — N ratio baseline(s)」</td><td>存檔並啟用</td></tr>
+<tr><td><strong>部分比值被拒絕</strong></td><td>跳出<strong>警告視窗</strong>，列出沒拿到基準線的比值與原因</td><td>仍然存檔並啟用；被拒的比值顯示 <strong>No Baseline</strong>，<strong>不參與洩漏警報</strong></td></tr>
+<tr><td><strong>沒有任何比值拿到基準線</strong></td><td>跳出<strong>錯誤視窗</strong></td><td>這次擷取<strong>整份丟棄</strong>：不存檔、不啟用、<strong>也不會蓋掉同名的舊基準線</strong>。原本使用中的基準線與洩漏率校正完全不受影響</td></tr>
+</tbody></table></div>
+<blockquote><p>為什麼要丟棄：一次什麼都沒量到的擷取，若照樣存檔並啟用，會讓<strong>每一條</strong>比值瞬間失去基準線（面板全變 No Baseline、洩漏警報整個停擺），還會連帶把綁定的洩漏率校正一起解除配對 —— 而這一切的依據是一段根本沒量到東西的資料。日誌記 <code>GoldenRunEmpty</code>，訊息會寫明目前使用中的基準線沒有變動。</p></blockquote>
 <p>擷取期間的品質把關：</p>
 <ul>
 <li>只有<strong>通過 SNR 下限</strong>的幀才會被納入該比值的基準線（跟即時判定用同一道關卡）。
@@ -1069,7 +1080,7 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li>等 Leak Monitor 的各比值 SNR 與讀值平穩後，按 <strong>Capture Golden Run</strong>，取一個看得出來源的名字，例如 <code>Replay 0807-2109</code>。
 </li>
-<li>捕捉完成後檢查日誌：出現 <code>GoldenRunCaptured</code> 才算成功。若出現 <code>GoldenRunRatioUnstableBaseline</code> 或 <code>GoldenRunRatioLowSnr</code>，代表那條比值的基線被拒絕，先處理再往下（見 §9.5）。
+<li>捕捉完成後檢查日誌：出現 <code>GoldenRunCaptured</code> 才算成功。若出現 <code>GoldenRunRatioUnstableBaseline</code>、<code>GoldenRunRatioLowSnr</code> 或 <code>GoldenRunRatioDropped</code>（畫面也會跳警告視窗），代表那條比值的基線被拒絕，先處理再往下（見 §9.5）。若跳的是錯誤視窗／日誌記 <code>GoldenRunEmpty</code>，這次擷取沒有存下任何東西 —— 重播的基線要重抓，<strong>而且不要拿實機的舊基準線頂替</strong>（§8.5 開頭的提醒）。
 </li>
 <li>按 <strong>Save</strong>。
 </li>
@@ -1155,9 +1166,12 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 </ol>
 <h3 id="95-golden-run-錄完後某條比值沒有基準線">9.5 Golden Run 錄完後某條比值沒有基準線</h3>
+<p>擷取一結束就會<strong>跳出警告視窗</strong>列出被拒絕的比值與原因，同樣的句子也會寫進系統日誌；下面是各種原因的處理方式。</p>
 <p>系統日誌會有 <code>GoldenRunRatioLowSnr</code> 記錄。原因是該比值可評估的幀當中，通過 SNR 下限的<strong>不到一半</strong>，基準線被主動拒絕了。</p>
+<p>若日誌寫的是 <strong><code>GoldenRunRatioDropped</code></strong>，代表該比值一幀都沒被採用。訊息會直接說是哪一種：監控譜線落在光譜儀波長範圍外、電漿閘門全程關閉（檢查記錄器的觸發波長／存檔門檻，見 §10.2）、參考譜線從未出現、或該比值整段擷取都是停用的。</p>
 <p>若日誌寫的是 <strong><code>GoldenRunRatioUnstableBaseline</code></strong>，原因不同：基準均值本身不夠遠離 0（例如 <code>−25 ± 95</code>）。這代表該波長沒有峰，扣背景後只剩雜訊 —— 把 <strong>Extraction</strong> 改成 <code>RawMean</code> 再錄一次。</p>
 <p>若日誌寫的是 <strong><code>LeakMonitorBaselineMismatch</code></strong>，基準線是好的，但你之後改了某個讓它失效的設定（參考譜線、監控方式、擷取方式、或升級後積分單位改變）—— 重錄即可。</p>
+<p><strong>若是「所有」比值都沒有基準線</strong>（跳出的是錯誤視窗、日誌記 <code>GoldenRunEmpty</code>），這次擷取已被整份丟棄 —— 原本使用中的基準線與洩漏率校正都沒有被動到，機台仍在用舊基準線監控。先照上面的原因排除，再重錄一次即可，<strong>不必</strong>擔心要去把舊基準線救回來。最常見的原因是電漿沒開／記錄器觸發門檻設得太高，讓電漿閘門整段關著（§10.2）。</p>
 <h3 id="96-日誌出現-spectrumframedropout">9.6 日誌出現 <code>SpectrumFrameDropout</code></h3>
 <p>代表<strong>光譜儀送回了整幀全暗的資料</strong>（正常幀最亮處約數萬 counts，全暗幀只有幾十）。這不是製程事件 —— 真正的電漿熄滅會持續超過一秒，而這種掉幀通常只有一到兩幀、約 0.3 秒。</p>
 <p>程式的電漿閘門會把這些幀丟掉，所以<strong>讀值不會被汙染</strong>；記這筆日誌是因為丟得無聲無息，你需要知道儀器有沒有在出這種狀況。實測曾在 13 分鐘內出現 20 幀，其中<strong>一幀落在 Golden Run 擷取視窗內就足以讓該比值的基準線被拒絕</strong>（σ 變成均值的 2.4 倍）。</p>

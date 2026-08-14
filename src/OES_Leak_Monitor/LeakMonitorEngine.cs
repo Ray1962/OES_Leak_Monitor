@@ -28,6 +28,41 @@ public enum CalibrationStatus
     BaselineMismatch,
 }
 
+/// <summary>Why one ratio ended a Golden Run capture without a usable baseline.</summary>
+public sealed class GoldenRunRatioRejection
+{
+    public string Key { get; init; } = "";
+    public string DisplayName { get; init; } = "";
+
+    /// <summary>Operator-facing reason, the same sentence written to the system log.</summary>
+    public string Reason { get; init; } = "";
+}
+
+/// <summary>
+/// Outcome of a Golden Run capture. A capture that produced no usable baseline at all is
+/// <see cref="Accepted"/> = false and was <em>discarded</em>: it is not stored, does not become
+/// the active baseline, and does not replace a same-named run — so a failed capture can never
+/// silently take a working baseline away. A partially successful capture is accepted (the
+/// baselines it did get are usable), with the ratios that got none listed in
+/// <see cref="Rejected"/> so the host can say so instead of reporting plain success.
+/// </summary>
+public sealed class GoldenRunCaptureResult
+{
+    public GoldenRun Run { get; init; } = new();
+
+    /// <summary>False when the run was discarded for having no usable ratio baseline.</summary>
+    public bool Accepted { get; init; }
+
+    /// <summary>Ratios that got no baseline from this capture, with the reason for each.</summary>
+    public IReadOnlyList<GoldenRunRatioRejection> Rejected { get; init; } =
+        Array.Empty<GoldenRunRatioRejection>();
+
+    /// <summary>Name of the baseline left active — unchanged when the capture was discarded.</summary>
+    public string? ActiveGoldenRun { get; init; }
+
+    public int BaselineCount => Run.Baselines.Count;
+}
+
 /// <summary>Immutable per-frame view of the whole monitor, handed to the UI.</summary>
 public sealed class LeakMonitorSnapshot
 {
@@ -226,8 +261,15 @@ public sealed class LeakMonitorEngine : IDisposable
     /// <summary>Raised when the composite alarm level changes.</summary>
     public event EventHandler<LeakAlarmEventArgs>? AlarmStateChanged;
 
-    /// <summary>Raised when a Golden Run capture finishes and becomes the active baseline.</summary>
+    /// <summary>Raised when a Golden Run capture finishes and becomes the active baseline.
+    /// Only fires for an accepted capture — a discarded one changed nothing, so there is
+    /// nothing for the host to persist. See <see cref="GoldenRunCaptureFinished"/>.</summary>
     public event EventHandler<GoldenRun>? GoldenRunCaptured;
+
+    /// <summary>Raised when a Golden Run capture finishes, accepted or discarded, carrying the
+    /// per-ratio rejection reasons. Fires after <see cref="GoldenRunCaptured"/>, so a host that
+    /// reports the outcome to the operator sees the new baseline already applied.</summary>
+    public event EventHandler<GoldenRunCaptureResult>? GoldenRunCaptureFinished;
 
     /// <summary>Raised when a leak-rate calibration point finishes averaging. The host collects
     /// these across leak elements and fits them into a <see cref="LeakCalibration"/>.</summary>
@@ -254,7 +296,7 @@ public sealed class LeakMonitorEngine : IDisposable
 
         LeakMonitorSnapshot snap;
         LeakAlarmLevel oldOverall, newOverall;
-        GoldenRun? capturedRun = null;
+        GoldenRunCaptureResult? captureResult = null;
         LeakCalPoint? capturedPoint = null;
 
         lock (_gate)
@@ -379,7 +421,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 }
                 _captureLast = sample.Timestamp;
                 if ((_captureLast - _captureStart).TotalSeconds >= _captureSeconds)
-                    capturedRun = FinalizeCapture();
+                    captureResult = FinalizeCapture();
             }
 
             if (_calCapturing)
@@ -413,8 +455,15 @@ public sealed class LeakMonitorEngine : IDisposable
             });
         }
 
-        if (capturedRun is not null)
-            GoldenRunCaptured?.Invoke(this, capturedRun);
+        if (captureResult is not null)
+        {
+            // Only an accepted capture changed anything — a discarded one leaves the settings,
+            // the stored runs and the active baseline exactly as they were, so there is nothing
+            // to persist and nothing to re-select.
+            if (captureResult.Accepted)
+                GoldenRunCaptured?.Invoke(this, captureResult.Run);
+            GoldenRunCaptureFinished?.Invoke(this, captureResult);
+        }
 
         if (capturedPoint is not null)
             CalibrationPointCaptured?.Invoke(this, capturedPoint);
@@ -727,10 +776,11 @@ public sealed class LeakMonitorEngine : IDisposable
 
     // --- internals -----------------------------------------------------------
 
-    private GoldenRun FinalizeCapture()
+    private GoldenRunCaptureResult FinalizeCapture()
     {
         _capturing = false;
 
+        var rejected = new List<GoldenRunRatioRejection>();
         double denomMean = _captureDenom.Count > 0 ? _captureDenom.Mean : 0.0;
         var run = new GoldenRun
         {
@@ -748,7 +798,7 @@ public sealed class LeakMonitorEngine : IDisposable
             {
                 // The ratio produced no usable samples — record why so the operator
                 // isn't left guessing at a permanent "No Baseline".
-                LogDroppedRatio(mon.Key, run.Name);
+                rejected.Add(Reject(mon.Key, ReportDroppedRatio(mon.Key, run.Name)));
                 continue;
             }
 
@@ -761,11 +811,14 @@ public sealed class LeakMonitorEngine : IDisposable
             if (evaluable > 0 && accepted < MinBaselineAcceptFraction * evaluable)
             {
                 var dropDef = _defs[mon.Key];
+                string reason =
+                    $"only {accepted} of {evaluable} frames cleared the SNR floor " +
+                    $"({dropDef.MinSnr:0.#}); the line sat near the noise floor. Raise plasma " +
+                    "intensity / exposure, lower Min SNR, or use a stronger line";
                 _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunRatioLowSnr",
-                    $"Ratio {dropDef.DisplayName} baseline rejected — only {accepted} of {evaluable} " +
-                    $"frames cleared the SNR floor ({dropDef.MinSnr:0.#}); the line sat near the noise " +
-                    "floor. Raise plasma intensity / exposure, lower Min SNR, or use a stronger line.",
+                    $"Ratio {dropDef.DisplayName} baseline rejected — {reason}.",
                     related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+                rejected.Add(Reject(mon.Key, reason));
                 continue;
             }
 
@@ -778,13 +831,16 @@ public sealed class LeakMonitorEngine : IDisposable
             double mean = acc!.Mean, sd = acc.StdDev;
             if (mean <= 0 || (sd > 0 && mean < MinBaselineMeanToSigma * sd))
             {
+                string reason =
+                    $"mean {mean:G4} ± {sd:G3} is not clear of zero (needs mean > " +
+                    $"{MinBaselineMeanToSigma:0} σ). The line is at or below the local continuum " +
+                    "estimate, so every derived quantity would be noise. Use a stronger line, or " +
+                    "switch the extraction to Raw (no baseline subtraction) if there is no peak " +
+                    "at this wavelength";
                 _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunRatioUnstableBaseline",
-                    $"Ratio {baselineDef.DisplayName} baseline rejected — mean {mean:G4} ± {sd:G3} " +
-                    $"is not clear of zero (needs mean > {MinBaselineMeanToSigma:0} σ). The line is " +
-                    "at or below the local continuum estimate, so every derived quantity would be " +
-                    "noise. Use a stronger line, or switch the extraction to Raw (no baseline " +
-                    "subtraction) if there is no peak at this wavelength.",
+                    $"Ratio {baselineDef.DisplayName} baseline rejected — {reason}.",
                     related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+                rejected.Add(Reject(mon.Key, reason));
                 continue;
             }
 
@@ -803,11 +859,27 @@ public sealed class LeakMonitorEngine : IDisposable
             });
         }
 
+        // A capture that produced nothing is discarded outright: it is not stored, does not
+        // become the active baseline, and — crucially — does not replace a same-named run that
+        // is already working. Storing it would have taken every ratio's baseline away (the panel
+        // reads "No Baseline", nothing takes part in the composite alarm) and dropped the paired
+        // calibration with it, on the strength of a capture that measured nothing. The operator
+        // is told; the settings are left exactly as they were.
         if (run.Baselines.Count == 0)
+        {
             _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunEmpty",
-                $"Golden Run “{run.Name}” captured no usable ratio baselines — check the " +
-                "spectrometer wavelength range, the plasma state, and which ratios are enabled.",
+                $"Golden Run “{run.Name}” captured no usable ratio baselines and was discarded — " +
+                "check the spectrometer wavelength range, the plasma state, and which ratios are " +
+                $"enabled. The active baseline is unchanged ({_settings.ActiveGoldenRun ?? "none"}).",
                 related: $"GoldenRun={run.Name}");
+            return new GoldenRunCaptureResult
+            {
+                Run = run,
+                Accepted = false,
+                Rejected = rejected,
+                ActiveGoldenRun = _settings.ActiveGoldenRun,
+            };
+        }
 
         _settings.GoldenRuns.RemoveAll(g => g.Name == run.Name);
         _settings.GoldenRuns.Add(run);
@@ -817,8 +889,22 @@ public sealed class LeakMonitorEngine : IDisposable
         // mismatching against a stale one.
         AutoPairCalibration(run.Name);
         ApplyGoldenRun(run);
-        return run;
+        return new GoldenRunCaptureResult
+        {
+            Run = run,
+            Accepted = true,
+            Rejected = rejected,
+            ActiveGoldenRun = _settings.ActiveGoldenRun,
+        };
     }
+
+    /// <summary>Packages one rejected ratio for <see cref="GoldenRunCaptureResult"/>.</summary>
+    private GoldenRunRatioRejection Reject(string key, string reason) => new()
+    {
+        Key = key,
+        DisplayName = _defs.TryGetValue(key, out var d) ? d.DisplayName : key,
+        Reason = reason,
+    };
 
     private LeakCalPoint FinalizeCalibrationPoint()
     {
@@ -999,8 +1085,9 @@ public sealed class LeakMonitorEngine : IDisposable
             value: _plasmaGate?.Description ?? "(none)");
     }
 
-    /// <summary>Logs why a ratio ended a Golden Run capture with no usable baseline.</summary>
-    private void LogDroppedRatio(string key, string runName)
+    /// <summary>Logs why a ratio ended a Golden Run capture with no usable baseline, and returns
+    /// the same reason so the host can show it to the operator without re-deriving it.</summary>
+    private string ReportDroppedRatio(string key, string runName)
     {
         var def = _defs[key];
         bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
@@ -1041,6 +1128,7 @@ public sealed class LeakMonitorEngine : IDisposable
         _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunRatioDropped",
             $"Ratio {def.DisplayName} got no baseline from Golden Run “{runName}”: {reason}.",
             related: $"GoldenRun={runName},Ratio={key}");
+        return reason;
     }
 
     private LeakAlarmLevel ComputeOverall()
@@ -1166,6 +1254,7 @@ public sealed class LeakMonitorEngine : IDisposable
         SampleProcessed = null;
         AlarmStateChanged = null;
         GoldenRunCaptured = null;
+        GoldenRunCaptureFinished = null;
         CalibrationPointCaptured = null;
         ConfigurationChanged = null;
         RatiosReloaded = null;

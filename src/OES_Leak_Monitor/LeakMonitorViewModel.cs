@@ -67,6 +67,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _engine.SampleProcessed   += OnSampleProcessed;
         _engine.AlarmStateChanged += OnAlarmStateChanged;
         _engine.GoldenRunCaptured += OnGoldenRunCaptured;
+        _engine.GoldenRunCaptureFinished += OnGoldenRunCaptureFinished;
         _engine.RatiosReloaded    += OnRatiosReloaded;
 
         _bannerTimer = new DispatcherTimer(DispatcherPriority.Normal, _dispatcher)
@@ -330,6 +331,58 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
                 $"Golden Run “{run.Name}” captured — {run.Baselines.Count} ratio baseline(s).";
         });
 
+    /// <summary>
+    /// Reports the outcome of a capture to the operator. A capture is a deliberate action they
+    /// stood and waited a minute for, so neither failure mode is left to the Logs tab: a
+    /// discarded capture is an error dialog (nothing changed — say so), and a partial one is a
+    /// warning naming the ratios that came back without a baseline, because those silently stop
+    /// taking part in the leak alarm. Fires after <see cref="OnGoldenRunCaptured"/>, so the
+    /// dialog is shown with the new baseline already selected.
+    /// </summary>
+    private void OnGoldenRunCaptureFinished(object? sender, GoldenRunCaptureResult result) =>
+        _dispatcher.BeginInvoke(() =>
+        {
+            if (!result.Accepted)
+            {
+                string active = string.IsNullOrEmpty(result.ActiveGoldenRun)
+                    ? "No baseline is active."
+                    : $"The active baseline “{result.ActiveGoldenRun}” is unchanged.";
+                StatusMessage =
+                    $"Golden Run “{result.Run.Name}” failed — no ratio produced a usable " +
+                    $"baseline, so the capture was discarded. {active}";
+                ShowCaptureDialog("Golden Run capture failed",
+                    $"Golden Run “{result.Run.Name}” produced no usable ratio baseline and was " +
+                    $"discarded — nothing was saved.\n{active}\n" + FormatRejections(result),
+                    MessageBoxImage.Error);
+                return;
+            }
+
+            if (result.Rejected.Count == 0) return;
+
+            ShowCaptureDialog("Golden Run captured with warnings",
+                $"Golden Run “{result.Run.Name}” is now the active baseline with " +
+                $"{result.BaselineCount} ratio baseline(s).\n\nThe following ratio(s) got no " +
+                "baseline and will not take part in the leak alarm:\n" + FormatRejections(result),
+                MessageBoxImage.Warning);
+        });
+
+    private static string FormatRejections(GoldenRunCaptureResult result)
+    {
+        if (result.Rejected.Count == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        foreach (var r in result.Rejected)
+            sb.Append("\n• ").Append(r.DisplayName).Append(" — ").Append(r.Reason).Append('.');
+        return sb.ToString();
+    }
+
+    private static void ShowCaptureDialog(string title, string text, MessageBoxImage icon)
+    {
+        text += "\n\nSee the Logs tab for the full record.";
+        var owner = Application.Current?.MainWindow;
+        if (owner is not null) MessageBox.Show(owner, text, title, MessageBoxButton.OK, icon);
+        else MessageBox.Show(text, title, MessageBoxButton.OK, icon);
+    }
+
     private void ApplySnapshot(LeakMonitorSnapshot snap)
     {
         TestMode = snap.TestMode;
@@ -554,6 +607,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _engine.SampleProcessed   -= OnSampleProcessed;
         _engine.AlarmStateChanged -= OnAlarmStateChanged;
         _engine.GoldenRunCaptured -= OnGoldenRunCaptured;
+        _engine.GoldenRunCaptureFinished -= OnGoldenRunCaptureFinished;
         _engine.RatiosReloaded    -= OnRatiosReloaded;
 #pragma warning disable CS0618 // AxisChanged: still the supported zoom/pan hook in OxyPlot 2.2.
         _timeAxis.AxisChanged     -= OnTimeAxisChanged;
