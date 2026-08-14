@@ -60,7 +60,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
             () => _engineerPlus && !_captureActive);
         CancelCaptureCommand = new RelayCommand(() => _engine.CancelGoldenRunCapture(),
             () => _captureActive);
-        AcknowledgeCommand = new RelayCommand(() => _engine.Acknowledge(),
+        AcknowledgeCommand = new RelayCommand(() => _engine.Acknowledge(_username),
             () => _operatorPlus && _overallState == LeakAlarmLevel.Alarm);
         ZoomAllCommand = new RelayCommand(ZoomAll);
 
@@ -294,13 +294,18 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
     // --- role gating ---------------------------------------------------------
 
-    /// <summary>Propagates the signed-in role: Operator+ may acknowledge, Engineer+ may capture.</summary>
-    public void SetRole(bool operatorOrHigher, bool engineerOrHigher)
+    /// <summary>Propagates the signed-in role: Operator+ may acknowledge, Engineer+ may capture.
+    /// The username comes along because acknowledging an alarm is logged, and "who" is the
+    /// first thing anyone asks of that entry.</summary>
+    public void SetRole(bool operatorOrHigher, bool engineerOrHigher, string? username = null)
     {
         _operatorPlus = operatorOrHigher;
         _engineerPlus = engineerOrHigher;
+        _username = username;
         RaiseCanExec();
     }
+
+    private string? _username;
 
     // --- engine events -------------------------------------------------------
 

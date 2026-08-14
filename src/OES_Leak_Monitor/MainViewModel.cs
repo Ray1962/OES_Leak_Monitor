@@ -287,7 +287,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // Initial role is Guest → propagate the action gate so the per-device buttons
         // start out disabled until the user signs in.
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
-        LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
+        LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher, AccessControl.CurrentUsername);
         RatioSetup.SetRole(IsEngineerOrHigher);
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
@@ -442,7 +442,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsAdmin));
 
         foreach (var d in _devices) d.ActionsAllowed = IsOperatorOrHigher;
-        LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher);
+        LeakMonitor.SetRole(IsOperatorOrHigher, IsEngineerOrHigher, AccessControl.CurrentUsername);
         RatioSetup.SetRole(IsEngineerOrHigher);
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);

@@ -578,17 +578,37 @@ public sealed class LeakMonitorEngine : IDisposable
             return _defs.ToDictionary(kv => kv.Key, kv => kv.Value.ValueHasPedestal);
     }
 
-    /// <summary>Clears every latched alarm.</summary>
-    public void Acknowledge()
+    /// <summary>
+    /// Clears every latched alarm. Logged, because this is the one action that ends a confirmed
+    /// leak alarm and it leaves no other trace: without it the audit CSV shows the alarm
+    /// stopping by itself, which is exactly the question asked afterwards — who cleared it, when,
+    /// and what was still latched at the time. A call that finds nothing latched is a no-op and
+    /// says nothing, so the entry means what it says.
+    /// </summary>
+    /// <param name="user">Signed-in operator, for the log line.</param>
+    public void Acknowledge(string? user = null)
     {
         LeakAlarmLevel oldOverall, newOverall;
+        List<string> cleared;
         lock (_gate)
         {
+            cleared = _monitors.Where(m => m.HasLatchedAlarm)
+                               .Select(m => _defs.TryGetValue(m.Key, out var d) ? d.DisplayName : m.Key)
+                               .ToList();
             foreach (var mon in _monitors) mon.Acknowledge();
             oldOverall = _overall;
             _overall = ComputeOverall();
             newOverall = _overall;
         }
+
+        if (cleared.Count > 0)
+            _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorAcknowledged",
+                $"Operator acknowledged the leak alarm — {cleared.Count} latched ratio alarm(s) " +
+                $"cleared, composite {oldOverall} → {newOverall}. A latch only ever clears here, " +
+                "so nothing else can have ended this alarm.",
+                related: $"User={user ?? "(unknown)"}",
+                value: string.Join(", ", cleared));
+
         if (newOverall != oldOverall)
             AlarmStateChanged?.Invoke(this, new LeakAlarmEventArgs
             {

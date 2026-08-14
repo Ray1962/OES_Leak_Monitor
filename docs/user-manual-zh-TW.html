@@ -607,7 +607,7 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td><strong>Baseline</strong> 下拉</td><td>—</td><td>切換使用中的 Golden Run。切換時會<strong>自動配對</strong>綁定該基準線的洩漏率校正</td></tr>
 <tr><td><strong>Capture Golden Run</strong></td><td>Engineer+</td><td>錄製新基準線（見 §6.3.5）</td></tr>
 <tr><td><strong>Cancel</strong></td><td>—</td><td>取消進行中的擷取（只在擷取中出現）</td></tr>
-<tr><td><strong>Acknowledge Alarm</strong></td><td>Operator+</td><td>洩漏排除後，清除鎖存的警報</td></tr>
+<tr><td><strong>Acknowledge Alarm</strong></td><td>Operator+</td><td>洩漏排除後，清除鎖存的警報。<strong>會寫進系統日誌</strong>（<code>LeakMonitorAcknowledged</code>：是誰按的、清掉哪幾條比值的鎖存、複合狀態怎麼變）—— 鎖存只有這個動作能清除，所以日誌上不會再出現「警報自己消失」</td></tr>
 <tr><td><strong>Zoom All</strong></td><td>—</td><td>趨勢圖縮放回全部資料</td></tr>
 </tbody></table></div>
 <h4 id="634-各比值列">6.3.4 各比值列</h4>
@@ -948,6 +948,8 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li><strong>警報狀態轉換</strong>
 </li>
+<li><strong>Acknowledge</strong>（清除鎖存的人、時間、清掉哪幾條）
+</li>
 <li><strong>Golden Run 擷取</strong>（含被拒絕的比值與原因）
 </li>
 <li><strong>洩漏率校正的啟用／暫停／清除</strong>
@@ -1097,7 +1099,7 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li>實體檢查（O-ring、法蘭、視窗、閥件）。
 </li>
-<li>排除後 → <strong>Acknowledge Alarm</strong> 清除鎖存。
+<li>排除後 → <strong>Acknowledge Alarm</strong> 清除鎖存（這一按會記進日誌，含操作者帳號）。
 </li>
 </ol>
 <h3 id="84-定期維護">8.4 定期維護</h3>

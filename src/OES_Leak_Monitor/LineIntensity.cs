@@ -96,7 +96,11 @@ public sealed class LineRegion
     /// average counts with counts·nm, which is the mixing the per-reference floor exists to
     /// stop. Built from the <em>effective</em> region, so a wavelength correction yields a new
     /// key; erring toward too-fine simply stops the pooling, while too-coarse is a wrong number.
+    /// <para>Not serialized: it is derived from the fields beside it, and writing it into
+    /// settings.json would put a second, un-editable copy of them in the file — read-only on
+    /// load, so anyone hand-editing it would change nothing and be told nothing.</para>
     /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public string MeasurementKey => FormattableString.Invariant(
         $"{Label}|{Mode}|{CenterNm:R}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}");
 }

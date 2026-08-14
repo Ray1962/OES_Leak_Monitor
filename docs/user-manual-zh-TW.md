@@ -442,7 +442,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | **Baseline** 下拉 | — | 切換使用中的 Golden Run。切換時會**自動配對**綁定該基準線的洩漏率校正 |
 | **Capture Golden Run** | Engineer+ | 錄製新基準線（見 §6.3.5） |
 | **Cancel** | — | 取消進行中的擷取（只在擷取中出現） |
-| **Acknowledge Alarm** | Operator+ | 洩漏排除後，清除鎖存的警報 |
+| **Acknowledge Alarm** | Operator+ | 洩漏排除後，清除鎖存的警報。**會寫進系統日誌**（`LeakMonitorAcknowledged`：是誰按的、清掉哪幾條比值的鎖存、複合狀態怎麼變）—— 鎖存只有這個動作能清除，所以日誌上不會再出現「警報自己消失」 |
 | **Zoom All** | — | 趨勢圖縮放回全部資料 |
 
 #### 6.3.4 各比值列
@@ -804,6 +804,7 @@ x ≈ s · Q
 - 記錄器開檔／收檔／錯誤
 - 登入／登出／自動鎖定／使用者管理
 - **警報狀態轉換**
+- **Acknowledge**（清除鎖存的人、時間、清掉哪幾條）
 - **Golden Run 擷取**（含被拒絕的比值與原因）
 - **洩漏率校正的啟用／暫停／清除**
 - Ratio CSV 被略過的原因
@@ -957,7 +958,7 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
    - 只有單一條上升 → 可能是該譜線受干擾，或有其他製程變化。
 3. 到 **Ratio Review** 回放這段時間，確認是**持續上升**還是短暫尖峰。
 4. 實體檢查（O-ring、法蘭、視窗、閥件）。
-5. 排除後 → **Acknowledge Alarm** 清除鎖存。
+5. 排除後 → **Acknowledge Alarm** 清除鎖存（這一按會記進日誌，含操作者帳號）。
 
 ### 8.4 定期維護
 
