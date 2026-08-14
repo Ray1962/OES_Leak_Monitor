@@ -14,6 +14,14 @@
 
         <TextBlock x:Name="DurationText" Foreground="#444" Margin="0,0,0,12"/>
 
+        <!-- Shown only while the typed name matches a stored run: capturing under that name
+             replaces it, and until now the dialog offered the current name by default, so the
+             overwrite was one Enter away and completely unannounced. -->
+        <Border x:Name="ReplaceNotice" Visibility="Collapsed" Margin="0,0,0,12"
+                Background="#FFF6E5" BorderBrush="#E8C889" BorderThickness="1" Padding="8,6">
+            <TextBlock x:Name="ReplaceText" TextWrapping="Wrap" Foreground="#6B4E00"/>
+        </Border>
+
         <CheckBox x:Name="ConfirmCheck" Click="Confirm_Click" Margin="0,0,0,16"
                   Content="I confirm the process is currently running leak-free."/>
 

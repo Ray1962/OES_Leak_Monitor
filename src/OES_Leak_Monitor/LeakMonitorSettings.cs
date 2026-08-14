@@ -375,8 +375,15 @@ public sealed class LeakMonitorSettings
     /// <summary>Name of the <see cref="GoldenRun"/> currently used as the baseline.</summary>
     public string? ActiveGoldenRun { get; set; }
 
-    /// <summary>How long a Golden Run capture averages the ratios, seconds.</summary>
-    public double GoldenRunCaptureSeconds { get; set; } = 60;
+    /// <summary>How long a Golden Run capture averages the ratios, seconds. Editable in the
+    /// Configuration tab; the useful range is bounded because a capture shorter than a few
+    /// seconds averages too few frames to give a meaningful σ, and one longer than ten minutes
+    /// is asking the process to hold steady for longer than most recipes run.</summary>
+    public double GoldenRunCaptureSeconds { get; set; } = DefaultGoldenRunCaptureSeconds;
+
+    public const double DefaultGoldenRunCaptureSeconds = 60;
+    public const double MinGoldenRunCaptureSeconds = 5;
+    public const double MaxGoldenRunCaptureSeconds = 600;
 
     /// <summary>Require at least two ratios in Alarm before the overall state is Alarm.</summary>
     public bool RequireTwoForAlarm { get; set; } = true;

@@ -342,6 +342,12 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private void OnGoldenRunCaptureFinished(object? sender, GoldenRunCaptureResult result) =>
         _dispatcher.BeginInvoke(() =>
         {
+            if (result.NeedsConfirmation)
+            {
+                ConfirmReplacement(result);
+                return;
+            }
+
             if (!result.Accepted)
             {
                 string active = string.IsNullOrEmpty(result.ActiveGoldenRun)
@@ -365,6 +371,45 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
                 "baseline and will not take part in the leak alarm:\n" + FormatRejections(result),
                 MessageBoxImage.Warning);
         });
+
+    /// <summary>
+    /// Asks before a capture destroys baselines the stored run of the same name still has. One
+    /// dialog, not two: "these ratios came back without a baseline" and "you are about to lose
+    /// these" are the two halves of one sentence, and a second window saying it again is a
+    /// window that gets clicked away. Answering either way is what finally stores or discards
+    /// the run — until then nothing has been written.
+    /// </summary>
+    private void ConfirmReplacement(GoldenRunCaptureResult result)
+    {
+        var run = result.Run;
+        string captured = result.Replaced is null
+            ? ""
+            : $" (captured {result.Replaced.CapturedUtc.ToLocalTime():yyyy-MM-dd HH:mm}, " +
+              $"{result.Replaced.Baselines.Count} baseline(s))";
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"Golden Run “{run.Name}” finished with {result.BaselineCount} ratio " +
+                  $"baseline(s). Saving it replaces the stored “{run.Name}”{captured}, which " +
+                  "cannot be undone.\n\nThese ratio(s) have a baseline there and none here:");
+        foreach (var l in result.Lost) sb.Append("\n• ").Append(l.DisplayName);
+        if (result.Rejected.Count > 0)
+            sb.Append("\n\nWhy this capture got no baseline for them:")
+              .Append(FormatRejections(result));
+        sb.Append("\n\nReplace the stored Golden Run?");
+
+        var owner = Application.Current?.MainWindow;
+        var answer = owner is not null
+            ? MessageBox.Show(owner, sb.ToString(), "Replace Golden Run?",
+                              MessageBoxButton.YesNo, MessageBoxImage.Warning)
+            : MessageBox.Show(sb.ToString(), "Replace Golden Run?",
+                              MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+        bool keep = answer == MessageBoxResult.Yes;
+        _engine.ConfirmCapturedRun(run, keep);   // stores + raises GoldenRunCaptured, or logs
+        if (!keep)
+            StatusMessage =
+                $"Golden Run “{run.Name}” discarded — the stored baseline of that name is " +
+                "unchanged.";
+    }
 
     private static string FormatRejections(GoldenRunCaptureResult result)
     {
@@ -503,7 +548,8 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private void CaptureGoldenRun()
     {
         double seconds = _engine.Settings.GoldenRunCaptureSeconds;
-        var dlg = new GoldenRunCaptureDialog(_selectedGoldenRun ?? "Recipe 1", seconds)
+        var dlg = new GoldenRunCaptureDialog(_selectedGoldenRun ?? "Recipe 1", seconds,
+                                             _engine.Settings.FindGoldenRun)
         {
             Owner = Application.Current?.MainWindow,
         };

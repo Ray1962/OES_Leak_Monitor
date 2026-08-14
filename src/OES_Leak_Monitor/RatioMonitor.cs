@@ -98,6 +98,19 @@ public sealed class RatioMonitor
     /// <summary>Mean of the active Golden Run baseline for this ratio (0 if none).</summary>
     public double BaselineMean => _baseMean;
 
+    /// <summary>σ of the active Golden Run baseline for this ratio (0 if none).</summary>
+    public double BaselineSigma => _baseSigma;
+
+    /// <summary>
+    /// While set, a confirmed alarm is still shown but not <em>latched</em>. Set during a Golden
+    /// Run capture: the thresholds it is being judged against belong to the previous baseline,
+    /// which is usually the very thing being replaced — a recipe change makes a deviation
+    /// certain, and latching it would leave the operator with an alarm to acknowledge that was
+    /// never about a leak. Does not clear an existing latch: one raised before the capture began
+    /// is a real, already-confirmed leak.
+    /// </summary>
+    public bool SuppressLatch { get; set; }
+
     /// <summary>True when a usable Golden Run baseline is set for this ratio.</summary>
     public bool HasBaseline => _hasBaseline;
 
@@ -324,7 +337,7 @@ public sealed class RatioMonitor
         else if (_aboveWarnSince is { } w && (ts - w).TotalSeconds >= confirm)
             confirmed = RatioState.Warning;
 
-        if (confirmed == RatioState.Alarm) _latchedAlarm = true;
+        if (confirmed == RatioState.Alarm && !SuppressLatch) _latchedAlarm = true;
         _state = _latchedAlarm ? RatioState.Alarm : confirmed;
     }
 

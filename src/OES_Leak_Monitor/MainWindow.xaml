@@ -217,6 +217,20 @@
                                        VerticalAlignment="Center" Margin="4,0,0,0" Foreground="#445"/>
                         </StackPanel>
 
+                        <!-- Golden Run capture length. Sixty seconds suits a steady recipe;
+                             a short step needs less and a drifting one more, and until now the
+                             only way to change it was to hand-edit settings.json. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Golden Run:" VerticalAlignment="Center"
+                                       Margin="0,0,8,0" FontWeight="SemiBold"/>
+                            <TextBlock Text="capture for" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox Text="{Binding GoldenRunCaptureSeconds, UpdateSourceTrigger=LostFocus}"
+                                     Width="52" VerticalAlignment="Center" TextAlignment="Right"
+                                     ToolTip="Seconds a Golden Run capture averages the ratios (5–600). Longer is steadier — the baseline σ it measures is what the alarm thresholds widen by — but the process has to hold steady for the whole window. Takes effect on the next capture; Save persists it."/>
+                            <TextBlock Text="seconds  (5–600, averaged into the baseline mean and σ)"
+                                       VerticalAlignment="Center" Margin="4,0,0,0" Foreground="#445"/>
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply"
                                     Command="{Binding ApplyAllCommand}"

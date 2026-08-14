@@ -50,12 +50,28 @@ public sealed class GoldenRunCaptureResult
 {
     public GoldenRun Run { get; init; } = new();
 
-    /// <summary>False when the run was discarded for having no usable ratio baseline.</summary>
+    /// <summary>False when the run was not stored — either discarded for having no usable ratio
+    /// baseline, or held pending the operator's answer (see <see cref="NeedsConfirmation"/>).</summary>
     public bool Accepted { get; init; }
+
+    /// <summary>
+    /// True when the capture is finished and usable but would destroy a stored run of the same
+    /// name that has baselines this one lacks. Nothing has been written: the host asks, then
+    /// calls <see cref="LeakMonitorEngine.ConfirmCapturedRun"/> either way.
+    /// </summary>
+    public bool NeedsConfirmation { get; init; }
 
     /// <summary>Ratios that got no baseline from this capture, with the reason for each.</summary>
     public IReadOnlyList<GoldenRunRatioRejection> Rejected { get; init; } =
         Array.Empty<GoldenRunRatioRejection>();
+
+    /// <summary>Ratios that would lose a baseline they have in <see cref="Replaced"/>. Only
+    /// populated with <see cref="NeedsConfirmation"/>.</summary>
+    public IReadOnlyList<GoldenRunRatioRejection> Lost { get; init; } =
+        Array.Empty<GoldenRunRatioRejection>();
+
+    /// <summary>The stored run of the same name this capture would replace, or null.</summary>
+    public GoldenRun? Replaced { get; init; }
 
     /// <summary>Name of the baseline left active — unchanged when the capture was discarded.</summary>
     public string? ActiveGoldenRun { get; init; }
@@ -304,10 +320,15 @@ public sealed class LeakMonitorEngine : IDisposable
         LeakAlarmLevel oldOverall, newOverall;
         GoldenRunCaptureResult? captureResult = null;
         LeakCalPoint? capturedPoint = null;
+        bool wasCapturing;
 
         lock (_gate)
         {
             if (!_settings.Enabled) return;
+
+            // Whether this frame was judged during a capture — read before FinalizeCapture can
+            // flip it, since it decides how this frame's transition is reported.
+            wasCapturing = _capturing;
 
             var wl = sample.Wavelengths;
             var inten = sample.Intensities;
@@ -327,6 +348,11 @@ public sealed class LeakMonitorEngine : IDisposable
             foreach (var mon in _monitors)
             {
                 var def = _defs[mon.Key];
+                // A capture is judged against the baseline it is about to replace, so any
+                // deviation it shows is expected and says nothing about a leak. Show it, don't
+                // latch it — an acknowledge-me alarm from a routine re-baseline teaches
+                // operators to acknowledge without reading.
+                mon.SuppressLatch = wasCapturing;
                 if (!def.Enabled)
                 {
                     mon.MarkDisabled();
@@ -455,7 +481,10 @@ public sealed class LeakMonitorEngine : IDisposable
 
         SampleProcessed?.Invoke(this, snap);
 
-        if (newOverall != oldOverall &&
+        // A transition seen while capturing is measured against the outgoing baseline — not
+        // reported, for the same reason it is not latched. The capture's own summary line
+        // (LogCaptureDeviation) is what records where the ratios actually sat.
+        if (newOverall != oldOverall && !wasCapturing &&
             !(snap.TestMode && _settings.SuppressAlarmsInTestMode))
         {
             AlarmStateChanged?.Invoke(this, new LeakAlarmEventArgs
@@ -880,6 +909,13 @@ public sealed class LeakMonitorEngine : IDisposable
             });
         }
 
+        // Where the ratios sat during the window, measured against the baseline still active
+        // while it ran. Recorded before that baseline is replaced, and stated as a fact rather
+        // than judged: re-capturing after a recipe change makes a large deviation expected and
+        // meaningless, while re-capturing the *same* recipe makes it the whole story — it says
+        // the state being frozen as "leak-free" was already well away from the last one.
+        LogCaptureDeviation(run.Name);
+
         // A capture that produced nothing is discarded outright: it is not stored, does not
         // become the active baseline, and — crucially — does not replace a same-named run that
         // is already working. Storing it would have taken every ratio's baseline away (the panel
@@ -902,6 +938,47 @@ public sealed class LeakMonitorEngine : IDisposable
             };
         }
 
+        // Replacing a same-named run destroys it. If the new capture is missing a baseline the
+        // old one had, that loss is permanent and the operator is the only one who can weigh it
+        // — so the run is held, unstored, until they answer. A capture that loses nothing (the
+        // ordinary weekly re-baseline) is stored without asking; a confirmation everyone sees
+        // every time is one nobody reads by the third week.
+        var replaced = _settings.FindGoldenRun(run.Name);
+        var lost = replaced is null
+            ? new List<GoldenRunRatioRejection>()
+            : replaced.Baselines
+                .Where(b => b.Mean > 0 && run.Find(b.Key) is null)
+                .Select(b => Reject(b.Key, "had a baseline in the run being replaced"))
+                .ToList();
+        if (lost.Count > 0)
+            return new GoldenRunCaptureResult
+            {
+                Run = run,
+                Accepted = false,
+                NeedsConfirmation = true,
+                Rejected = rejected,
+                Lost = lost,
+                Replaced = replaced,
+                ActiveGoldenRun = _settings.ActiveGoldenRun,
+            };
+
+        StoreCapturedRun(run);
+        return new GoldenRunCaptureResult
+        {
+            Run = run,
+            Accepted = true,
+            Rejected = rejected,
+            ActiveGoldenRun = _settings.ActiveGoldenRun,
+        };
+    }
+
+    /// <summary>
+    /// Stores a finished capture, makes it the active baseline and re-pairs the calibration.
+    /// Caller holds the lock. Split out of <see cref="FinalizeCapture"/> so a capture that has
+    /// to be confirmed first can be stored later, from <see cref="ConfirmCapturedRun"/>.
+    /// </summary>
+    private void StoreCapturedRun(GoldenRun run)
+    {
         _settings.GoldenRuns.RemoveAll(g => g.Name == run.Name);
         _settings.GoldenRuns.Add(run);
         _settings.ActiveGoldenRun = run.Name;
@@ -910,13 +987,67 @@ public sealed class LeakMonitorEngine : IDisposable
         // mismatching against a stale one.
         AutoPairCalibration(run.Name);
         ApplyGoldenRun(run);
-        return new GoldenRunCaptureResult
+    }
+
+    /// <summary>
+    /// Answers a <see cref="GoldenRunCaptureResult.NeedsConfirmation"/> capture: <paramref
+    /// name="keep"/> stores it and makes it active (raising <see cref="GoldenRunCaptured"/> so
+    /// the host persists it), anything else discards it — the run it would have replaced, the
+    /// active baseline and the paired calibration all stay exactly as they were. Call from the
+    /// UI thread once the operator has answered; the run is inert until then.
+    /// </summary>
+    public void ConfirmCapturedRun(GoldenRun run, bool keep)
+    {
+        if (run is null || _disposed) return;
+        lock (_gate)
         {
-            Run = run,
-            Accepted = true,
-            Rejected = rejected,
-            ActiveGoldenRun = _settings.ActiveGoldenRun,
-        };
+            if (!keep)
+            {
+                _log?.LogSystemEvent(LogSeverity.Warning, "GoldenRunCaptureDiscarded",
+                    $"Golden Run “{run.Name}” was discarded by the operator rather than replace " +
+                    $"the stored run of the same name. The active baseline is unchanged " +
+                    $"({_settings.ActiveGoldenRun ?? "none"}).",
+                    related: $"GoldenRun={run.Name}");
+                return;
+            }
+            StoreCapturedRun(run);
+        }
+        GoldenRunCaptured?.Invoke(this, run);
+    }
+
+    /// <summary>
+    /// Records where each ratio sat during the capture window relative to the baseline that was
+    /// active while it ran — the one about to be replaced. Stated, never judged: after a recipe
+    /// change a large deviation is expected, so calling it a warning would cry wolf every time,
+    /// while on a re-capture of the same recipe this line is the only record that the state
+    /// being frozen as "leak-free" had already moved. Caller holds the lock, and must call this
+    /// before <see cref="ApplyGoldenRun"/> swaps the baselines out.
+    /// </summary>
+    private void LogCaptureDeviation(string runName)
+    {
+        if (_log is null) return;
+        var parts = new List<string>();
+        foreach (var mon in _monitors)
+        {
+            if (!mon.HasBaseline || !_captureAccum.TryGetValue(mon.Key, out var acc) || acc.Count == 0)
+                continue;
+            var def = _defs[mon.Key];
+            // A pedestal value's ratio to its baseline is compressed into a fraction of a
+            // percent, so it is reported in σ for the same reason the trend plots it that way.
+            string where = def.ValueHasPedestal
+                ? (mon.BaselineSigma > 0
+                    ? $"{(acc.Mean - mon.BaselineMean) / mon.BaselineSigma:+0.0;-0.0}σ"
+                    : "n/a")
+                : $"{acc.Mean / mon.BaselineMean * 100.0:0}%";
+            parts.Add($"{def.DisplayName}={where}");
+        }
+        if (parts.Count == 0) return;
+        _log.LogSystemEvent(LogSeverity.Information, "GoldenRunCaptureDeviation",
+            $"During the “{runName}” capture the ratios sat at these levels relative to the " +
+            "baseline that was still active. A recipe change makes a large figure expected; " +
+            "re-capturing the same recipe does not — there it says the state being recorded as " +
+            "leak-free had already moved.",
+            related: $"GoldenRun={runName}", value: string.Join(", ", parts));
     }
 
     /// <summary>Packages one rejected ratio for <see cref="GoldenRunCaptureResult"/>.</summary>

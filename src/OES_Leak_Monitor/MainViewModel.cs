@@ -481,6 +481,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         foreach (var d in _devices) d.LoadDefaultsCommand.Execute(null);
         Logger.LoadDefaults();
         TrendRetentionMinutes = AppSettings.DefaultTrendRetentionMinutes;
+        GoldenRunCaptureSeconds = LeakMonitorSettings.DefaultGoldenRunCaptureSeconds;
         StatusMessage = "Defaults loaded — click Apply to push to devices and logger.";
         _systemLogger.LogSystemEvent(LogSeverity.Information, "LoadDefaultsAll",
             "Reset to factory defaults (not yet applied/persisted)",
@@ -817,6 +818,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             // bound TextBox back — same idiom as RatioEditViewModel.MinSnr.
             if (!Set(ref _trendRetentionMinutes, clamped) && clamped != value)
                 OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// How long a Golden Run capture averages, seconds. Lives here rather than only in
+    /// settings.json because 60 s suits a steady recipe and not a short or a drifting one, and
+    /// the only way to change it was to hand-edit the file — which meant nobody did. Written
+    /// straight into the live leak-monitor settings (so the next capture dialog offers it) and
+    /// persisted by Save; clamped here so a typed value out of range snaps back in the box.
+    /// </summary>
+    public double GoldenRunCaptureSeconds
+    {
+        get => _leakMonitorEngine.Settings.GoldenRunCaptureSeconds;
+        set
+        {
+            double clamped = Math.Clamp(value, LeakMonitorSettings.MinGoldenRunCaptureSeconds,
+                                               LeakMonitorSettings.MaxGoldenRunCaptureSeconds);
+            if (_leakMonitorEngine.Settings.GoldenRunCaptureSeconds != clamped)
+                _leakMonitorEngine.Settings.GoldenRunCaptureSeconds = clamped;
+            // Notify unconditionally: a rejected entry has to snap the bound TextBox back.
+            OnPropertyChanged();
         }
     }
 
