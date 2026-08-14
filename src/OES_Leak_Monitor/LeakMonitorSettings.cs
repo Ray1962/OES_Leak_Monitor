@@ -202,9 +202,21 @@ public sealed class AcquisitionFingerprint
     }
 }
 
+/// <summary>Minimum intensity of one reference line that counts as "plasma on", measured from
+/// the leak-free capture. Keyed by <see cref="LineRegion.MeasurementKey"/> so ratios that read
+/// the same line the same way share one floor and ratios that don't never see each other's.
+/// <see cref="ReferenceLabel"/> carries no meaning to the code — it is there so the entry is
+/// readable in <c>settings.json</c> and in the log.</summary>
+public sealed class PlasmaFloorEntry
+{
+    public string ReferenceKey { get; set; } = "";
+    public string ReferenceLabel { get; set; } = "";
+    public double Floor { get; set; }
+}
+
 /// <summary>
 /// A leak-free reference capture for one recipe: per-ratio baseline mean/sigma plus the
-/// minimum N2 reference intensity that counts as "plasma on" for that recipe.
+/// minimum reference intensity that counts as "plasma on" for that recipe, per reference line.
 /// </summary>
 public sealed class GoldenRun
 {
@@ -212,10 +224,29 @@ public sealed class GoldenRun
     public DateTime CapturedUtc { get; set; }
     public double DurationSeconds { get; set; }
 
-    /// <summary>Minimum denominator (N2) intensity for the plasma-present gate. Ratio-mode
-    /// entries only — absolute-intensity ratios gate on the logger trigger (see
-    /// <see cref="PlasmaGate"/>), so their reference never contributed to this floor.</summary>
+    /// <summary>
+    /// Superseded by <see cref="PlasmaFloors"/> and no longer written. It held one floor for the
+    /// whole run — 20 % of the mean of <em>every</em> ratio-mode denominator pooled together —
+    /// which is only meaningful while every ratio shares one reference line. Mix an Ar 811.5
+    /// reference (bright) with an N₂ 662.4 one (faint) and the pooled floor lands above the faint
+    /// line's normal level: that ratio reads "plasma off" in every frame and goes silently dark,
+    /// while the bright one gets a floor at 10 % of its own level and is effectively ungated.
+    /// Kept as the fallback for runs captured before the per-reference floors existed, so an
+    /// upgrade changes nothing until the next capture.
+    /// </summary>
     public double PlasmaPresentFloor { get; set; }
+
+    /// <summary>Per-reference-line plasma floors, ratio-mode entries only — absolute-intensity
+    /// ratios gate on the logger trigger (see <see cref="PlasmaGate"/>), so their reference
+    /// never contributes one. Empty for a run captured before this existed.</summary>
+    public List<PlasmaFloorEntry> PlasmaFloors { get; set; } = new();
+
+    /// <summary>The floor for one reference line, or 0 (ungated) when this run never measured
+    /// it. Falls back to the run-level <see cref="PlasmaPresentFloor"/> for a legacy run.</summary>
+    public double FindFloor(string referenceKey) =>
+        PlasmaFloors is null || PlasmaFloors.Count == 0
+            ? PlasmaPresentFloor
+            : PlasmaFloors.FirstOrDefault(f => f.ReferenceKey == referenceKey)?.Floor ?? 0.0;
 
     /// <summary>
     /// Acquisition conditions at capture time, so a baseline taken at a different integration
@@ -378,56 +409,88 @@ public sealed class LeakMonitorSettings
     public LeakCalibration? FindCalibration(string? name) =>
         name is null ? null : Calibrations.FirstOrDefault(c => c.Name == name);
 
-    /// <summary>Factory defaults: the four v1 ratios, all referenced to N2 337.1 nm.</summary>
+    /// <summary>
+    /// Factory defaults: three nitrogen-family indicators divided by Ar 750.4, plus one
+    /// absolute-intensity diagnostic that ships disabled.
+    /// <para>The set this replaced — O 777, OH 309, NO 237 and Ar 750, all over N₂ 337.1 — came
+    /// from the textbook assumption that an air leak raises O, OH and NO. Measured against a
+    /// known 100-unit air leak on a real Ar plasma, three of those four numerators did not
+    /// respond (O 777.2 moved 0.7 σ, OH 308.9 moved 0.1 σ) while N₂ 337.1 — the line that set
+    /// was dividing <em>by</em> — moved 33.8 σ. Numerator and denominator were the wrong way
+    /// round. What ships now is what that measurement actually selected: N₂ 337.1 (33.8 σ) as
+    /// the primary, NO 237 (18.3 σ) as an independent second opinion from another species, and
+    /// N₂ 357.7 (16.2 σ) so a single ratio dropping to LowSignal cannot make
+    /// <see cref="RequireTwoForAlarm"/> unreachable.</para>
+    /// <para>This is still one machine's answer, and §1.1 of the manual says so: which lines
+    /// respond is a measurement, and it has to be repeated per tool. The Warn/Alarm factors
+    /// (1.05 / 1.12) belong to that machine's 2 % baseline scatter — the class defaults stay at
+    /// 1.2 / 1.5 for hand-added ratios, whose scatter nobody has measured yet.</para>
+    /// </summary>
     public static LeakMonitorSettings CreateDefault() => new()
     {
         Ratios = new List<RatioDefinition>
         {
             new()
             {
-                Key = "R_O", DisplayName = "O 777 / N₂ 337",
+                Key = "R_N2Ar", DisplayName = "N₂ 337 / Ar 750",
+                // RawMean: 337.1 sits in dense band structure on a sloping continuum, where a
+                // side-window baseline subtracts more error than signal. The pedestal it carries
+                // is largely divided out by the reference.
                 Numerator = new LineRegion
                 {
-                    Label = "O 777.2", CenterNm = 777.2, HalfWidthNm = 0.5,
-                    BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.PeakHeight,
+                    Label = "N₂ 337.1", CenterNm = 337.1, HalfWidthNm = 1.0,
+                    BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.RawMean,
                 },
-                Denominator = DefaultN2Reference(),
+                Denominator = DefaultArReference(),
+                WarnFactor = 1.05, AlarmFactor = 1.12,
             },
             new()
             {
-                Key = "R_OH", DisplayName = "OH 309 / N₂ 337",
-                Numerator = new LineRegion
-                {
-                    Label = "OH 308.9", CenterNm = 308.9, HalfWidthNm = 1.0,
-                    BaselineGapNm = 0.6, BaselineWidthNm = 0.6, Mode = LineExtractMode.Integral,
-                },
-                Denominator = DefaultN2Reference(),
-            },
-            new()
-            {
-                Key = "R_NO", DisplayName = "NO 237 / N₂ 337",
+                Key = "R_NOAr", DisplayName = "NO 237 / Ar 750",
                 Numerator = new LineRegion
                 {
                     Label = "NO 237", CenterNm = 237.0, HalfWidthNm = 1.5,
-                    BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.Integral,
+                    BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.RawMean,
                 },
-                Denominator = DefaultN2Reference(),
+                Denominator = DefaultArReference(),
+                WarnFactor = 1.05, AlarmFactor = 1.12,
             },
             new()
             {
-                Key = "R_Ar", DisplayName = "Ar 750 / N₂ 337",
+                Key = "R_N2357Ar", DisplayName = "N₂ 358 / Ar 750",
                 Numerator = new LineRegion
                 {
-                    Label = "Ar 750.4", CenterNm = 750.4, HalfWidthNm = 0.5,
+                    Label = "N₂ 357.7", CenterNm = 357.7, HalfWidthNm = 0.5,
                     BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.PeakHeight,
                 },
-                Denominator = DefaultN2Reference(),
+                Denominator = DefaultArReference(),
+                WarnFactor = 1.05, AlarmFactor = 1.12,
+            },
+            new()
+            {
+                // Same line as the entry above, undivided: the pair reads out whether a rise is
+                // chemistry or the whole spectrum brightening, which is the one row of the
+                // inspection plan's diagnostic matrix that a single ratio cannot settle.
+                // Disabled by factory: absolute intensity does not return to baseline after a
+                // leak is closed (measured: +7.6 % still, with the Ar-normalized ratio back to
+                // +1 %) and drifts with window fouling, so left armed it would sit in Warning
+                // after every event on a tool nobody has tuned yet. Arm it deliberately.
+                // Its Warn/Alarm factors are ignored — absolute + RawMean carries the continuum
+                // pedestal (ValueHasPedestal), so only the σ thresholds apply.
+                Key = "R_N2357Abs", DisplayName = "N₂ 358 absolute", Enabled = false,
+                MonitorMode = MonitorMode.AbsoluteIntensity,
+                Numerator = new LineRegion
+                {
+                    Label = "N₂ 357.7", CenterNm = 357.7, HalfWidthNm = 1.0,
+                    BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.RawMean,
+                },
+                Denominator = DefaultArReference(),
             },
         },
     };
 
-    // The default reference is N₂ 337.1, sourced from the shared catalog so its Label
+    // The default reference is Ar 750.4, sourced from the shared catalog so its Label
     // matches the names the reference-line picker offers.
-    private static LineRegion DefaultN2Reference() =>
-        ReferenceLineCatalog.FindByName("N₂ 337.1")!.CreateRegion();
+    private static LineRegion DefaultArReference() =>
+        ReferenceLineCatalog.FindByName("Ar 750.4")!.CreateRegion();
 }

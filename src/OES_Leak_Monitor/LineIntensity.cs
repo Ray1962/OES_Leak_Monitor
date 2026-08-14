@@ -87,6 +87,18 @@ public sealed class LineRegion
         BaselineGapNm == other.BaselineGapNm &&
         BaselineWidthNm == other.BaselineWidthNm &&
         PeakSearchHalfWidthNm == other.PeakSearchHalfWidthNm;
+
+    /// <summary>
+    /// String form of the same fingerprint <see cref="MeasuresSameAs"/> compares: two regions
+    /// share a key exactly when they would read the same number out of the same spectrum. Used
+    /// to pool readings of one line across the ratios that share it (the Golden Run's
+    /// per-reference plasma floor) — pooling values that merely share a <em>label</em> would
+    /// average counts with counts·nm, which is the mixing the per-reference floor exists to
+    /// stop. Built from the <em>effective</em> region, so a wavelength correction yields a new
+    /// key; erring toward too-fine simply stops the pooling, while too-coarse is a wrong number.
+    /// </summary>
+    public string MeasurementKey => FormattableString.Invariant(
+        $"{Label}|{Mode}|{CenterNm:R}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}");
 }
 
 /// <summary>

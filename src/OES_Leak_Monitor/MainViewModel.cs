@@ -1055,7 +1055,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _systemLogger.LogSystemEvent(LogSeverity.Information, "GoldenRunCaptured",
             $"Leak-monitor Golden Run baseline captured: {run.Name}",
             related: $"Ratios={run.Baselines.Count}",
-            value: $"PlasmaFloor={run.PlasmaPresentFloor:G4}");
+            // One floor per reference line, named — a bare number told you nothing about which
+            // line it applied to, and now there can be more than one.
+            value: run.PlasmaFloors.Count == 0
+                ? "PlasmaFloor=none"
+                : "PlasmaFloor " + string.Join(", ",
+                    run.PlasmaFloors.Select(f => $"{f.ReferenceLabel}={f.Floor:G4}")));
     }
 
     private void OnLeakConfigChanged(object? sender, EventArgs e)

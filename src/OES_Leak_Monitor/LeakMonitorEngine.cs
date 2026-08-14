@@ -174,7 +174,13 @@ public sealed class LeakMonitorEngine : IDisposable
     private DateTime _captureStart, _captureLast;
     private readonly Dictionary<string, Accum> _captureAccum = new();
     private readonly Dictionary<string, CaptureDiag> _captureDiag = new();
-    private readonly Accum _captureDenom = new();
+    // Reference-line readings during a capture, keyed by LineRegion.MeasurementKey: ratios that
+    // read the same line the same way pool into one floor, ratios that don't never mix.
+    private readonly Dictionary<string, Accum> _captureDenoms = new();
+
+    // Plasma-present floor per ratio key, resolved from the active Golden Run's per-reference
+    // floors. Rebuilt in ApplyGoldenRun — the only place either the baseline or _defs changes.
+    private readonly Dictionary<string, double> _floorByRatio = new();
 
     // Leak-rate calibration-point capture state. Mirrors the Golden Run capture above but
     // averages each ratio's fractional rise (rawRatio / baselineMean − 1) at a known leak.
@@ -310,12 +316,6 @@ public sealed class LeakMonitorEngine : IDisposable
             // against it — an exposure change mid-campaign re-scales every absolute reading.
             UpdateAcquisitionStatus(wl);
 
-            // During a Golden Run capture the plasma gate ignores the inherited floor —
-            // that floor came from a previous run and could otherwise block capturing a
-            // fresh baseline (e.g. after a peak shift or a lower-power recipe). The new
-            // floor is derived from the capture itself in FinalizeCapture().
-            double floor = _capturing ? 0.0 : (_activeRun?.PlasmaPresentFloor ?? 0.0);
-
             // Absolute-intensity ratios gate on the logger's trigger metric, not on their
             // reference line — they never divide by it, so requiring it to extract positive only
             // let the reference's own noise (or a systematically negative extraction on a curved
@@ -351,6 +351,15 @@ public sealed class LeakMonitorEngine : IDisposable
                 // those same blank frames contaminated. Ten such frames in one real run poisoned
                 // a Golden Run baseline (σ 2.6× the mean) and skewed the offline analysis before
                 // anyone noticed. Both conditions now have to hold.
+                // The floor is this ratio's own reference line's leak-free level, not a level
+                // pooled across every ratio: a floor derived from a brighter reference sits
+                // above a fainter one's normal reading and closes that ratio permanently.
+                // During a capture it stands down entirely — the inherited floor came from a
+                // previous run and would otherwise block capturing a fresh baseline after a
+                // peak shift or a lower-power recipe. The new floors come out of the capture
+                // itself in FinalizeCapture().
+                double floor = _capturing || absolute ? 0.0
+                    : _floorByRatio.TryGetValue(mon.Key, out var f) ? f : 0.0;
                 bool plasma = absolute
                     ? gateOpen
                     : gateOpen && !double.IsNaN(den) && den > 0 && den > floor;
@@ -390,7 +399,9 @@ public sealed class LeakMonitorEngine : IDisposable
                             GetAccum(mon.Key).Add(value);
                             // Only reference lines that are actually used contribute to the
                             // recipe's plasma floor; an absolute ratio's reference is inert.
-                            if (!absolute) _captureDenom.Add(den);
+                            // Pooled by measurement key, so two ratios sharing a reference
+                            // share its floor and get it from twice the frames.
+                            if (!absolute) GetDenomAccum(def.Denominator.MeasurementKey).Add(den);
                         }
                     }
                 }
@@ -480,7 +491,7 @@ public sealed class LeakMonitorEngine : IDisposable
             _captureHasStart = false;
             _captureAccum.Clear();
             _captureDiag.Clear();
-            _captureDenom.Reset();
+            _captureDenoms.Clear();
         }
     }
 
@@ -781,15 +792,25 @@ public sealed class LeakMonitorEngine : IDisposable
         _capturing = false;
 
         var rejected = new List<GoldenRunRatioRejection>();
-        double denomMean = _captureDenom.Count > 0 ? _captureDenom.Mean : 0.0;
         var run = new GoldenRun
         {
             Name = _captureName,
             CapturedUtc = DateTime.UtcNow,
             DurationSeconds = (_captureLast - _captureStart).TotalSeconds,
-            PlasmaPresentFloor = 0.2 * denomMean,
             Acquisition = _acquisition?.Clone(),
         };
+        // One floor per reference line at 20 % of its own leak-free level. Ordered so the same
+        // capture always writes the same settings.json, which makes a diff mean something.
+        foreach (var kv in _captureDenoms.OrderBy(k => k.Key, StringComparer.Ordinal))
+        {
+            if (kv.Value.Count == 0) continue;
+            run.PlasmaFloors.Add(new PlasmaFloorEntry
+            {
+                ReferenceKey = kv.Key,
+                ReferenceLabel = kv.Key.Split('|')[0],
+                Floor = 0.2 * kv.Value.Mean,
+            });
+        }
         foreach (var mon in _monitors)
         {
             _captureAccum.TryGetValue(mon.Key, out var acc);
@@ -932,10 +953,16 @@ public sealed class LeakMonitorEngine : IDisposable
     private void ApplyGoldenRun(GoldenRun? run)
     {
         _activeRun = run;
+        _floorByRatio.Clear();
         foreach (var mon in _monitors)
         {
             var b = run?.Find(mon.Key);
             var def = _defs[mon.Key];
+            // Resolved once here rather than per frame: the reference's measurement key is
+            // built from the *corrected* region, so it only changes when _defs or the active
+            // run does — which is exactly when this method runs.
+            if (run is not null && def.MonitorMode != MonitorMode.AbsoluteIntensity)
+                _floorByRatio[mon.Key] = run.FindFloor(def.Denominator.MeasurementKey);
             bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
             // The baseline is a mean of the monitored quantity, so it only applies while that
             // quantity is still defined the same way: same monitor mode, and — in ratio mode —
@@ -1231,6 +1258,13 @@ public sealed class LeakMonitorEngine : IDisposable
     {
         if (!_captureAccum.TryGetValue(key, out var acc))
             _captureAccum[key] = acc = new Accum();
+        return acc;
+    }
+
+    private Accum GetDenomAccum(string referenceKey)
+    {
+        if (!_captureDenoms.TryGetValue(referenceKey, out var acc))
+            _captureDenoms[referenceKey] = acc = new Accum();
         return acc;
     }
 

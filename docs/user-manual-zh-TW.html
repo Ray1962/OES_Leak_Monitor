@@ -211,7 +211,7 @@ td code{white-space:nowrap;}
 </li>
 </ul>
 <blockquote><p>⚠️ <strong>哪些譜線會對洩漏起反應，是你機台的實驗結果，不是常識。</strong></p>
-<p>教科書上的 actinometry 多半拿 <strong>O 777.2 / Ar</strong> 當空氣洩漏指標，本軟體的出廠預設比值（§10.5）也是照這個假設配的。但在一台 <strong>Ar 80 sccm、0.95 torr、RF 50 W</strong> 的實機上實測：<strong>O 777.2 對 100 單位的空氣洩漏只有 0.7σ 的反應（等於沒有），而 N₂ 337.1 有 33.8σ</strong> —— 分子與分母的角色完全反了過來。</p>
+<p>教科書上的 actinometry 多半拿 <strong>O 777.2 / Ar</strong> 當空氣洩漏指標，本軟體早期的出廠預設比值也是照這個假設配的。但在一台 <strong>Ar 80 sccm、0.95 torr、RF 50 W</strong> 的實機上實測：<strong>O 777.2 對 100 單位的空氣洩漏只有 0.7σ 的反應（等於沒有），而 N₂ 337.1 有 33.8σ</strong> —— 分子與分母的角色完全反了過來。</p>
 <p>壓力、功率、氣體組成一變，會動的物種就可能換人。<strong>上線前一定要用一次已知洩漏實測，確認哪條線真的會動</strong>（見 §1.1）。跳過這一步，監控器會看起來一切正常而完全抓不到洩漏。</p></blockquote>
 <h3 id="11-上線前必做用一次已知洩漏挑譜線">1.1 上線前必做：用一次已知洩漏挑譜線</h3>
 <ol>
@@ -353,7 +353,7 @@ vcruntime140_cor3.dll</code></pre>
 <ol>
 <li>到 <strong>Ratio Setup</strong> 分頁。
 </li>
-<li>出廠預設已有四組比值：<code>O 777 / N₂ 337</code>、<code>OH 309 / N₂ 337</code>、<code>NO 237 / N₂ 337</code>、<code>Ar 750 / N₂ 337</code>。
+<li>出廠預設已有四組比值，全部以 <strong>Ar 750.4 nm</strong> 為參考線：<code>N₂ 337 / Ar 750</code>（主指標）、<code>NO 237 / Ar 750</code>（次指標）、<code>N₂ 358 / Ar 750</code>（第三條，讓「三取二」有餘裕），以及<strong>出廠不啟用</strong>的 <code>N₂ 358 absolute</code>。完整規格見 §10.5。
 </li>
 <li>檢查你的光譜儀波段是否涵蓋這些波長 —— 涵蓋不到的請<strong>取消勾選</strong>或改選別的譜線。
 </li>
@@ -655,7 +655,7 @@ vcruntime140_cor3.dll</code></pre>
 </li>
 <li>若某條比值可評估的幀當中，<strong>通過率不到 50%</strong>，這條比值的基準線會被<strong>直接拒絕</strong>，並記進系統日誌。 → 避免弱訊號譜線用「剛好往上跳的那幾筆雜訊」湊出一條假基準線。
 </li>
-<li>同時會記錄 <strong>PlasmaPresentFloor</strong>（＝參考譜線基準均值的 <strong>20%</strong>），之後用來判斷「電漿有沒有開」（僅 <code>Ratio</code> 模式使用）。
+<li>同時會記錄<strong>每條參考譜線各自的 PlasmaPresentFloor</strong>（＝該參考線基準均值的 <strong>20%</strong>），之後用來判斷「電漿有沒有開」（僅 <code>Ratio</code> 模式使用）。<strong>是每條參考線一個值</strong>：不同比值若用不同參考線（例如一條用 Ar 811.5、一條用 N₂ 662.4），兩條線的強度可能差幾十倍，共用一個門檻會讓弱的那條被永久判定成「電漿沒開」而安靜失效。兩條比值若用<strong>完全相同</strong>的參考線設定（同一條線、同一種擷取方式與窗寬），則共用同一個 floor，樣本數也加倍。
 </li>
 <li><strong>基準均值必須明顯離開 0</strong>：若均值 ≤ 0，或均值不到自身 σ 的 <strong>10 倍</strong>，該比值的基準線會被拒絕並寫進日誌。門檻、% 顯示、洩漏率全都要除以這個均值，一個「−25 ± 95」的基準線會讓三者都變成擲硬幣。日誌訊息會建議改用 <code>RawMean</code> 擷取（該波長若本來就沒有峰）。
 </li>
@@ -1288,29 +1288,25 @@ vcruntime140_cor3.dll</code></pre>
 <tr><td>基準線接受門檻</td><td>可評估幀中至少 50% 通過 SNR</td></tr>
 <tr><td>基準均值穩定度門檻</td><td>均值 &gt; 10 σ 且 &gt; 0</td></tr>
 <tr><td>電漿存在判定（兩種模式共用）</td><td>記錄器的儲存觸發量 &gt; save-start 門檻</td></tr>
-<tr><td>電漿存在判定（<code>Ratio</code> 模式額外要求）</td><td>參考譜線 &gt; 基準均值的 20%</td></tr>
+<tr><td>電漿存在判定（<code>Ratio</code> 模式額外要求）</td><td>參考譜線 &gt; <strong>該參考線自己</strong>基準均值的 20%（每條參考線各一個值）</td></tr>
 <tr><td>掉幀判定上限</td><td>1 秒（更久視為電漿真的關閉）</td></tr>
 <tr><td>比值數量上限</td><td>10</td></tr>
 <tr><td>波長修正上限</td><td>±5 nm</td></tr>
 </tbody></table></div>
 <h3 id="105-出廠預設比值">10.5 出廠預設比值</h3>
+<p>全部以 <strong>Ar 750.4 nm（PeakHeight）</strong> 為參考線；門檻倍數 Warn <strong>1.05</strong> / Alarm <strong>1.12</strong>，σ 3 / 6。</p>
 <div class="tablewrap"><table>
-<thead><tr><th>Key</th><th>名稱</th><th>訊號線</th><th>擷取方式</th><th>參考線</th></tr></thead>
+<thead><tr><th>Key</th><th>名稱</th><th>角色</th><th>訊號線</th><th>擷取方式</th><th>出廠</th></tr></thead>
 <tbody>
-<tr><td><code>R_O</code></td><td>O 777 / N₂ 337</td><td>O 777.2 nm</td><td>PeakHeight</td><td>N₂ 337.1 nm</td></tr>
-<tr><td><code>R_OH</code></td><td>OH 309 / N₂ 337</td><td>OH 308.9 nm</td><td>Integral</td><td>N₂ 337.1 nm</td></tr>
-<tr><td><code>R_NO</code></td><td>NO 237 / N₂ 337</td><td>NO 237.0 nm</td><td>Integral</td><td>N₂ 337.1 nm</td></tr>
-<tr><td><code>R_Ar</code></td><td>Ar 750 / N₂ 337</td><td>Ar 750.4 nm</td><td>PeakHeight</td><td>N₂ 337.1 nm</td></tr>
+<tr><td><code>R_N2Ar</code></td><td>N₂ 337 / Ar 750</td><td>主指標（實測 33.8σ）</td><td>N₂ 337.1 nm</td><td>RawMean（半寬 1.0）</td><td>啟用</td></tr>
+<tr><td><code>R_NOAr</code></td><td>NO 237 / Ar 750</td><td>次指標（18.3σ，另一個物種的獨立意見）</td><td>NO 237.0 nm</td><td>RawMean（半寬 1.5）</td><td>啟用</td></tr>
+<tr><td><code>R_N2357Ar</code></td><td>N₂ 358 / Ar 750</td><td>第三條（16.2σ），讓「三取二」有餘裕</td><td>N₂ 357.7 nm</td><td>PeakHeight（半寬 0.5）</td><td>啟用</td></tr>
+<tr><td><code>R_N2357Abs</code></td><td>N₂ 358 absolute</td><td>診斷用：同一條線<strong>不除以 Ar</strong></td><td>N₂ 357.7 nm</td><td>RawMean（半寬 1.0）、<code>AbsoluteIntensity</code></td><td><strong>不啟用</strong></td></tr>
 </tbody></table></div>
-<blockquote><p>⚠️ <strong>這些是未經你的機台驗證的起點，不是建議值。</strong> 它們依據的是「空氣洩漏會抬高 O 的發光」這個教科書假設 —— 而在實測過的那台 Ar 電漿上，這個假設不成立（O 777.2 對 100 單位洩漏只有 0.7σ，OH 309 是 0.1σ，連 N₂ 337.1 都被放在分母）。</p>
-<p><strong>上線前請依 §1.1 用一次已知洩漏挑出你機台真正會動的譜線</strong>，再據此重設比值。那台機器最後採用的是：</p></blockquote>
-<div class="tablewrap"><table>
-<thead><tr><th>角色</th><th>比值</th><th>訊號線</th><th>擷取方式</th><th>參考線</th></tr></thead>
-<tbody>
-<tr><td>主指標</td><td>N₂ 337.1 / Ar 750.4</td><td>N₂ 337.1 nm</td><td>RawMean（半寬 1.0）</td><td>Ar 750.4 nm（PeakHeight）</td></tr>
-<tr><td>次指標</td><td>NO 237 / Ar 750.4</td><td>NO 237.0 nm</td><td>RawMean</td><td>Ar 750.4 nm（PeakHeight）</td></tr>
-</tbody></table></div>
-<blockquote><p>門檻倍數也一併調整為 Warn 1.05 / Alarm 1.12（σ 3 / 6 不變）—— 出廠的 1.2 / 1.5 配上 2% 的基準散度，會讓乘法那一支永遠勝出而把 σ 門檻整個蓋掉，詳見 §6.4.2。</p></blockquote>
+<p><strong>為什麼是這幾條</strong>：這是 §1.1 那次已知洩漏實測<strong>挑出來</strong>的結果，不是教科書假設。舊出廠組（<code>O 777 / N₂ 337</code> 等四條）依據的是「空氣洩漏會抬高 O 的發光」，而同一次實測裡 O 777.2 只有 0.7σ、OH 308.9 只有 0.1σ，真正動的是被放在分母的 N₂ 337.1（33.8σ）—— 分子與分母反了。</p>
+<p><strong>第三條的用途</strong>：<code>RequireTwoForAlarm</code> 出廠是 true（要兩條同時 Alarm）。只有兩條時，任一條掉進 LowSignal 或沒有基準線，整體就再也升不到 Alarm，而畫面上不會有任何提示。三條啟用時掉一條仍能報警。</p>
+<p><strong>第四條的用途</strong>：它和第三條讀<strong>同一條譜線</strong>，差別只在有沒有除以 Ar 750.4。兩條並排看，就能直接判斷「訊號上升」是化學變化還是整個光譜一起變亮（巡檢計畫診斷矩陣裡最難判的那一列）。出廠不啟用，是因為絕對強度在洩漏排除後<strong>回不到基準線</strong>（實測仍高 +7.6%，同一時刻 Ar 正規化的比值已回到 +1%），也會跟著觀察窗髒污漂移 —— 開著會讓機台在每次事件後長期掛著 Warning。要用時到 Ratio Setup 勾選、Save、重啟擷取。</p>
+<blockquote><p>⚠️ <strong>這仍然是「一台機器」的答案，不是通用建議值。</strong> 壓力、功率、氣體組成一變，會動的物種就可能換人。<strong>上線前請依 §1.1 用一次已知洩漏重做一次挑線</strong>。門檻倍數 1.05 / 1.12 也是配著那台機器 2% 的基準散度調的：散度 8% 的機台用 1.05 會天天假警報。（出廠的 1.2 / 1.5 則是相反的問題 —— 配上 2% 散度會讓乘法那一支永遠勝出而把 σ 門檻整個蓋掉，詳見 §6.4.2。手動<strong>新增</strong>比值時的起始值仍是 1.2 / 1.5，見 §10.3。）</p></blockquote>
 <h3 id="106-可選參考譜線">10.6 可選參考譜線</h3>
 <p><code>N₂ 337.1</code>、<code>N₂ 662.4</code>、<code>Hα 656.3</code>、<code>Ar 750.4</code>、<code>Ar 811.5</code></p>
 <h3 id="107-趨勢圖">10.7 趨勢圖</h3>
