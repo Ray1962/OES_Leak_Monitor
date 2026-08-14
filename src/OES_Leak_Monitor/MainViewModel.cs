@@ -200,6 +200,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup = new RatioSetupViewModel(_leakMonitorEngine,
             () => PersistLeakMonitorSettings("RatioSetupSaved"), _systemLogger);
 
+        // Fills the logger's two wavelength fields from the emission-line catalog — the
+        // LoggerPanel comes from the framework package and knows nothing about emission lines,
+        // so the picker sits beside it and writes into the same properties a hand-typed value
+        // would. It owns no state of its own; the LoggerPanel's boxes remain the value.
+        LinePicker = new LinePickerViewModel(Logger, _leakMonitorEngine);
+
         // Wavelength Calibration tab: a staged editor for the catalog-level wavelength-drift
         // correction overlay. Like a Ratio Setup edit it is persisted immediately but only
         // applied to the engine when acquisition (re)starts (via ReloadRatios).
@@ -211,7 +217,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // A saved user line is usable at once — the catalog is not something the running engine
         // computes with, so unlike a correction it needs no acquisition restart. Push it into
         // the Ratio Setup pickers rather than making the operator find that out by restarting.
-        WavelengthCorrection.LineTable.UserLinesSaved += (_, _) => RatioSetup.RefreshLineCatalog();
+        WavelengthCorrection.LineTable.UserLinesSaved += (_, _) =>
+        {
+            RatioSetup.RefreshLineCatalog();
+            LinePicker.RefreshCatalog();
+        };
+        WavelengthCorrection.CorrectionsSaved += (_, _) => LinePicker.RefreshCatalog();
 
         // Leak Calibration tab: a guided wizard that captures "ratio rise ↔ known leak rate"
         // points and fits a per-ratio sensitivity, persisted to settings.json (Engineer+).
@@ -717,6 +728,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public LeakCalibrationViewModel LeakCalibration { get; }
     public WavelengthTrendViewModel WavelengthTrend { get; }
     public ReplayViewModel Replay { get; }
+
+    /// <summary>Emission-line picker for the logger's two wavelength fields (Configuration tab).</summary>
+    public LinePickerViewModel LinePicker { get; }
 
     public RelayCommand ApplyAllCommand { get; }
     public RelayCommand SaveAllCommand { get; }

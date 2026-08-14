@@ -33,8 +33,15 @@ public sealed class SpectralLineOption : INotifyPropertyChanged
             OnPropertyChanged(nameof(OffsetNm));
             OnPropertyChanged(nameof(HasCorrection));
             OnPropertyChanged(nameof(CorrectionText));
+            OnPropertyChanged(nameof(Display));
         }
     }
+
+    /// <summary>Single-string label for pickers that show one line of text per entry (the
+    /// Configuration tab's line picker); the Ratio Setup combos template the parts themselves.</summary>
+    public string Display => HasCorrection
+        ? $"{Species} {WavelengthNm:0.###} nm  ({CorrectionText})"
+        : $"{Species} {WavelengthNm:0.###} nm";
 
     public bool HasCorrection => _offsetNm != 0.0;
 

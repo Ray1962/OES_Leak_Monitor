@@ -231,6 +231,43 @@
                                        VerticalAlignment="Center" Margin="4,0,0,0" Foreground="#445"/>
                         </StackPanel>
 
+                        <!-- Emission-line picker for the logger's two wavelength fields. The
+                             LoggerPanel above comes from the framework package and knows nothing
+                             about emission lines, so this fills its boxes rather than replacing
+                             them: it writes the catalog wavelength and nothing else, and a
+                             hand-typed value stays exactly as valid. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4"
+                                    DataContext="{Binding LinePicker}">
+                            <TextBlock Text="Emission line:" VerticalAlignment="Center"
+                                       Margin="0,0,8,0" FontWeight="SemiBold"/>
+                            <ComboBox ItemsSource="{Binding Lines}"
+                                      SelectedItem="{Binding SelectedLine}"
+                                      IsSynchronizedWithCurrentItem="False"
+                                      IsTextSearchEnabled="True" TextSearch.TextPath="Display"
+                                      DisplayMemberPath="Display"
+                                      Width="230" VerticalAlignment="Center" Margin="0,0,8,0"
+                                      ToolTip="Emission lines from the catalog, grouped by species — built-in lines and your own (u…) together. Maintained on the Wavelength Calibration tab.">
+                                <ComboBox.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                                           Foreground="#1F3A66" Margin="2,4,2,2"/>
+                                            </DataTemplate>
+                                        </GroupStyle.HeaderTemplate>
+                                    </GroupStyle>
+                                </ComboBox.GroupStyle>
+                            </ComboBox>
+                            <Button Content="Set as trigger" Command="{Binding SetTriggerCommand}"
+                                    Padding="10,3" MinWidth="100" Margin="0,0,4,0"
+                                    ToolTip="Write this line's catalog wavelength into Trigger wavelength above. Still needs Apply / Save."/>
+                            <Button Content="Add to monitored" Command="{Binding AddMonitoredCommand}"
+                                    Padding="10,3" MinWidth="115"
+                                    ToolTip="Append this line to the monitored-wavelength list above. Lines already in the list are not added twice."/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding LinePicker.HintText}" Margin="0,0,0,8"
+                                   Foreground="#445" TextWrapping="Wrap"/>
+
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply"
                                     Command="{Binding ApplyAllCommand}"

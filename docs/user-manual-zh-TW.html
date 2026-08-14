@@ -470,6 +470,15 @@ vcruntime140_cor3.dll</code></pre>
 <blockquote><p>改完記得 <strong>Apply → Save</strong> 兩個都按。只按 Apply 的話，下次開機會回到舊值。</p></blockquote>
 <p>動作列上方還有兩排設定：</p>
 <ul>
+<li><strong>Emission line</strong> —— 從<strong>譜線目錄</strong>挑一條線，填進上面 Data Logger 區的兩個波長欄位，不必背數字：
+<ul>
+<li>下拉依<strong>物種分組</strong>，內定線與你自己加的 <code>u…</code> 線一起列出（目錄在 Wavelength Calibration 分頁維護，見 §6.5.1）。存好的自訂線<strong>立刻</strong>出現在這裡。</li>
+<li><strong>Set as trigger</strong> → 寫進 <strong>Trigger wavelength</strong>。<strong>Add to monitored</strong> → 附加到 <strong>Monitored wavelengths</strong> 清單尾端；已經在清單裡的（±0.05 nm 內）不會重複加，會提示。</li>
+<li>寫進去的一律是<strong>目錄波長</strong>，不是加了漂移修正的波長。若那條線有修正量，下方提示會講明「記錄器不套用修正」——記錄器有自己的波長容差，通常遠大於這類修正；真要用修正後的位置，自己手打即可。</li>
+<li>若目前的 <strong>Trigger mode</strong> 不是 <code>Wavelength</code>，按 Set as trigger 仍會寫值，但提示會告訴你「這個模式的觸發判定不使用它」——程式<strong>不會</strong>替你改模式（那是你為了配方刻意選的）。</li>
+<li>加到第 6 條以後會提示：Monitor 分頁的趨勢圖只畫<strong>前 5 條</strong>，其餘仍然<strong>會</strong>記進強度 CSV。 &gt; 這一區只是<strong>輸入輔助</strong>：值仍然住在 Data Logger 區的那兩個欄位裡，手打完全等價。按完仍要 <strong>Apply → Save</strong>。</li>
+</ul>
+</li>
 <li><strong>Data folder</strong> —— 舊資料自動壓縮與磁碟用量，見 §7.4。
 </li>
 <li><strong>Golden Run</strong> —— <code>capture for ___ seconds</code>：一次 Golden Run 擷取平均多久，範圍 <strong>5–600 秒</strong>，預設 60。下一次擷取生效，按 <strong>Save</strong> 才會存進 <code>settings.json</code>。時間越長，量到的基準 σ 越穩（警報門檻就是靠這個 σ 加寬的），但製程必須整段維持穩定。
