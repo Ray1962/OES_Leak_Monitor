@@ -3,7 +3,15 @@ using System.Collections.Generic;
 
 namespace OES_Leak_Monitor;
 
-/// <summary>Per-ratio monitoring state.</summary>
+/// <summary>
+/// Per-ratio monitoring state.
+/// <para>
+/// ⚠️ <b>The declaration order is a wire format.</b> These members are reported to a SECS host
+/// as their integer values (specification §1.4(c)-3, slot offset 05), and the counts in VID
+/// 009–011 are derived from them. Inserting a member in the middle silently changes what a
+/// host reads. Append only — see <c>docs/secs-integration.md</c> §5.1.
+/// </para>
+/// </summary>
 public enum RatioState
 {
     /// <summary>Plasma on, baseline set, ratio below the warning threshold.</summary>

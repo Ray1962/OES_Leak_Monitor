@@ -44,6 +44,12 @@ public sealed class AppSettings : IJsonOnDeserialized
     public DataRetentionSettings DataRetention { get; set; } = new();
 
     /// <summary>
+    /// SECS/GEM equipment interface. Absent from a settings.json predating it, which leaves
+    /// the interface disabled — see <see cref="SecsSettings.Enabled"/>.
+    /// </summary>
+    public SecsSettings Secs { get; set; } = new();
+
+    /// <summary>
     /// How much history the two live trend charts keep — the Monitor tab's Wavelength Trend and
     /// the Leak Monitor's % -of-baseline chart. One setting for both: they sit in the same app
     /// and are read together, and a run whose interesting stretch is 45 minutes long is 45
@@ -112,6 +118,7 @@ public sealed class AppSettings : IJsonOnDeserialized
         LeakMonitor.UserSpectralLines ??= new();
         RecordingsWavelengths ??= new();
         DataRetention ??= new();
+        Secs ??= new();
         // A settings.json predating this key deserializes to 0, which would leave both trend
         // charts empty. Clamp rather than reject: any out-of-range value has an obvious
         // intent-preserving nearest legal value.

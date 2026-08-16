@@ -5,7 +5,15 @@ using Aqst.OesSpectrometer.Models;
 
 namespace OES_Leak_Monitor;
 
-/// <summary>Overall leak-monitor status, the worst of all monitored ratios.</summary>
+/// <summary>
+/// Overall leak-monitor status, the worst of all monitored ratios.
+/// <para>
+/// ⚠️ <b>The declaration order is a wire format.</b> This is reported to a SECS host as VID 007
+/// (specification §1.4(c)-1: 0 Idle, 1 Normal, 2 Warning, 3 Alarm). Inserting a member in the
+/// middle silently changes what a host reads. Append only — see
+/// <c>docs/secs-integration.md</c> §5.1.
+/// </para>
+/// </summary>
 public enum LeakAlarmLevel
 {
     /// <summary>Nothing to evaluate — plasma off, no baseline, or monitor disabled.</summary>
@@ -15,7 +23,14 @@ public enum LeakAlarmLevel
     Alarm,
 }
 
-/// <summary>Validity of the selected leak-rate calibration for the current conditions.</summary>
+/// <summary>
+/// Validity of the selected leak-rate calibration for the current conditions.
+/// <para>
+/// ⚠️ <b>The declaration order is a wire format.</b> This is reported to a SECS host as VID 006
+/// (specification §1.4(c)-2: 0 not calibrated, 1 active, 2 baseline mismatch). Append only —
+/// see <c>docs/secs-integration.md</c> §5.1.
+/// </para>
+/// </summary>
 public enum CalibrationStatus
 {
     /// <summary>No calibration is selected — leak-rate estimation is off.</summary>
@@ -114,10 +129,47 @@ public sealed class LeakMonitorSnapshot
     /// longer applies. Empty when they agree, or when the run predates the recording of them.
     /// </summary>
     public string AcquisitionWarning { get; init; } = "";
+
+    /// <summary>
+    /// Whether the plasma-present gate was open on this frame — the frame counted towards
+    /// the monitors rather than being held out as "plasma off". False when the gate could
+    /// not be evaluated at all; read it with <see cref="PlasmaGateAvailable"/>, since
+    /// "we can't tell" is not "plasma off".
+    /// <para/>
+    /// Whole-frame counterpart of <see cref="RatioSnapshot.PlasmaPresent"/>, which is
+    /// per ratio because a ratio-mode entry additionally needs its own reference line.
+    /// </summary>
+    public bool PlasmaPresent { get; init; }
+
+    /// <summary>Whether the gate could be evaluated (a usable trigger, measurable on this frame).</summary>
+    public bool PlasmaGateAvailable { get; init; }
+
+    /// <summary>
+    /// Isolated gate dropouts counted this acquisition — single blank frames between good
+    /// ones. The gate discards them silently, so this is the number that says whether an
+    /// acquisition-mode change actually helped.
+    /// </summary>
+    public int DropoutCount { get; init; }
 }
 
 public sealed class LeakAlarmEventArgs : EventArgs
 {
+    public LeakAlarmLevel OldLevel { get; init; }
+    public LeakAlarmLevel NewLevel { get; init; }
+    public DateTime Timestamp { get; init; }
+}
+
+/// <summary>An operator ending a confirmed leak alarm — who, what was latched, and the
+/// composite level either side of it.</summary>
+public sealed class LeakAcknowledgedEventArgs : EventArgs
+{
+    /// <summary>Signed-in operator, or "" when the caller did not supply one.</summary>
+    public string User { get; init; } = "";
+
+    /// <summary>Display names of the ratios whose latch was cleared. Never empty — the event
+    /// does not fire when there was nothing to clear.</summary>
+    public IReadOnlyList<string> ClearedRatios { get; init; } = Array.Empty<string>();
+
     public LeakAlarmLevel OldLevel { get; init; }
     public LeakAlarmLevel NewLevel { get; init; }
     public DateTime Timestamp { get; init; }
@@ -160,6 +212,9 @@ public sealed class LeakMonitorEngine : IDisposable
     // trigger. Null until ConfigureTrigger is called (the host does so at start-up and on Apply).
     private PlasmaGate? _plasmaGate;
     private bool _gateWarned;                // "gate unusable" is logged once, not per frame
+    // Last gate reading, for the snapshot. null = could not be evaluated on that frame,
+    // which is reported as "gate unavailable" rather than as "plasma off".
+    private bool? _lastGateOpen;
     // Live acquisition conditions, for stamping onto a Golden Run and for detecting that the
     // active baseline was captured under different ones. Device half comes from the host via
     // ConfigureAcquisition; the axis half is read off each frame.
@@ -245,6 +300,9 @@ public sealed class LeakMonitorEngine : IDisposable
             _plasmaGate = settings is null ? null : new PlasmaGate(settings);
             after = _plasmaGate?.Description;
             _gateWarned = false;
+            // The last reading was taken through the old gate; a new one has not judged a
+            // frame yet, so report "unavailable" rather than carrying the stale answer over.
+            _lastGateOpen = null;
         }
         if (before != after)
             _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorPlasmaGate",
@@ -304,6 +362,13 @@ public sealed class LeakMonitorEngine : IDisposable
     /// <summary>Raised after <see cref="ReloadRatios"/> rebuilds the monitored-ratio set.</summary>
     public event EventHandler? RatiosReloaded;
 
+    /// <summary>
+    /// Raised when <see cref="Acknowledge"/> actually cleared a latched alarm — the same
+    /// condition that writes the <c>LeakMonitorAcknowledged</c> audit entry, so the event
+    /// means exactly what that entry means: a person ended a confirmed alarm.
+    /// </summary>
+    public event EventHandler<LeakAcknowledgedEventArgs>? Acknowledged;
+
     /// <summary>The live settings object — mutated in place as Golden Runs are captured.</summary>
     public LeakMonitorSettings Settings => _settings;
 
@@ -343,6 +408,7 @@ public sealed class LeakMonitorEngine : IDisposable
             // continuum) decide whether the frame was evaluated at all. Measured once per frame
             // and shared by every absolute ratio; null = the gate could not be evaluated.
             bool? triggerPlasma = _plasmaGate?.IsPlasmaPresent(wl, inten);
+            _lastGateOpen = triggerPlasma;
             if (triggerPlasma is { } g) TrackGateDropouts(g, sample.Timestamp);
 
             foreach (var mon in _monitors)
@@ -608,6 +674,16 @@ public sealed class LeakMonitorEngine : IDisposable
                 "so nothing else can have ended this alarm.",
                 related: $"User={user ?? "(unknown)"}",
                 value: string.Join(", ", cleared));
+
+        if (cleared.Count > 0)
+            Acknowledged?.Invoke(this, new LeakAcknowledgedEventArgs
+            {
+                User = user ?? "",
+                ClearedRatios = cleared,
+                OldLevel = oldOverall,
+                NewLevel = newOverall,
+                Timestamp = DateTime.Now,
+            });
 
         if (newOverall != oldOverall)
             AlarmStateChanged?.Invoke(this, new LeakAlarmEventArgs
@@ -1360,6 +1436,9 @@ public sealed class LeakMonitorEngine : IDisposable
             ActiveCalibration = _settings.ActiveCalibration,
             CalibrationStatus = _calStatus,
             AcquisitionWarning = _acquisitionWarning,
+            PlasmaPresent = _lastGateOpen ?? false,
+            PlasmaGateAvailable = _lastGateOpen.HasValue,
+            DropoutCount = _dropoutEvents,
         };
     }
 
