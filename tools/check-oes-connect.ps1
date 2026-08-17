@@ -1,14 +1,21 @@
 <#
-    check-oes-connect.ps1 - why does OES_Leak_Monitor fall back to test mode?
+    check-oes-connect.ps1 - why did the app fall back to test mode?
 
-    Reproduces exactly what the app does at Connect (DllResolver.Resolve ->
-    CheckHardwareDllAvailability -> USB enumeration) and prints the reason the app
-    itself swallows. Run it in the SAME folder as OES_Leak_Monitor.exe, as the SAME
-    Windows user, with the spectrometer plugged in and every other OES program closed.
+    Works for any host of Aqst.OesSpectrometer (OES_Leak_Monitor,
+    DualOes_PlasmaMonitor, ...). Reproduces exactly what the app does at Connect
+    (DllResolver.Resolve -> CheckHardwareDllAvailability -> USB enumeration) and
+    prints the reason the app itself swallows. Run it in the SAME folder as the
+    app's .exe, as the SAME Windows user, with the spectrometer plugged in and
+    every other OES program closed.
 
         powershell -ExecutionPolicy Bypass -File .\check-oes-connect.ps1
+
+    The app is found automatically; -AppExe names it if the folder holds several.
+
+    Canonical copy: OES_Leak_Monitor/tools/. DualOes_PlasmaMonitor/tools/ carries
+    a mirror - change both together.
 #>
-param([string]$Folder = $PSScriptRoot)
+param([string]$Folder = $PSScriptRoot, [string]$AppExe = "")
 
 $ErrorActionPreference = 'Continue'
 function Line { Write-Host ('-' * 66) }
@@ -24,10 +31,29 @@ if (-not [Environment]::Is64BitProcess) {
     return
 }
 
+# Which app is this? Named by -AppExe, else a known host, else the only .exe in
+# the folder. The helper .exe names that ship alongside are excluded so a
+# delivery folder with one app still resolves to that app.
+if (-not $AppExe) {
+    $known = @('OES_Leak_Monitor.exe','DualOes_PlasmaMonitor.exe')
+    $AppExe = $known | Where-Object { Test-Path (Join-Path $Folder $_) } | Select-Object -First 1
+}
+if (-not $AppExe) {
+    $exes = @(Get-ChildItem -Path $Folder -Filter *.exe -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notmatch '^(createdump|check-)' })
+    if ($exes.Count -eq 1) { $AppExe = $exes[0].Name }
+}
+if (-not $AppExe) {
+    Write-Host "!! No application .exe found in this folder. Put this script in the app folder," -ForegroundColor Red
+    Write-Host "   or name the app with -AppExe <name.exe>." -ForegroundColor Red
+    return
+}
+Write-Host "Application   : $AppExe"
+
 # ---------------------------------------------------------------- 1. files
 Line
 Write-Host "1. Files that must sit next to the .exe"
-$oesNative = @('OES_Leak_Monitor.exe','UserApplication.dll','SiUSBXp.dll','libsodium.dll',
+$oesNative = @($AppExe,'UserApplication.dll','SiUSBXp.dll','libsodium.dll',
                'vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll')
 $wpfNative = @('wpfgfx_cor3.dll','PresentationNative_cor3.dll','D3DCompiler_47_cor3.dll',
                'PenImc_cor3.dll','vcruntime140_cor3.dll')

@@ -11,10 +11,11 @@ if not exist "%~dp0check-oes-connect.ps1" (
     exit /b 1
 )
 
-if not exist "%~dp0OES_Leak_Monitor.exe" (
+if not exist "%~dp0UserApplication.dll" (
     echo.
-    echo WARNING: OES_Leak_Monitor.exe is not in this folder.
-    echo The check must run in the app folder, or it inspects the wrong files.
+    echo WARNING: UserApplication.dll is not in this folder, so this does not look
+    echo like the app folder. The check must run beside the app's .exe, or it
+    echo inspects the wrong files.
     echo.
     pause
 )
