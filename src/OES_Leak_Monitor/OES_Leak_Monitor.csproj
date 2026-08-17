@@ -137,6 +137,7 @@
     <ItemGroup>
       <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\user-manual-zh-TW.html" />
       <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\daily-inspection-plan-zh-TW.html" />
+      <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\secs-operation-sop-zh-TW.html" />
     </ItemGroup>
     <Warning Text="Operator document not found at %(_OperatorDoc.FullPath) — the publish folder will ship without it. Regenerate the HTML from its Markdown source with tools/md2html.py (see CLAUDE.md &gt; Documentation)."
              Condition="!Exists('%(_OperatorDoc.FullPath)')" />
