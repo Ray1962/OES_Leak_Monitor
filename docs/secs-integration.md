@@ -10,7 +10,7 @@
 > 相關程式：`LeakMonitorEngine`、`MainViewModel`、`AppSettings`（見 `CLAUDE.md`）。
 > 通訊函式庫：`Aqusen.Secs`（維護於 `Ray1962/Test_SECS`，整合方式見該 repo 的 `整合指南.md`）。
 
-**狀態：** 已實作，並有自動化測試（§13.2–13.3，36 個）。連線、S1F3、S5F5 已在真機驗證；
+**狀態：** 已實作，並有自動化測試（§13.2–13.3，38 個）。連線、S1F3、S5F5 已在真機驗證；
 洩漏警報 S5F1 已用 2026-08-14 的實機錄檔重放驗證，S6F11 的三個事件已由 `SecsEventTests`
 走 loopback 驗證。**尚待人工驗收的只剩 UI 到 bridge 的接線**（按鈕、Replay 分頁），逐項狀態見 §13.4。
 
@@ -461,7 +461,7 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 ### 13.2 自動化測試（`tests/OES_Leak_Monitor.Tests`）
 
 `dotnet test tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug` —
-36 個測試，在有實機錄檔的機器上全過（沒有錄檔時 33 過、3 略過）：
+38 個測試，在有實機錄檔的機器上全過（沒有錄檔時 35 過、3 略過）：
 
 | 檔案 | 涵蓋 |
 |---|---|
@@ -470,6 +470,7 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `SecsWireTests` | 真的 `SecsBridge` 對真的 `GemHost` 走 loopback：S1F3 回 26 個 SV、S5F5 的 ALID 是 ASCII 且 category 正確、Warning→Alarm→Normal 送出正確的 set/clear 順序、故障警報去抖動 |
 | `SecsEventTests` | 同樣走 loopback 的 **S6F11 事件路徑**：三個 CEID 各自送達且編號正確、`Enqueue` 的順序保證（連續六則）、`reportEvents = false` 只擋事件不擋警報、測試模式閘門預設擋住事件與洩漏警報但**不擋設備故障**、介面關閉時呼叫不拋例外 |
 | `AppSettingsDefaultsTests` | 全新 `settings.json` 的三個覆寫預設（觸發波長 337.1、記錄器預設啟用、`ForceTestMode` 為假），以及「已存檔的決定要被尊重」那半個契約 |
+| `SecsTraceTests` | **S2F23／S6F1 trace**：取樣依 SVID 順序回傳綁定值、`SMPLN` 連號不重複；以及「上報全關時 trace 仍回得到真值」（composite 仍是 Alarm、VID 016 仍是 1，且確實沒送出任何 S5F1／S6F11） |
 | `RecordedRunTests` | **實機錄檔重放**，見下 |
 
 ### 13.3 實機錄檔重放（`RecordedRunTests`）
@@ -500,9 +501,9 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 | # | 項目 | 狀態 |
 |---|---|---|
 | 1 | Replay 分頁播一段有洩漏的錄檔，勾「Raise leak alarms during replay」與「測試模式也上報」→ 應看到 S5F1 set/clear（ALID `1cc27001`／`1cc27002`）與 CEID `1cc27508`／`1cc27509`；按 Acknowledge → CEID `1cc27502` | ⬜ 未驗收 |
-| 2 | 取消「測試模式也上報」→ 同一段錄檔不應再送出任何 S5F1／S6F11，但 S1F3 仍回得到值且 VID 016 = 1 | ⬜ 未驗收（閘門本身已由 `SecsEventTests` 自動化，這裡驗的是它在真實 Replay 流程下的表現與 VID 016） |
+| 2 | 取消「測試模式也上報」→ 同一段錄檔不應再送出任何 S5F1／S6F11，但 S1F3 仍回得到值且 VID 016 = 1 | 🟡 部分自動化——閘門與「上報全關仍讀得到真值（含 VID 016）」已由 `SecsEventTests`／`SecsTraceTests` 涵蓋；剩下的是同一件事發生在真實 Replay 流程裡 |
 | 3 | 拔掉光譜儀 → ALID `1cc27012` set；插回 → clear | ⬜ 未驗收 |
-| 4 | 在 Host 端做一次 S2F23 Trace，確認 S6F1 依週期回傳 | ⬜ 未驗收 |
+| 4 | 在 Host 端做一次 S2F23 Trace，確認 S6F1 依週期回傳 | ✅ 已自動化（`SecsTraceTests`，走 loopback）。仍建議在真實 Host 上做一次，因為對方的 DSPER／REPGSZ 慣例才是驗收標的 |
 | 5 | 全程比對 `secs_YYYYMMDD.log` 與 `Test_SECS` 兩邊的收送紀錄 | ⬜ 未驗收 |
 
 第 1 項的 S5F1 那半已由 §13.3 自動化，三個 CEID 的線上行為則由 `SecsEventTests` 自動化；
@@ -522,6 +523,19 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 
 **剩下的人工驗收只有一件事：GUI 到 bridge 的那一段接線**——按鈕真的會呼叫到上表的方法。
 那需要有人開著 App 按，所以 §13.4 第 1 項仍然是 ⬜。
+
+#### 為什麼第 1、3、5 項到此為止
+
+不是還沒做，是**自動化到不了**：
+
+- **第 1 項**要有人在 Replay 分頁選檔、按 Play、按 Acknowledge。引擎以下（錄檔 → 引擎 → S5F1／S6F11）
+  已由 §13.3 與 `SecsEventTests` 走完，缺的正好是按鈕到那些方法的那一步。
+- **第 3 項**要有人把光譜儀的線拔掉再插回。`ReportFault` 的去抖動與「測試模式不擋設備故障」
+  都有測試，`MainViewModel` 對 `IsConnected` 的監看則需要真的裝置。
+- **第 5 項**是前四項的副產物：跑完之後把兩邊的日誌對一次。
+
+驗收時照 [`secs-operation-sop-zh-TW.md`](secs-operation-sop-zh-TW.md) §9 的步驟走即可，
+那份文件就是為此寫的。
 
 `Test_SECS` 的 `使用手冊.md` 有完整的雙視窗驗收流程（使用例 1～14），可整套照走。
 

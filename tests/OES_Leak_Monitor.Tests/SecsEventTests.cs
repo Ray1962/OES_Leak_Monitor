@@ -37,7 +37,7 @@ public class SecsEventTests
     [Fact]
     public async Task Starting_and_stopping_acquisition_send_CEID_508_then_509()
     {
-        await using var h = await Harness.StartAsync();
+        await using var h = await SecsHarness.StartAsync();
         h.Bridge.OnSample(SnapshotBuilder.Quiet());
 
         h.Bridge.OnAcquisitionChanged(true);
@@ -56,7 +56,7 @@ public class SecsEventTests
     [Fact]
     public async Task An_acknowledged_alarm_sends_CEID_502()
     {
-        await using var h = await Harness.StartAsync();
+        await using var h = await SecsHarness.StartAsync();
         h.Bridge.OnSample(SnapshotBuilder.Leaking());
 
         h.Bridge.OnAcknowledged(new LeakAcknowledgedEventArgs
@@ -80,7 +80,7 @@ public class SecsEventTests
     [Fact]
     public async Task Events_arrive_in_the_order_they_happened()
     {
-        await using var h = await Harness.StartAsync();
+        await using var h = await SecsHarness.StartAsync();
         h.Bridge.OnSample(SnapshotBuilder.Quiet());
 
         for (var i = 0; i < 3; i++)
@@ -109,7 +109,7 @@ public class SecsEventTests
     [Fact]
     public async Task Event_reporting_off_silences_events_but_not_alarms()
     {
-        await using var h = await Harness.StartAsync(s => s.ReportEvents = false);
+        await using var h = await SecsHarness.StartAsync(s => s.ReportEvents = false);
         h.Bridge.OnSample(SnapshotBuilder.Leaking());
 
         h.Bridge.OnAcquisitionChanged(true);
@@ -129,7 +129,7 @@ public class SecsEventTests
     [Fact]
     public async Task Test_mode_frames_send_no_events_by_default()
     {
-        await using var h = await Harness.StartAsync(s => s.ReportInTestMode = false);
+        await using var h = await SecsHarness.StartAsync(s => s.ReportInTestMode = false);
         h.Bridge.OnSample(SnapshotBuilder.Quiet());   // TestMode = true
 
         h.Bridge.OnAcquisitionChanged(true);
@@ -148,7 +148,7 @@ public class SecsEventTests
     [Fact]
     public async Task Test_mode_suppresses_leak_alarms_but_never_equipment_faults()
     {
-        await using var h = await Harness.StartAsync(s => s.ReportInTestMode = false);
+        await using var h = await SecsHarness.StartAsync(s => s.ReportInTestMode = false);
         h.Bridge.OnSample(SnapshotBuilder.Leaking());   // TestMode = true
 
         h.Bridge.OnLeakLevelChanged(LeakAlarmLevel.Alarm);
@@ -183,89 +183,6 @@ public class SecsEventTests
         finally
         {
             try { Directory.Delete(folder, recursive: true); } catch { /* best effort */ }
-        }
-    }
-
-    /// <summary>
-    /// A bridge and a host, connected over loopback, collecting what the host receives.
-    /// Built per test rather than once per class: every test here varies a setting that is read
-    /// when the interface starts, and reconfiguring a running one would make the host reconnect
-    /// mid-assertion.
-    /// </summary>
-    private sealed class Harness : IAsyncDisposable
-    {
-        private readonly string _folder = Path.Combine(
-            Path.GetTempPath(), "oes-secs-event-" + Guid.NewGuid().ToString("N"));
-        private readonly List<uint> _ceids = new();
-        private readonly List<string> _alids = new();
-
-        private GemHost _host = null!;
-
-        public SecsBridge Bridge { get; private set; } = null!;
-
-        /// <summary>Event reports received so far, in arrival order.</summary>
-        public IReadOnlyList<uint> Ceids() { lock (_ceids) { return _ceids.ToArray(); } }
-
-        public int Count { get { lock (_ceids) { return _ceids.Count; } } }
-
-        /// <summary>Alarm ids received so far, as sent — ASCII, per specification §5.3.</summary>
-        public IReadOnlyList<string> Alids() { lock (_alids) { return _alids.ToArray(); } }
-
-        public int Alarms { get { lock (_alids) { return _alids.Count; } } }
-
-        public static async Task<Harness> StartAsync(Action<SecsSettings>? configure = null)
-        {
-            var h = new Harness();
-            var port = SecsTestPort.Free();
-            Directory.CreateDirectory(h._folder);
-
-            var settings = new SecsSettings
-            {
-                Enabled = true,
-                ChamberCode = Chamber,
-                IpAddress = "127.0.0.1",
-                Port = port,
-                // A test has only synthetic frames to offer, so reporting them is the default
-                // here; the tests that are about the gate itself turn it back off.
-                ReportInTestMode = true,
-            };
-            configure?.Invoke(settings);
-
-            h.Bridge = new SecsBridge(null, h._folder, h._folder,
-                () => new SecsBridge.AcquisitionInfo(120f, 4u));
-            h.Bridge.Configure(settings);
-
-            h._host = new GemHost(
-                new SecsGemOptions { IsActive = true, IpAddress = "127.0.0.1", Port = port },
-                new GemOptions
-                {
-                    ModelName = "TEST-HOST",
-                    SoftwareRevision = "1.0",
-                    EstablishRetryIntervalMs = 1000,
-                });
-            // S6F11 carries L{3} DATAID, CEID, reports — the CEID is U4 (only ALID is ASCII).
-            h._host.EventReportReceived += m =>
-            {
-                lock (h._ceids) { h._ceids.Add(m.SecsItem![1].FirstValue<uint>()); }
-            };
-            h._host.AlarmReceived += m =>
-            {
-                lock (h._alids) { h._alids.Add(m.SecsItem![1].GetString()); }
-            };
-            h._host.Start();
-            h._host.Enable();
-
-            Assert.True(await SecsTestPort.WaitAsync(
-                () => h._host.CommunicationState == CommunicationState.Communicating, 20),
-                "the host and the equipment never reached Communicating");
-            return h;
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await _host.DisposeAsync();
-            Bridge.Dispose();
-            try { Directory.Delete(_folder, recursive: true); } catch { /* best effort */ }
         }
     }
 }
