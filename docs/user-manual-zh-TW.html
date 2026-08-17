@@ -259,17 +259,24 @@ td code{white-space:nowrap;}
 UserApplication.dll           ← OES 硬體 SDK
 SiUSBXp.dll                   ← USB 驅動介面
 libsodium.dll                 ← SDK 相依
+vcruntime140.dll              ← 以下三個是 libsodium.dll 需要的 VC++ 執行階段
+vcruntime140_1.dll
+msvcp140.dll
 wpfgfx_cor3.dll               ← 以下為 WPF 原生元件
 PresentationNative_cor3.dll
 D3DCompiler_47_cor3.dll
 PenImc_cor3.dll
-vcruntime140_cor3.dll</code></pre>
+vcruntime140_cor3.dll
+user-manual-zh-TW.html        ← 本手冊
+daily-inspection-plan-zh-TW.html</code></pre>
 <blockquote><p>⚠️ <strong>整個資料夾要一起複製，不能只拷貝 <code>.exe</code>。</strong> 那幾個 DLL 是刻意放在 <code>.exe</code> 旁邊的 —— SDK 的 <code>DllResolver</code> 只會在程式所在目錄找它們。少了 <code>UserApplication.dll</code> / <code>SiUSBXp.dll</code>，程式仍會啟動，但<strong>連線會無聲地掉進測試模式</strong>（畫面看得到假光譜，卻連不到硬體）。</p></blockquote>
-<p>需求：64 位元 Windows。目標電腦<strong>不需要</strong>安裝 .NET。</p>
+<p><code>vcruntime140.dll</code>、<code>vcruntime140_1.dll</code>、<code>msvcp140.dll</code> 是隨程式一起帶的 <strong>Visual C++ 執行階段</strong>。<code>UserApplication.dll</code> 透過 <code>libsodium.dll</code> 相依於它，因此在<strong>從未安裝過 Visual C++ 2015–2022 x64 Redistributable 的乾淨電腦上</strong>，少了它們就會連 DLL 都載不起來 → 同樣無聲掉進測試模式。名字相似的 <code>vcruntime140_cor3.dll</code> 是 WPF 的私有改名副本，<strong>不能替代</strong>。帶著這三個檔，目標電腦就不需要另外安裝 Redistributable。</p>
+<p>需求：64 位元 Windows。目標電腦<strong>不需要</strong>安裝 .NET，也不需要安裝 VC++ Redistributable。</p>
 <h3 id="22-啟動">2.2 啟動</h3>
 <p>雙擊 <code>OES_Leak_Monitor.exe</code>。首次啟動會在 <code>%APPDATA%\OES_Leak_Monitor\</code> 建立設定與資料夾。</p>
 <h3 id="23-測試模式無硬體">2.3 測試模式（無硬體）</h3>
 <p>沒接到光譜儀時，按 <strong>Connect</strong> 會自動退回<strong>測試模式</strong>，產生合成光譜（正弦波＋雜訊，約 200–800 nm、1000 點）。整個 UI 都能操作，適合教育訓練與功能驗證。</p>
+<p><strong>怎麼一眼看出現在是測試模式</strong>：Monitor 分頁 <code>DevicePanel</code> 底部的 <strong>Test Mode</strong> 會變成紅色粗體 <code>True</code>，旁邊狀態列寫出原因（滑鼠停在上面看完整句子），<code>Serial</code> 顯示 <code>TEST_MODE_SIMULATOR</code>。同時系統日誌會記一筆 <strong>警告</strong> <code>Device_TestModeFallback</code>，Description 就是原因。<strong>接了硬體卻看到這些，代表硬體沒連上，資料是假的</strong> —— 見 §9.1。</p>
 <p>在測試模式下：</p>
 <ul>
 <li>Leak Monitor 分頁會顯示 <strong>"test mode"</strong> 註記，並註明目前的光譜來源是合成波形還是重播的錄檔、警報是否生效。
@@ -1196,17 +1203,28 @@ vcruntime140_cor3.dll</code></pre>
 <hr>
 <h2 id="9-疑難排解">9. 疑難排解</h2>
 <h3 id="91-按-connect-後掉進測試模式明明接了硬體">9.1 按 Connect 後掉進測試模式（明明接了硬體）</h3>
-<p>最常見原因：<strong>原生 DLL 不在 <code>.exe</code> 旁邊</strong>。</p>
-<p>檢查程式資料夾裡有沒有 <code>UserApplication.dll</code>、<code>SiUSBXp.dll</code>、<code>libsodium.dll</code>。SDK 的 DLL 解析器<strong>只會在程式所在目錄找</strong>，放到子資料夾沒有用。</p>
-<p>其他要檢查的：</p>
+<p><strong>這是本程式最需要警覺的故障</strong>：畫面顯示「已連線」、光譜在動、CSV 也照寫，但那些數字全是合成的，檔名前綴跟真實量測一模一樣（只有 Replay 產生的檔才會標 <code>SIM</code>）。</p>
+<p><strong>先確認確實掉進測試模式</strong>：Monitor 分頁的 <code>Serial</code> 顯示 <code>TEST_MODE_SIMULATOR</code>、<strong>Test Mode</strong> 為紅色 <code>True</code>，或系統日誌出現警告 <code>Device_TestModeFallback</code>（Description 就是原因）。</p>
+<h4 id="一鍵診斷">一鍵診斷</h4>
+<p>程式資料夾裡附了 <code>check-oes-connect.cmd</code> 與 <code>check-oes-connect.ps1</code>。<strong>兩個檔要放在 <code>OES_Leak_Monitor.exe</code> 同一層</strong>，用平常開程式的那個帳號<strong>點兩下 <code>.cmd</code></strong>（不要用「以系統管理員身分執行」）。它會照著程式連線的順序重跑一次，把程式吞掉的錯誤印出來，並存成同資料夾的 <code>oes-diagnostic.txt</code>：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>診斷輸出</th><th>意思</th><th>處理</th></tr></thead>
+<tbody>
+<tr><td>第 2 節 <code>vcruntime140.dll NOT FOUND</code>、第 4 節 <code>FAILED … (Win32 126)</code></td><td>這台沒有 VC++ 執行階段，DLL 根本載不起來</td><td>把 <code>vcruntime140.dll</code>、<code>vcruntime140_1.dll</code>、<code>msvcp140.dll</code> 補到 <code>.exe</code> 旁（見 §2.1），或安裝 <a href="https://aka.ms/vs/17/release/vc_redist.x64.exe">VC++ 2015–2022 x64 Redistributable</a></td></tr>
+<tr><td>第 4 節 <code>FAILED …（Win32 5）</code></td><td>檔案被防毒或權限擋住</td><td>檔案右鍵 → 內容 → 勾「解除封鎖」；請 IT 把資料夾加入防毒白名單</td></tr>
+<tr><td>第 4 節 <code>FAILED …（Win32 193）</code></td><td>32/64 位元不符</td><td>拿到的不是 x64 版，重新取得正確的發布資料夾</td></tr>
+<tr><td>第 1 節有 <code>MISSING</code></td><td>交付資料夾不完整</td><td>整包重新複製，不要只拷貝 <code>.exe</code></td></tr>
+<tr><td>第 5 節 <code>devices=0</code></td><td>驅動沒裝或線沒接</td><td>裝驅動（交付 USB 的 <code>Driver\install_drvier.bat</code>）、換線、裝置管理員確認看得到裝置</td></tr>
+<tr><td>第 5 節 <code>open #0: FAILED</code></td><td>裝置被別的程式佔用</td><td>關掉原廠軟體（SpectraSmart 等）與其他一份本程式，再試</td></tr>
+</tbody></table></div>
+<h4 id="其他要檢查的">其他要檢查的</h4>
 <ul>
-<li>Configuration 分頁的 <strong>Force Test Mode</strong> 是不是被勾起來了。
-</li>
-<li>USB 線／驅動、裝置管理員裡有沒有看到裝置。
+<li>Configuration 分頁的 <strong>Force Test Mode</strong> 是不是被勾起來了（日誌 <code>Device_TestModeFallback</code> 的 Related 欄會寫 <code>ForceTestMode=True</code>）。<strong>注意</strong>：按下 Configuration 分頁的 <strong>Load Defaults</strong> 不會再把它打開，但舊版本會 —— 若這台曾經按過並存檔，請取消勾選後 <strong>Apply → Save</strong>。
 </li>
 <li>乙太網路機種：0.4.6 已修正預設 device type（改為 Z5，並會自動改試另一種），若仍連不上請確認 IP 設定。
 </li>
 </ul>
+<blockquote><p><strong>實例（2026-08-17）</strong>：某台機台的交付資料夾檔案齊全、位元正確、驅動正常、原廠軟體也連得到，卻每次都掉進測試模式。原因是那台從未安裝過 VC++ Redistributable，<code>libsodium.dll</code> 載入失敗（Win32 126），連裝置列舉都還沒跑到。之後的版本已把 VC++ 執行階段一起打包，就是為了根除這個情況。</p></blockquote>
 <h3 id="92-光譜幀出現斷裂撕裂">9.2 光譜幀出現斷裂／撕裂</h3>
 <p>Configuration → <strong>Acquire Mode</strong> 改成 <code>Oneshot</code> → <strong>Apply</strong>。常見於 Z5／乙太網路機種在長積分時間下。</p>
 <blockquote><p>同一個設定也是<strong>整幀全暗</strong>（掉幀）的第一個處理方向 —— 那種狀況日誌會記 <code>SpectrumFrameDropout</code>，見 §9.6。</p></blockquote>

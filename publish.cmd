@@ -69,6 +69,8 @@ for %%F in (
     msvcp140.dll
     user-manual-zh-TW.html
     daily-inspection-plan-zh-TW.html
+    check-oes-connect.ps1
+    check-oes-connect.cmd
 ) do (
     if not exist "%PUBFOLDER%\%%F" set "MISSING=!MISSING! %%F"
 )
@@ -97,7 +99,7 @@ if defined MISSING (
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 14 files present ***
+echo  *** PUBLISH SUCCEEDED - all 16 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -111,6 +113,7 @@ echo    vcruntime140.dll etc.      VC++ runtime libsodium.dll needs (app-local,
 echo                               so the target PC needs no redistributable)
 echo    user-manual-zh-TW.html     operator manual
 echo    daily-inspection-plan-zh-TW.html   daily/weekly inspection plan
+echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
 echo.
 
 if exist "%PUBFOLDER%" start "" explorer "%PUBFOLDER%"
