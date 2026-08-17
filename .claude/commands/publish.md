@@ -25,7 +25,7 @@ Steps:
    ```
 
 3. When it finishes, verify `src/OES_Leak_Monitor/bin/Publish/win-x64/` holds
-   all **17** expected files. Report the full output folder path and the `.exe`
+   all **18** expected files. Report the full output folder path and the `.exe`
    size. **Anything missing means the folder is not shippable — say so rather
    than reporting success**, because the app launches happily without most of
    these and only fails on the production PC.
@@ -36,7 +36,7 @@ Steps:
    | OES native | `UserApplication.dll`, `SiUSBXp.dll`, `libsodium.dll` |
    | WPF native | `wpfgfx_cor3.dll`, `PresentationNative_cor3.dll`, `D3DCompiler_47_cor3.dll`, `PenImc_cor3.dll`, `vcruntime140_cor3.dll` |
    | VC++ runtime | `vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll` |
-   | Operator docs | `user-manual-zh-TW.html`, `daily-inspection-plan-zh-TW.html`, `secs-operation-sop-zh-TW.html` |
+   | Operator docs | `user-manual-zh-TW.html`, `daily-inspection-plan-zh-TW.html`, `secs-operation-sop-zh-TW.html`, `secs-acceptance-sheet-zh-TW.html` |
    | Field diagnostic | `check-oes-connect.ps1`, `check-oes-connect.cmd` |
 
    The authority on this list is `publish.cmd`'s own check — if it and this
@@ -52,6 +52,8 @@ Notes:
 - If an operator `.html` is missing, regenerate it from its Markdown with
   `tools/md2html.py` (see CLAUDE.md > Documentation) and publish again — the
   HTML is what the fab actually reads, so a stale one is worse than none.
+  The exception is `secs-acceptance-sheet-zh-TW.html`, which is a hand-authored
+  form with no Markdown source: restore it from git, never regenerate it.
 - If the publish fails on restore, a package from step 1 is missing.
-- `publish.cmd` runs the same publish and then re-checks all 17 files itself, so
+- `publish.cmd` runs the same publish and then re-checks all 18 files itself, so
   prefer it when the user wants the folder opened in Explorer afterwards.
