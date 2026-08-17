@@ -36,7 +36,7 @@ public class SecsWireTests : IAsyncLifetime
             IpAddress = "127.0.0.1",
             Port = port,
             // Replayed and synthetic frames are the only ones a test has, and the point here is
-            // the wire format rather than the test-mode policy (which SecsReportingPolicyTests covers).
+            // the wire format rather than the test-mode policy (which SecsEventTests covers).
             ReportInTestMode = true,
         });
 

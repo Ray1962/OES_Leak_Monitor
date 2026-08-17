@@ -10,9 +10,9 @@
 > 相關程式：`LeakMonitorEngine`、`MainViewModel`、`AppSettings`（見 `CLAUDE.md`）。
 > 通訊函式庫：`Aqusen.Secs`（維護於 `Ray1962/Test_SECS`，整合方式見該 repo 的 `整合指南.md`）。
 
-**狀態：** 已實作，並有自動化測試（§13.2–13.3，29 個）。連線、S1F3、S5F5 已在真機驗證；
-洩漏警報 S5F1 已用 2026-08-14 的實機錄檔重放驗證。**尚待人工驗收的只剩三個 CEID 事件**
-與 Replay 分頁的接線——S6F11 這條路徑目前完全沒有自動化涵蓋，逐項狀態見 §13.4。
+**狀態：** 已實作，並有自動化測試（§13.2–13.3，36 個）。連線、S1F3、S5F5 已在真機驗證；
+洩漏警報 S5F1 已用 2026-08-14 的實機錄檔重放驗證，S6F11 的三個事件已由 `SecsEventTests`
+走 loopback 驗證。**尚待人工驗收的只剩 UI 到 bridge 的接線**（按鈕、Replay 分頁），逐項狀態見 §13.4。
 
 ---
 
@@ -461,13 +461,14 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 ### 13.2 自動化測試（`tests/OES_Leak_Monitor.Tests`）
 
 `dotnet test tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug` —
-29 個測試，在有實機錄檔的機器上全過（沒有錄檔時 26 過、3 略過）：
+36 個測試，在有實機錄檔的機器上全過（沒有錄檔時 33 過、3 略過）：
 
 | 檔案 | 涵蓋 |
 |---|---|
 | `SecsChamberCodingTests` | 編號運算對照規格範例、腔體表、戳記的冪等與可重戳、錯誤 `ss`／`aa`／腔體被拒、非本系統的 id 不被動到 |
 | `SecsProfileTests` | 範本可載入、26 個 binding 全被 App 供應、既有 profile 永不被覆寫 |
 | `SecsWireTests` | 真的 `SecsBridge` 對真的 `GemHost` 走 loopback：S1F3 回 26 個 SV、S5F5 的 ALID 是 ASCII 且 category 正確、Warning→Alarm→Normal 送出正確的 set/clear 順序、故障警報去抖動 |
+| `SecsEventTests` | 同樣走 loopback 的 **S6F11 事件路徑**：三個 CEID 各自送達且編號正確、`Enqueue` 的順序保證（連續六則）、`reportEvents = false` 只擋事件不擋警報、測試模式閘門預設擋住事件與洩漏警報但**不擋設備故障**、介面關閉時呼叫不拋例外 |
 | `AppSettingsDefaultsTests` | 全新 `settings.json` 的三個覆寫預設（觸發波長 337.1、記錄器預設啟用、`ForceTestMode` 為假），以及「已存檔的決定要被尊重」那半個契約 |
 | `RecordedRunTests` | **實機錄檔重放**，見下 |
 
@@ -499,26 +500,28 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 | # | 項目 | 狀態 |
 |---|---|---|
 | 1 | Replay 分頁播一段有洩漏的錄檔，勾「Raise leak alarms during replay」與「測試模式也上報」→ 應看到 S5F1 set/clear（ALID `1cc27001`／`1cc27002`）與 CEID `1cc27508`／`1cc27509`；按 Acknowledge → CEID `1cc27502` | ⬜ 未驗收 |
-| 2 | 取消「測試模式也上報」→ 同一段錄檔不應再送出任何 S5F1／S6F11，但 S1F3 仍回得到值且 VID 016 = 1 | ⬜ 未驗收 |
+| 2 | 取消「測試模式也上報」→ 同一段錄檔不應再送出任何 S5F1／S6F11，但 S1F3 仍回得到值且 VID 016 = 1 | ⬜ 未驗收（閘門本身已由 `SecsEventTests` 自動化，這裡驗的是它在真實 Replay 流程下的表現與 VID 016） |
 | 3 | 拔掉光譜儀 → ALID `1cc27012` set；插回 → clear | ⬜ 未驗收 |
 | 4 | 在 Host 端做一次 S2F23 Trace，確認 S6F1 依週期回傳 | ⬜ 未驗收 |
 | 5 | 全程比對 `secs_YYYYMMDD.log` 與 `Test_SECS` 兩邊的收送紀錄 | ⬜ 未驗收 |
 
-第 1 項的 S5F1 那半已由 §13.3 自動化；它真正要驗的是 **Replay 分頁到引擎的接線**與**下面三個 CEID**。
+第 1 項的 S5F1 那半已由 §13.3 自動化，三個 CEID 的線上行為則由 `SecsEventTests` 自動化；
+它真正剩下要驗的是 **Replay 分頁到引擎、以及 UI 按鈕到 bridge 的接線**。
 
 #### 三個 CEID 的狀態
 
-| CEID `1{cc}27nnn` | 事件 | 觸發點 | 自動化涵蓋 | 狀態 | 怎麼留證 |
-|---|---|---|---|---|---|
-| 502 | 警報已確認 | `LeakMonitorEngine.Acknowledged` → `SecsBridge.OnAcknowledged` | **無** | ⬜ 未驗收 | 在 Leak Monitor 分頁按 Acknowledge（需先有鎖存的 Alarm），Host 端收到 S6F11 |
-| 508 | 開始擷取 | `IsAcquiring` false→true → `OnAcquisitionChanged(true)` | **無** | ⬜ 未驗收 | 按 Start，Host 端收到 S6F11 |
-| 509 | 停止擷取 | `IsAcquiring` true→false → `OnAcquisitionChanged(false)` | **無** | ⬜ 未驗收 | 按 Stop，Host 端收到 S6F11 |
+| CEID `1{cc}27nnn` | 事件 | 觸發點 | 自動化涵蓋 | 仍待人工的部分 |
+|---|---|---|---|---|
+| 502 | 警報已確認 | `LeakMonitorEngine.Acknowledged` → `SecsBridge.OnAcknowledged` | ✅ `SecsEventTests` | 按下 Acknowledge 會走到 `OnAcknowledged` |
+| 508 | 開始擷取 | `IsAcquiring` false→true → `OnAcquisitionChanged(true)` | ✅ `SecsEventTests` | 按下 Start 會走到 `OnAcquisitionChanged(true)` |
+| 509 | 停止擷取 | `IsAcquiring` true→false → `OnAcquisitionChanged(false)` | ✅ `SecsEventTests` | 按下 Stop 會走到 `OnAcquisitionChanged(false)` |
 
-**「自動化涵蓋：無」是字面意思。** `SecsWireTests` 只走警報路徑（S5F1／S5F5）；
-`SendEvent` 這條路——含 `EventsAllowed` 的測試模式閘門與 `Enqueue` 的排序——
-目前沒有任何自動化測試碰過，三個 CEID 的編號也只在 `SecsChamberCodingTests`
-裡以純算術驗過，沒有一則真的 S6F11 被送出去過。三者都只能由 GUI 觸發，
-所以在有人照上表跑一遍之前，這條路徑等於**未測**。
+**線上行為已經測掉了**：三則 S6F11 真的走過 loopback 送到 `GemHost`、CEID 編號正確、
+`Enqueue` 的順序在連續六則下維持、`reportEvents = false` 與測試模式閘門各自擋住事件
+（前者以「警報仍送得出去」為對照，確保測到的是開關而不是一條死掉的連線）。
+
+**剩下的人工驗收只有一件事：GUI 到 bridge 的那一段接線**——按鈕真的會呼叫到上表的方法。
+那需要有人開著 App 按，所以 §13.4 第 1 項仍然是 ⬜。
 
 `Test_SECS` 的 `使用手冊.md` 有完整的雙視窗驗收流程（使用例 1～14），可整套照走。
 
