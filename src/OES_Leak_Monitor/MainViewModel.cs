@@ -20,7 +20,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly DualIntensityLogger _intensityLogger;
     private readonly LeakMonitorEngine _leakMonitorEngine;
     private readonly RatioCsvLogger _ratioCsvLogger;
+    private readonly SecsBridge _secs;
     private readonly List<DeviceViewModel> _devices;
+
+    // Whether the spectrometer has ever been connected this run. "Connection lost" is a
+    // transition, not a state: at start-up nothing is connected and that is not a fault.
+    private bool _deviceWasConnected;
+    private bool _deviceInError;
 
     // Test-mode replay of a recorded plasma spectrum (Replay tab): while it runs, it replaces
     // the device's synthetic frames with the recording's own — on the recording's wavelength
@@ -81,6 +87,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _settingsService = new SettingsService(_paths.ConfigDirectory);
         _systemLogger    = new SystemLogger(_paths.LogDirectory);
+
+        // Built first, before anything that can raise an event at it. The device view-models
+        // below report connection and error transitions into it, and a half-constructed host is
+        // the classic way that becomes a null reference on someone else's machine. Nothing is
+        // opened here — Configure() at the end of the constructor decides that, once the
+        // settings have been read. The acquisition lambda is not called until then either.
+        _secs = new SecsBridge(_systemLogger, _paths.ConfigDirectory, _paths.LogDirectory,
+            // The device list is built below, so the lambda checks rather than assumes: a host
+            // querying before there is a device gets zeros, not an exception on a socket thread.
+            () => _devices is { Count: > 0 } devices
+                ? new SecsBridge.AcquisitionInfo(devices[0].IntegrationTimeMs, devices[0].AverageCount)
+                : default);
 
         var deviceTags = DeviceProfiles.Select(p => p.Tag).ToArray();
         _intensityLogger = new DualIntensityLogger(deviceTags, _paths.DataDirectory);
@@ -257,6 +275,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         UpdateTestModeContext();
         UpdateReplayAvailability();   // a device may already be connected when settings reload
 
+        // SECS/GEM equipment interface (the object itself was built at the top of this
+        // constructor). It reads the leak monitor's snapshots and reports them to a fab host;
+        // nothing it does feeds back into the measurement. Off unless settings.json says
+        // otherwise, so an upgrade opens no port until someone asks for one.
+        _leakMonitorEngine.SampleProcessed += (_, snap) => _secs.OnSample(snap);
+        _leakMonitorEngine.Acknowledged += (_, e) => _secs.OnAcknowledged(e);
+        Secs = new SecsViewModel(_secs, settings.Secs, PersistSecsSettings);
+        _secs.Configure(settings.Secs);
+
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
             related: $"Path={_settingsService.ConfigFilePath}",
@@ -292,6 +319,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
         Replay.SetRole(IsEngineerOrHigher);
+        Secs.SetRole(IsEngineerOrHigher);
 
         UpdateRecorderStatus();
 
@@ -327,10 +355,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                            or nameof(DeviceViewModel.IsTestMode))
             UpdateReplayAvailability();
 
+        if (e.PropertyName is nameof(DeviceViewModel.IsConnected)
+                           or nameof(DeviceViewModel.Status))
+            ReportDeviceHealthToSecs();
+
         if (e.PropertyName != nameof(DeviceViewModel.IsAcquiring)) return;
         if (sender is not DeviceViewModel d) return;
 
         bool now = d.IsAcquiring;
+        if (now != _wasAcquiring) _secs.OnAcquisitionChanged(now);
         if (now && !_wasAcquiring)
         {
             _leakMonitorEngine.ReloadRatios();
@@ -364,6 +397,40 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private void UpdateReplayAvailability() =>
         Replay.SetHardwareAttached(_devices.Any(d => d.IsConnected && !d.IsTestMode));
+
+    /// <summary>
+    /// Maps the spectrometer's state onto the two equipment-fault alarms a host cares about
+    /// (ALID 012 / 013).
+    /// <para>
+    /// "Connection lost" is deliberately a <b>transition</b>, not a state: at start-up nothing
+    /// is connected, and an alarm the tool raises about itself every time it launches is one
+    /// the host learns to ignore. A deliberate Disconnect raises it too — from the fab's side
+    /// an OES that has stopped watching the chamber is the same fact either way, and the alarm
+    /// clears the moment it comes back.
+    /// </para>
+    /// </summary>
+    private void ReportDeviceHealthToSecs()
+    {
+        var device = _devices[0];
+
+        bool connected = device.IsConnected;
+        if (connected)
+        {
+            _deviceWasConnected = true;
+            _secs.ReportFault(SecsFault.ConnectionLost, set: false);
+        }
+        else if (_deviceWasConnected)
+        {
+            _secs.ReportFault(SecsFault.ConnectionLost, set: true, detail: device.StatusText);
+        }
+
+        bool error = device.Status == Aqst.OesSpectrometer.Models.DeviceConnectionStatus.Error;
+        if (error != _deviceInError)
+        {
+            _deviceInError = error;
+            _secs.ReportFault(SecsFault.AcquisitionError, error, device.StatusMessage ?? device.StatusText);
+        }
+    }
 
     /// <summary>
     /// Frame substitution, called by the device before it plots the frame or raises
@@ -447,6 +514,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
         Replay.SetRole(IsEngineerOrHigher);
+        Secs.SetRole(IsEngineerOrHigher);
 
         RaiseCanExec();
     }
@@ -529,7 +597,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void LoadDefaultsAll()
     {
-        foreach (var d in _devices) d.LoadDefaultsCommand.Execute(null);
+        foreach (var d in _devices)
+        {
+            d.LoadDefaultsCommand.Execute(null);
+            // Same reason as the logger lines below: the framework's device defaults are a
+            // demo's (ForceTestMode on), and Load Defaults has to land where a fresh install
+            // lands. Left alone it silently re-arms test mode, and the next Save persists it —
+            // a tool that quietly stops measuring and keeps writing files that look real.
+            d.ForceTestMode = AppSettings.DefaultForceTestMode;
+        }
         Logger.LoadDefaults();
         // LoadDefaults resets the logger to the framework's values, which are a general-purpose
         // recorder's, not this app's: disarmed, and triggering on 387 nm. "Load Defaults" has to
@@ -690,6 +766,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Persists the SECS tab's settings and rebuilds the interface with them. Same
+    /// read-modify-write idiom as the replay selection, so saving on the SECS tab does not
+    /// clobber an unsaved Configuration-tab edit.
+    /// <para>
+    /// The rebuild happens after the write, not before: what is running should always be what
+    /// is on disk, so a restart of the app does not quietly change the tool's behaviour.
+    /// </para>
+    /// </summary>
+    private void PersistSecsSettings(SecsSettings secs)
+    {
+        try
+        {
+            var onDisk = _settingsService.Load();
+            onDisk.Secs = secs;
+            _settingsService.Save(onDisk);
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "SecsSettingsSaved",
+                "SECS interface settings saved",
+                related: $"User={AccessControl.CurrentUsername ?? "(guest)"},Enabled={secs.Enabled}," +
+                         $"Chamber={secs.ChamberCode:00}",
+                value: $"{secs.IpAddress}:{secs.Port} deviceId={secs.DeviceId}");
+        }
+        catch (Exception ex)
+        {
+            _systemLogger.LogError("SecsSettings_Persist_Failed", ex, "");
+        }
+        _secs.Configure(secs);
+    }
+
     /// <summary>Persists the Recordings line view's wavelength set, same read-modify-write
     /// idiom as the replay selection so no unsaved Configuration edit is clobbered.</summary>
     private void PersistRecordingsWavelengths()
@@ -722,6 +827,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             TrendRetentionMinutes = TrendRetentionMinutes,
             SimulationCsvPath = _replay.FilePath, // keep the Replay tab's recording selection
             ReplaySpeed = _replay.Speed,
+            Secs = Secs.ToSettings(),   // the SECS tab has its own Save; this preserves it here
         };
         _settingsService.Save(settings);
         // The armed flag now matches what is on disk, so the Monitor strip's
@@ -755,6 +861,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public LeakCalibrationViewModel LeakCalibration { get; }
     public WavelengthTrendViewModel WavelengthTrend { get; }
     public ReplayViewModel Replay { get; }
+
+    /// <summary>SECS tab: interface status (any role) and its settings (Engineer+).</summary>
+    public SecsViewModel Secs { get; }
 
     /// <summary>Emission-line picker for the logger's two wavelength fields (Configuration tab).</summary>
     public LinePickerViewModel LinePicker { get; }
@@ -1106,6 +1215,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             d.SpectrumMapper = null;
             d.Dispose();
         }
+        _secs.Dispose();
         Recordings.Dispose();
         RatioReview.Dispose();
         LeakMonitor.Dispose();
@@ -1124,10 +1234,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             related: $"From={e.OldState},To={e.NewState}",
             value: e.Timestamp.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
 
-    private void OnIntensityError(object? sender, LoggerErrorEventArgs e) =>
+    private void OnIntensityError(object? sender, LoggerErrorEventArgs e)
+    {
         _systemLogger.LogIntensityLogger("Error", e.Message,
             value: e.Exception is null ? "" : $"Exception={e.Exception.GetType().Name}",
             severity: LogSeverity.Error);
+        // A tool that is measuring but not recording looks healthy from the host's side, and
+        // the gap is only discovered when someone goes looking for the data. Cleared when a
+        // writer next opens successfully (OnIntensityFilesChanged).
+        _secs.ReportFault(SecsFault.DataWriteFailure, set: true, detail: e.Message);
+    }
 
     /// <summary>
     /// A writer continued into a new file without the save session ending. Logged with the
@@ -1158,6 +1274,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _systemLogger.LogIntensityLogger("FilesChanged",
             "Intensity logger writers opened or closed",
             value: summary);
+        // Writers opening again is the evidence that whatever stopped the last write is over.
+        if (files.Any(f => !string.IsNullOrEmpty(f)))
+            _secs.ReportFault(SecsFault.DataWriteFailure, set: false);
     }
 
     // --- LeakMonitorEngine → SystemLogger / settings bridges ---
@@ -1174,6 +1293,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             $"Leak monitor {e.OldLevel} → {e.NewLevel}",
             related: $"From={e.OldLevel},To={e.NewLevel}",
             value: e.Timestamp.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        _secs.OnLeakLevelChanged(e.NewLevel);
     }
 
     private void OnGoldenRunCaptured(object? sender, GoldenRun run)

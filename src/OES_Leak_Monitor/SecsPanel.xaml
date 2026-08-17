@@ -1,0 +1,201 @@
+<UserControl x:Class="OES_Leak_Monitor.SecsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:OES_Leak_Monitor">
+
+    <UserControl.Resources>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Foreground" Value="#445"/>
+        </Style>
+        <Style x:Key="PathText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#667"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel Background="#F4F6FA">
+
+        <!-- Status. Visible to every role: "is the tool talking to the MES?" is a question an
+             Operator is asked, and the answer must not need a sign-in. -->
+        <Border DockPanel.Dock="Top" Background="White"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Border Background="{Binding StateBrush}" CornerRadius="3" Padding="10,3"
+                            MinWidth="130" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="{Binding StateText}" Foreground="White"
+                                   FontWeight="Bold" FontSize="11" HorizontalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="{Binding StatusDetail}" VerticalAlignment="Center"
+                               Foreground="#334" TextWrapping="Wrap" MaxWidth="700"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <TextBlock Text="Control state:" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Text="{Binding ControlStateText}" VerticalAlignment="Center"
+                               Foreground="#334" Margin="0,0,16,0"
+                               ToolTip="SEMI E30 control state. ONLINE-REMOTE accepts host commands; this tool declares none, so the state only affects whether S1F17 succeeds."/>
+                    <TextBlock Text="{Binding ChamberName}" VerticalAlignment="Center" Foreground="#334"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding ReportingSummary}" Margin="0,6,0,0"
+                           Foreground="#334" TextWrapping="Wrap"
+                           ToolTip="Switching reporting off does not hide anything: the state still reaches this app's own log and any host status query. It only stops the equipment volunteering it."/>
+
+                <TextBlock Text="{Binding IdExample}" Margin="0,4,0,0" Foreground="#777"
+                           TextWrapping="Wrap"
+                           ToolTip="Every id is derived from the chamber code. Check these against the host's configuration — a mismatch here is the usual reason a host connects and then reads nothing."/>
+            </StackPanel>
+        </Border>
+
+        <!-- Settings. Engineer+ only; the tab itself is open to all, so the controls carry the gate. -->
+        <Border DockPanel.Dock="Top" Background="#FAFAFA"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8"
+                IsEnabled="{Binding CanEdit}">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <CheckBox Content="Enable SECS" IsChecked="{Binding Enabled}"
+                              VerticalAlignment="Center" Margin="0,0,16,0" FontWeight="Bold"
+                              ToolTip="Master switch. Off means no port is opened at all."/>
+                    <CheckBox Content="Report alarms (S5F1)" IsChecked="{Binding ReportAlarms}"
+                              VerticalAlignment="Center" Margin="0,0,16,0"
+                              ToolTip="Leak warning / leak alarm and equipment faults. Off while commissioning, so a test run does not file alarms in the fab's MES."/>
+                    <CheckBox Content="Report events (S6F11)" IsChecked="{Binding ReportEvents}"
+                              VerticalAlignment="Center" Margin="0,0,16,0"
+                              ToolTip="Acquisition started / stopped and alarm acknowledged."/>
+                    <CheckBox Content="Report test / replay data too" IsChecked="{Binding ReportInTestMode}"
+                              VerticalAlignment="Center"
+                              ToolTip="Off by default. Synthetic and replayed frames are not measurements, and an alarm arriving at the host carries no marking that says so. Switch it on deliberately, to validate the alarm path against a recording of a real leak. VID 016 reports the truth either way."/>
+                </StackPanel>
+
+                <WrapPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,8">
+                        <TextBlock Text="Chamber:" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox ItemsSource="{Binding Chambers}" DisplayMemberPath="Display"
+                                  SelectedValuePath="Code" SelectedValue="{Binding ChamberCode}"
+                                  Width="190" VerticalAlignment="Center"
+                                  ToolTip="Which chamber this OES watches. Every SVID, ALID and CEID is derived from it — this is the one number that must match what the host was told."/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,8">
+                        <TextBlock Text="Address:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding IpAddress, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="120" VerticalAlignment="Center" Margin="0,0,8,0"
+                                 ToolTip="0.0.0.0 listens on every adapter; 127.0.0.1 for a bench test against Test_SECS on this machine."/>
+                        <TextBlock Text="Port:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="60" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="Device ID:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding DeviceId, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="50" VerticalAlignment="Center"
+                                 ToolTip="Must match the host. HSMS does not check it during the handshake, so a mismatch shows up later as data messages being rejected with S9F1."/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,8">
+                        <CheckBox Content="Connect out (active)" IsChecked="{Binding IsActive}"
+                                  VerticalAlignment="Center"
+                                  ToolTip="Equipment is normally passive: it listens and the host connects to it. Tick this only if the host expects the equipment to dial out."/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,8">
+                        <TextBlock Text="Model (MDLN):" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding ModelName, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="90" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="Revision:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding SoftwareRevision, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="70" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,8"
+                                ToolTip="HSMS timeouts in seconds (specification §2). T3 is how long a reply is waited for.">
+                        <TextBlock Text="T3:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding T3}" Width="42" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="T5:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding T5}" Width="42" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="T6:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding T6}" Width="42" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="T7:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding T7}" Width="42" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="T8:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding T8}" Width="42" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,8">
+                        <TextBlock Text="Keep traffic logs (days):" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding LogRetentionDays}" Width="46" VerticalAlignment="Center"
+                                 ToolTip="Day files older than this are deleted. 0 keeps them for ever. Acceptance usually asks for this log, so keep at least a few days."/>
+                    </StackPanel>
+                </WrapPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="Save &amp; apply" Command="{Binding SaveCommand}"
+                            Padding="14,4" MinWidth="110" Margin="0,0,8,0" FontWeight="Bold"
+                            ToolTip="Writes these settings to settings.json and rebuilds the interface. Nothing here takes effect as it is typed."/>
+                    <Button Content="Restart interface" Command="{Binding RestartCommand}"
+                            Padding="14,4" MinWidth="130" Margin="0,0,16,0"
+                            ToolTip="Re-reads the profile file and starts over — what you press after editing the profile JSON by hand."/>
+                    <TextBlock VerticalAlignment="Center" Foreground="#B8860B" FontWeight="SemiBold"
+                               Text="Unsaved changes">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Where the files are. Field staff have to be able to find these without a developer. -->
+        <Border DockPanel.Dock="Top" Background="#FAFAFA"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,6">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Profile (edit this):" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Text="{Binding ProfileTemplatePath}" Style="{StaticResource PathText}"
+                               MaxWidth="620" ToolTip="{Binding ProfileTemplatePath}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                    <TextBlock Text="In use (generated):" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Text="{Binding EffectiveProfilePath}" Style="{StaticResource PathText}"
+                               MaxWidth="620" ToolTip="Rewritten from the profile on every start with the chamber code stamped in. Editing this copy achieves nothing — edit the one above and press Restart interface."/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                    <TextBlock Text="Traffic log:" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Text="{Binding LogFilePath}" Style="{StaticResource PathText}"
+                               MaxWidth="620" ToolTip="{Binding LogFilePath}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Live traffic -->
+        <Border DockPanel.Dock="Top" Background="#FAFAFA" Padding="10,4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Traffic" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Button Content="Clear" Command="{Binding ClearTrafficCommand}" Padding="10,2"
+                        ToolTip="Clears the on-screen list only. The file keeps everything."/>
+                <TextBlock Text="every message in and out, newest last" VerticalAlignment="Center"
+                           Foreground="#888" Margin="12,0,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <ListBox x:Name="TrafficList" ItemsSource="{Binding Traffic}"
+                 FontFamily="Consolas" FontSize="11" Background="White"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="2,0"/>
+                </Style>
+            </ListBox.ItemContainerStyle>
+        </ListBox>
+    </DockPanel>
+</UserControl>

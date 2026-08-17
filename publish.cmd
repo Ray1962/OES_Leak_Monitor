@@ -64,8 +64,14 @@ for %%F in (
     UserApplication.dll
     SiUSBXp.dll
     libsodium.dll
+    vcruntime140.dll
+    vcruntime140_1.dll
+    msvcp140.dll
     user-manual-zh-TW.html
     daily-inspection-plan-zh-TW.html
+    secs-operation-sop-zh-TW.html
+    check-oes-connect.ps1
+    check-oes-connect.cmd
 ) do (
     if not exist "%PUBFOLDER%\%%F" set "MISSING=!MISSING! %%F"
 )
@@ -77,17 +83,25 @@ if defined MISSING (
     echo  Missing from %PUBFOLDER%:
     for %%M in (!MISSING!) do echo    %%M
     echo.
-    echo  Delete the folder and run this script again. If only the .html docs are
-    echo  missing, regenerate them first:
+    echo  Delete the folder and run this script again.
+    echo.
+    echo  If vcruntime140*.dll / msvcp140.dll are the missing ones, this build
+    echo  machine has no Visual C++ 2015-2022 x64 redistributable to copy from:
+    echo    https://aka.ms/vs/17/release/vc_redist.x64.exe
+    echo  Without them the app falls back to test mode - silently, with nothing
+    echo  in its log - on every PC that has not had that redistributable installed.
+    echo.
+    echo  If only the .html docs are missing, regenerate them first:
     echo    python3 tools\md2html.py docs\user-manual-zh-TW.md docs\user-manual-zh-TW.html "OES Leak Monitor manual"
     echo    python3 tools\md2html.py docs\daily-inspection-plan-zh-TW.md docs\daily-inspection-plan-zh-TW.html "OES Plasma Monitor inspection plan"
+    echo    python3 tools\md2html.py docs\secs-operation-sop-zh-TW.md docs\secs-operation-sop-zh-TW.html "OES Leak Monitor SECS SOP"
     echo.
     pause
     exit /b 1
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 11 files present ***
+echo  *** PUBLISH SUCCEEDED - all 17 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -97,8 +111,12 @@ echo    wpfgfx_cor3.dll etc.       WPF native runtime DLLs
 echo    UserApplication.dll        native OES DLL
 echo    SiUSBXp.dll                native USB DLL
 echo    libsodium.dll              native OES SDK dependency
+echo    vcruntime140.dll etc.      VC++ runtime libsodium.dll needs (app-local,
+echo                               so the target PC needs no redistributable)
 echo    user-manual-zh-TW.html     operator manual
 echo    daily-inspection-plan-zh-TW.html   daily/weekly inspection plan
+echo    secs-operation-sop-zh-TW.html      SECS connection SOP
+echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
 echo.
 
 if exist "%PUBFOLDER%" start "" explorer "%PUBFOLDER%"

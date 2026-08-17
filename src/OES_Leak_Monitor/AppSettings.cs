@@ -9,7 +9,22 @@ public sealed class AppSettings : IJsonOnDeserialized
 {
     public string Version { get; set; } = "1.0";
 
-    public List<DeviceSettings> Devices { get; set; } = new() { new(), new() };
+    public List<DeviceSettings> Devices { get; set; } = new() { NewDevice(), NewDevice() };
+
+    /// <summary>
+    /// A fresh settings.json connects to the spectrometer, not to the synthetic generator. The
+    /// framework ships <c>DeviceSettings.ForceTestMode = true</c>, which suits a demo but means
+    /// a new PC — or one whose settings.json was deleted or rebuilt — runs the whole leak
+    /// monitor on a sine wave until someone finds the checkbox on the Engineer-gated
+    /// Configuration tab. There is nothing on screen that says the frames are fake except a
+    /// "Test Mode: True" in the DevicePanel footer, and the CSVs it writes carry the ordinary
+    /// prefix. Only the factory value changes: a stored <c>"forceTestMode": true</c> is a
+    /// decision someone saved and is still honoured.
+    /// </summary>
+    public const bool DefaultForceTestMode = false;
+
+    /// <summary>A <see cref="DeviceSettings"/> carrying this app's factory values.</summary>
+    public static DeviceSettings NewDevice() => new() { ForceTestMode = DefaultForceTestMode };
 
     /// <summary>Trigger wavelength for a fresh settings.json — the N2 337.1 nm band head, kept
     /// to one decimal place (the line is at 337.1, not a round 337). Overrides the
@@ -42,6 +57,12 @@ public sealed class AppSettings : IJsonOnDeserialized
     /// gets the defaults.
     /// </summary>
     public DataRetentionSettings DataRetention { get; set; } = new();
+
+    /// <summary>
+    /// SECS/GEM equipment interface. Absent from a settings.json predating it, which leaves
+    /// the interface disabled — see <see cref="SecsSettings.Enabled"/>.
+    /// </summary>
+    public SecsSettings Secs { get; set; } = new();
 
     /// <summary>
     /// How much history the two live trend charts keep — the Monitor tab's Wavelength Trend and
@@ -99,7 +120,7 @@ public sealed class AppSettings : IJsonOnDeserialized
         Devices ??= new();
         if (Device1 is not null) { EnsureAt(0); Devices[0] = Device1; Device1 = null; }
         if (Device2 is not null) { EnsureAt(1); Devices[1] = Device2; Device2 = null; }
-        while (Devices.Count < 2) Devices.Add(new());
+        while (Devices.Count < 2) Devices.Add(NewDevice());
 
         // A settings.json predating the leak monitor has no `leakMonitor` key; an older
         // one may have the section but an empty ratio list. Either way, fold in the
@@ -112,6 +133,7 @@ public sealed class AppSettings : IJsonOnDeserialized
         LeakMonitor.UserSpectralLines ??= new();
         RecordingsWavelengths ??= new();
         DataRetention ??= new();
+        Secs ??= new();
         // A settings.json predating this key deserializes to 0, which would leave both trend
         // charts empty. Clamp rather than reject: any out-of-range value has an obvious
         // intent-preserving nearest legal value.

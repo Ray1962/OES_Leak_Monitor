@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor SECS 連線操作 SOP</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#1-角色與權限">1. 角色與權限</a>
+<a class="l2" href="#2-開工前要先跟-host-對齊的五件事">2. 開工前：要先跟 Host 對齊的五件事</a>
+<a class="l2" href="#3-首次設定步驟">3. 首次設定步驟</a>
+<a class="l2" href="#4-確認連線成功">4. 確認連線成功</a>
+<a class="l3" href="#41-看狀態燈">4.1 看狀態燈</a>
+<a class="l3" href="#42-看-traffic收送日誌">4.2 看 Traffic（收送日誌）</a>
+<a class="l3" href="#43-三個要點">4.3 三個要點</a>
+<a class="l2" href="#5-日常確認operator每班一次">5. 日常確認（Operator，每班一次）</a>
+<a class="l2" href="#6-上報開關怎麼用">6. 上報開關怎麼用</a>
+<a class="l3" href="#61-測試模式閘門為什麼預設關">6.1 測試模式閘門為什麼預設關</a>
+<a class="l3" href="#62-什麼時候該把它勾起來">6.2 什麼時候該把它勾起來</a>
+<a class="l3" href="#63-設備故障警報不受這個閘門影響">6.3 設備故障警報不受這個閘門影響</a>
+<a class="l2" href="#7-變更設定的正確做法">7. 變更設定的正確做法</a>
+<a class="l3" href="#71-改腔體代號-cc">7.1 改腔體代號 cc</a>
+<a class="l3" href="#72-改-profilesvid-名稱單位警報文字">7.2 改 profile（SVID 名稱、單位、警報文字）</a>
+<a class="l2" href="#8-故障排除">8. 故障排除</a>
+<a class="l3" href="#81-狀態是紅色-failed">8.1 狀態是紅色 FAILED</a>
+<a class="l3" href="#82-一直停在藍色-listeninghost-連不進來">8.2 一直停在藍色 LISTENING，Host 連不進來</a>
+<a class="l3" href="#83-卡在橘色-selected-不變綠">8.3 卡在橘色 SELECTED 不變綠</a>
+<a class="l3" href="#84-綠燈但-host-讀不到值收到-s9f1">8.4 綠燈，但 Host 讀不到值／收到 S9F1</a>
+<a class="l3" href="#85-綠燈但沒收到任何警報">8.5 綠燈，但沒收到任何警報</a>
+<a class="l3" href="#86-host-端說某個警報沒有結束">8.6 Host 端說某個警報「沒有結束」</a>
+<a class="l3" href="#87-斷線期間發生的警報會補送嗎">8.7 斷線期間發生的警報會補送嗎</a>
+<a class="l3" href="#88-找不到日誌檔">8.8 找不到日誌檔</a>
+<a class="l2" href="#9-對測驗收程序">9. 對測／驗收程序</a>
+<a class="l3" href="#91-基本連線必做">9.1 基本連線（必做）</a>
+<a class="l3" href="#92-設備故障警報必做">9.2 設備故障警報（必做）</a>
+<a class="l3" href="#93-洩漏警報全路徑用錄檔驗證">9.3 洩漏警報全路徑（用錄檔驗證）</a>
+<a class="l3" href="#94-收尾">9.4 收尾</a>
+<a class="l2" href="#10-交給-host-端的對照表">10. 交給 Host 端的對照表</a>
+<a class="l3" href="#101-編碼規則">10.1 編碼規則</a>
+<a class="l3" href="#102-警報s5f1">10.2 警報（S5F1）</a>
+<a class="l3" href="#103-事件s6f11">10.3 事件（S6F11）</a>
+<a class="l3" href="#104-狀態變數重點完整-26-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 26 項見 [secs-integration.md](secs-integration.md) §5）</a>
+<a class="l2" href="#11-檢核表可列印">11. 檢核表（可列印）</a>
+<a class="l3" href="#111-上線前engineer">11.1 上線前（Engineer）</a>
+<a class="l3" href="#112-每班operator">11.2 每班（Operator）</a>
+<a class="l3" href="#113-交接異常回報時要附上">11.3 交接／異常回報時要附上</a>
+<a class="l2" href="#附錄-a檔案位置">附錄 A：檔案位置</a>
+<a class="l2" href="#附錄-bsettingsjson-的-secs-區塊">附錄 B：settings.json 的 secs 區塊</a>
+<a class="l3" href="#合法的腔體代號">合法的腔體代號</a>
+</nav>
+<main>
+<h1 id="secs-連線操作-sopoes-leak-monitor">SECS 連線操作 SOP（OES Leak Monitor）</h1>
+<blockquote><p><strong>用途</strong>：讓現場人員把 OES Leak Monitor 接上 fab 的 Host／MES，並在日常運轉中確認它「真的還在講話」。</p>
+<p><strong>這份文件寫給誰</strong></p>
+<ul>
+<li><strong>Operator</strong>：只看第 <a href="#1-角色與權限">1</a>、<a href="#5-日常確認operator每班一次">5</a>、<a href="#8-故障排除">8</a> 節——你只需要會看狀態，不需要、也不應該改設定。
+</li>
+<li><strong>Engineer／設備工程師</strong>：全部。首次設定、對測、變更、驗收都在這裡。
+</li>
+</ul>
+<p><strong>相關文件</strong></p>
+<ul>
+<li>實作規格（欄位從哪來、為什麼這樣設計）：<a href="secs-integration.md"><code>secs-integration.md</code></a>
+</li>
+<li>通訊協定的上位規格（欄位語意以它為準）：<a href="Satellite_SECS_Specification_v2.md"><code>Satellite_SECS_Specification_v2.md</code></a>
+</li>
+<li>App 本身的操作：<a href="user-manual-zh-TW.md"><code>user-manual-zh-TW.md</code></a>
+</li>
+</ul></blockquote>
+<hr>
+<h2 id="目錄">目錄</h2>
+<ul>
+<li><a href="#1-角色與權限">1. 角色與權限</a>
+</li>
+<li><a href="#2-開工前要先跟-host-對齊的五件事">2. 開工前：要先跟 Host 對齊的五件事</a>
+</li>
+<li><a href="#3-首次設定步驟">3. 首次設定步驟</a>
+</li>
+<li><a href="#4-確認連線成功">4. 確認連線成功</a>
+</li>
+<li><a href="#5-日常確認operator每班一次">5. 日常確認（Operator，每班一次）</a>
+</li>
+<li><a href="#6-上報開關怎麼用">6. 上報開關怎麼用</a>
+</li>
+<li><a href="#7-變更設定的正確做法">7. 變更設定的正確做法</a>
+</li>
+<li><a href="#8-故障排除">8. 故障排除</a>
+</li>
+<li><a href="#9-對測驗收程序">9. 對測／驗收程序</a>
+</li>
+<li><a href="#10-交給-host-端的對照表">10. 交給 Host 端的對照表</a>
+</li>
+<li><a href="#11-檢核表可列印">11. 檢核表（可列印）</a>
+</li>
+<li><a href="#附錄-a檔案位置">附錄 A：檔案位置</a>
+</li>
+<li><a href="#附錄-bsettingsjson-的-secs-區塊">附錄 B：settings.json 的 secs 區塊</a>
+</li>
+</ul>
+<hr>
+<h2 id="1-角色與權限">1. 角色與權限</h2>
+<p><strong>SECS 分頁人人都能進</strong>，不需要登入。這是刻意的：「這台機器現在有沒有在跟 MES 講話」是 Operator 會被問到的問題，答案不該需要一組帳號。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>你要做的事</th><th>需要的角色</th></tr></thead>
+<tbody>
+<tr><td>看連線狀態、控制狀態、腔體號、profile 路徑、收送日誌</td><td>任何人（含 Guest）</td></tr>
+<tr><td>改任何一項設定、按 <strong>Save &amp; apply</strong> 或 <strong>Restart interface</strong></td><td><strong>Engineer 以上</strong></td></tr>
+</tbody></table></div>
+<p>未登入或角色不足時，設定區整塊是灰的——<strong>這不是故障</strong>。要改設定請先用右上角登入 Engineer 帳號。</p>
+<blockquote><p>⚠️ 設定區的每一個欄位都會改變 Host 看到的東西。Operator 在沒有工程師在場時，<strong>只看不改</strong>。</p></blockquote>
+<hr>
+<h2 id="2-開工前要先跟-host-對齊的五件事">2. 開工前：要先跟 Host 對齊的五件事</h2>
+<p>這五項只要有一項不一致，結果都是「看起來連上了，可是讀不到東西」——比完全連不上更難查。<strong>在動 App 之前先把這張表填好、雙方簽字。</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>項目</th><th>我方（設備端）填</th><th>必須與 Host 一致</th><th>備註</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>腔體代號 <code>cc</code></strong></td><td></td><td>✅</td><td>這台 OES 監看的是哪個腔體。<strong>所有 SVID／ALID／CEID 都由它算出來</strong>，錯了就整組編號都對不上</td></tr>
+<tr><td>2</td><td><strong>IP 位址／Port</strong></td><td></td><td>✅</td><td>設備端是 <strong>passive</strong>（監聽），由 Host 主動連進來。預設 port 5000</td></tr>
+<tr><td>3</td><td><strong>Device ID</strong></td><td></td><td>✅</td><td>HSMS 交握<strong>不會</strong>檢查它，所以打錯不會在連線階段報錯，而是之後資料訊息被回 S9F1</td></tr>
+<tr><td>4</td><td><strong>MDLN／SOFTREV</strong></td><td></td><td>建議一致</td><td>回在 S1F2／S1F14，Host 端的機台清單會顯示</td></tr>
+<tr><td>5</td><td><strong>ALID 型別 = ASCII</strong></td><td>固定 ASCII</td><td>✅ <strong>請 Host 確認</strong></td><td>本設備依 Satellite 規格 §5.3 送 ASCII（<code>&lt;A[8] "10227002"&gt;</code>）。若 Host 只吃 U4，上線前就要談，不要等到警報發不出去才發現</td></tr>
+</tbody></table></div>
+<p>另外請 IT／廠務確認：</p>
+<ul>
+<li>設備 PC 的防火牆對該 port <strong>允許 inbound（由外部連入）TCP 連線</strong>。
+</li>
+<li>設備 PC 與 Host 之間的網路可通（<code>ping</code> 得到、port 不被中間設備擋掉）。
+</li>
+<li><strong>同一台 PC 若跑兩套監測不同腔體，port 必須分開。</strong> 一個 App 執行個體只對應一個 <code>cc</code>。
+</li>
+</ul>
+<hr>
+<h2 id="3-首次設定步驟">3. 首次設定步驟</h2>
+<blockquote><p>全程約 5 分鐘。做完之後 App 每次啟動都會自動帶起 SECS，不需要重做。</p></blockquote>
+<ol>
+<li><strong>登入 Engineer 以上帳號</strong>（主畫面右上角）。
+</li>
+<li>切到 <strong>SECS 分頁</strong>。
+</li>
+<li><strong>勾選 <code>Enable SECS</code></strong>（總開關。沒勾時完全不開 port，狀態顯示 <code>DISABLED</code>）。
+</li>
+<li><strong><code>Chamber</code></strong> 下拉選這台 OES 監看的腔體，例如 <code>02 — Ch_2</code>。 選完後<strong>立刻檢查狀態區最下面那行編號範例</strong>，例如： ``<code> Leak rate SVID 1022700001, leak alarm ALID 10227002, acquisition-started CEID 10227508 </code>`` <strong>把這三個數字唸給 Host 端的人核對。</strong> 這是最快、也最常抓到錯誤的一步。
+</li>
+<li><strong><code>Address</code></strong> 填 <code>0.0.0.0</code>（監聽所有網卡，一般用這個）。同機對測時填 <code>127.0.0.1</code>。 <strong><code>Port</code></strong> 與 <strong><code>Device ID</code></strong> 依第 2 節的表填。
+</li>
+<li><strong><code>Connect out (active)</code> 不要勾。</strong> 設備端正常是被動等待 Host 連進來；只有 Host 明確要求設備主動撥出時才勾。
+</li>
+<li><strong><code>Model (MDLN)</code> / <code>Revision</code></strong> 依表填（預設 <code>OESLM</code> / <code>1.0.0</code>）。
+</li>
+<li><strong><code>T3</code>–<code>T8</code></strong>（秒）除非 Host 指定，否則<strong>保持預設</strong> <code>45/10/10/10/10</code>。T3 是等回覆的時間。
+</li>
+<li><strong><code>Keep traffic logs (days)</code></strong> 保持 <code>30</code>。驗收時客戶通常會要這份紀錄，不要設成太小的值。
+</li>
+<li><strong>上報開關</strong>：首次上線建議先<strong>只連線、不上報</strong>——
+<ul>
+<li><code>Report alarms (S5F1)</code>：<strong>先取消</strong></li>
+<li><code>Report events (S6F11)</code>：<strong>先取消</strong></li>
+<li><code>Report test / replay data too</code>：<strong>保持取消</strong></li>
+</ul>
+</li>
+</ol>
+<p>等到第 4 節確認連線正常、第 9 節對測通過之後，再回來把前兩項勾起來。這樣測試期間不會有假警報進到 fab 的 MES。</p>
+<ol>
+<li>按 <strong><code>Save &amp; apply</code></strong>。
+</li>
+</ol>
+<blockquote><p><strong><code>Save &amp; apply</code> 才會生效。</strong> 欄位打字的當下什麼都不會改變——半個 port 號不是一個位址。畫面上出現橘色的 <strong><code>Unsaved changes</code></strong> 就表示你改了東西但還沒套用。</p></blockquote>
+<hr>
+<h2 id="4-確認連線成功">4. 確認連線成功</h2>
+<h3 id="41-看狀態燈">4.1 看狀態燈</h3>
+<p>分頁最上方的色塊，由淺到深就是連線的四個階段：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>顯示</th><th>顏色</th><th>意思</th><th>該怎麼辦</th></tr></thead>
+<tbody>
+<tr><td><code>DISABLED</code></td><td>灰</td><td>總開關沒開，沒有開 port</td><td>要用就去勾 <code>Enable SECS</code></td></tr>
+<tr><td><code>LISTENING</code></td><td>藍</td><td><strong>設備端正常</strong>，port 已開，正在等 Host 連進來</td><td>這是 Host 還沒連時的正常狀態</td></tr>
+<tr><td><code>SELECTED</code></td><td>橘</td><td>TCP 連上、HSMS 已 select，但還沒建立通訊</td><td>通常一兩秒就會跳成綠色；卡住看 8.3</td></tr>
+<tr><td><code>COMMUNICATING</code></td><td>綠</td><td><strong>完全正常</strong>，S1F13/S1F14 已完成，可以收送訊息</td><td>這是上線後該長期停留的狀態</td></tr>
+<tr><td><code>FAILED</code></td><td>紅</td><td>起不來</td><td>旁邊那行字就是原因，看 8.1</td></tr>
+</tbody></table></div>
+<p>色塊右邊那行字補充細節，例如 <code>listening on 0.0.0.0:5000, device id 0</code>；<code>FAILED</code> 時顯示的是失敗原因。</p>
+<p>下面一行 <strong><code>Control state</code></strong> 是 SEMI E30 的控制狀態（<code>OnlineRemote</code> 等）。本設備<strong>不接受任何遠端命令</strong>，所以這個狀態只影響 Host 送 S1F17 時的回應，不影響資料查詢。</p>
+<h3 id="42-看-traffic收送日誌">4.2 看 Traffic（收送日誌）</h3>
+<p>分頁下半部逐行列出每一則進出的訊息，最新的在最下面。啟動時應該看到這三行（或類似）：</p>
+<pre><code>[CFG] profile template C:\Users\&lt;user&gt;\AppData\Roaming\OES_Leak_Monitor\profiles\oes-leak-monitor.json
+[CFG] chamber 02 (Ch_2) -&gt; ...\profiles\.effective\oes-leak-monitor.json
+[EQP] listening on 0.0.0.0:5000</code></pre>
+<p>Host 連進來之後，會看到 S1F13/S1F14、以及 Host 每次查詢的 S1F3/S1F4。</p>
+<p><strong><code>[CFG] not saved — …</code></strong> 這種行表示你按了 Save 但設定不合法（腔體代號不在規格表內、port 超出範圍、T 值超出 1–3600 等），<strong>設定沒有被套用</strong>。把該行講的問題改掉再存一次。</p>
+<h3 id="43-三個要點">4.3 三個要點</h3>
+<ul>
+<li><strong>兩邊各送一次 S1F13 是正常的。</strong> 設備與 Host 都會主動建立通訊，日誌裡看到兩次不是重複或錯誤。
+</li>
+<li><strong><code>COMMUNICATING</code> 不代表有在上報。</strong> 狀態區的 <code>ReportingSummary</code> 那行才是答案，例如 <code>alarms OFF, events on, test/replay data is not reported. Status queries always answer.</code> <strong>看到 <code>OFF</code> 就表示那類訊息不會主動送出去</strong>，即使一切都連得好好的。
+</li>
+<li><strong>不論開關怎麼設，Host 用 S1F3 查狀態永遠查得到真值。</strong> 開關只擋設備主動送出的訊息。
+</li>
+</ul>
+<hr>
+<h2 id="5-日常確認operator每班一次">5. 日常確認（Operator，每班一次）</h2>
+<p><strong>約 20 秒。不需要登入，也不要改任何設定。</strong></p>
+<ol>
+<li>切到 <strong>SECS 分頁</strong>。
+</li>
+<li>確認狀態燈是 <strong>綠色 <code>COMMUNICATING</code></strong>。
+</li>
+<li>確認 <code>ReportingSummary</code> 那行是 <strong><code>alarms on, events on</code></strong>（正式生產時應為此）。
+</li>
+<li>確認 Traffic 最下面幾行的時間戳是<strong>最近的</strong>（Host 通常會定期查詢；長時間完全沒有新行值得問一下）。
+</li>
+</ol>
+<p><strong>任何一項不符 → 記錄下來並通知設備工程師，不要自己改設定。</strong> 特別是狀態燈變成藍色 <code>LISTENING</code>：那代表 Host 掉線了，App 本身沒問題，但這段期間的洩漏警報<strong>送不出去也不會補送</strong>（本版不做 spooling），只會留在本機的日誌與稽核紀錄裡。</p>
+<hr>
+<h2 id="6-上報開關怎麼用">6. 上報開關怎麼用</h2>
+<p>四個勾選框，語意各自獨立：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>開關</th><th>取消勾選時的效果</th><th>什麼時候取消</th></tr></thead>
+<tbody>
+<tr><td><strong><code>Enable SECS</code></strong></td><td>完全不啟動、不開 port，狀態 <code>DISABLED</code></td><td>這台機器不接 MES 時</td></tr>
+<tr><td><strong><code>Report alarms (S5F1)</code></strong></td><td>不主動送洩漏警報與設備故障警報。狀態照樣進本機 UI、稽核日誌，Host 查 S1F3 也照樣讀得到</td><td><strong>調機、對測、保養期間</strong>，避免測試動作在 fab 的 MES 留下假警報</td></tr>
+<tr><td><strong><code>Report events (S6F11)</code></strong></td><td>不送「開始擷取／停止擷取／警報已確認」三個事件</td><td>同上</td></tr>
+<tr><td><strong><code>Report test / replay data too</code></strong></td><td><strong>測試模式與 Replay 期間</strong>不送任何警報與事件（預設就是取消）</td><td><strong>保持取消</strong>，除非你正在做下一段那件事</td></tr>
+</tbody></table></div>
+<h3 id="61-測試模式閘門為什麼預設關">6.1 測試模式閘門為什麼預設關</h3>
+<p>沒有接光譜儀時 App 會落到 <strong>test mode</strong>（合成頻譜），Replay 分頁還會播放錄檔。這兩種都不是量測值——CSV 檔名會被標成 <code>SIM</code> 前綴，但<strong>送到 Host 的警報上沒有任何記號說「這是假資料」</strong>。所以預設不送。</p>
+<p>不論這個開關怎麼設，<strong>VID 016（Test / replay mode）永遠回報真相</strong>，Host 端可以自己判斷這批數據不能用於製程判定。</p>
+<h3 id="62-什麼時候該把它勾起來">6.2 什麼時候該把它勾起來</h3>
+<p>只有一種情況：<strong>要用一段真實錄檔驗證整條警報路徑</strong>。做法見第 9.3 節。驗證完<strong>當場取消勾選</strong>，不要留著過夜。</p>
+<h3 id="63-設備故障警報不受這個閘門影響">6.3 設備故障警報不受這個閘門影響</h3>
+<p>ALID 012（連線中斷）／013（擷取錯誤）／014（寫檔失敗）<strong>在測試模式下照樣會送</strong>。光譜儀掉線、CSV 寫不進去，是關於這台機器的事實，跟畫面上跑的是不是合成頻譜無關。</p>
+<hr>
+<h2 id="7-變更設定的正確做法">7. 變更設定的正確做法</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>你改了什麼</th><th>該按哪個鍵</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>分頁上的任何欄位（腔體、位址、開關、T 值…）</td><td><strong><code>Save &amp; apply</code></strong></td><td>寫進 <code>settings.json</code>，然後整個介面重建</td></tr>
+<tr><td>用文字編輯器手改了 profile JSON</td><td><strong><code>Restart interface</code></strong></td><td>重新讀 profile 檔、重新戳腔體號、重新啟動</td></tr>
+</tbody></table></div>
+<p>兩顆按鍵都會<strong>先存檔再重建</strong>——正在跑的一定等於磁碟上的那份，所以下次重開 App 不會悄悄變成別的行為。</p>
+<h3 id="71-改腔體代號-cc">7.1 改腔體代號 <code>cc</code></h3>
+<p><strong>這會改變全部的 SVID／ALID／CEID。</strong> 改之前務必通知 Host 端，兩邊同時改。改完按 <code>Save &amp; apply</code>，然後照第 4 節重新確認一次，並把新的編號範例唸給 Host 核對。</p>
+<h3 id="72-改-profilesvid-名稱單位警報文字">7.2 改 profile（SVID 名稱、單位、警報文字）</h3>
+<p><strong>要改的是「Profile (edit this)」那一份</strong>，不是下面「In use (generated)」那份——後者每次啟動都會被重寫，改它沒有任何效果。</p>
+<pre><code>Profile (edit this):   ...\profiles\oes-leak-monitor.json          ← 改這個
+In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要改</code></pre>
+<p>範本檔裡的編號一律以 <strong><code>cc=00</code></strong> 書寫，App 啟動時才把第 2–3 位換成你設定的腔體號。<strong>手改時不要把 <code>00</code> 換成真正的腔體號</strong>，那會被當成錯誤而拒絕啟動。</p>
+<p>改完按 <strong><code>Restart interface</code></strong>。如果 JSON 打錯（位數不對、<code>ss</code> 不是 27、<code>aa</code> 不是 00），介面會直接變 <code>FAILED</code> 並在旁邊說明原因——這是刻意的，寧可起不來，也不要送出屬於別種感測器的編號。</p>
+<blockquote><p>檔案不小心刪掉沒關係：下次啟動會自動寫回一份預設範本（Traffic 會出現 <code>[CFG] wrote the default profile to …</code>）。</p></blockquote>
+<hr>
+<h2 id="8-故障排除">8. 故障排除</h2>
+<h3 id="81-狀態是紅色-failed">8.1 狀態是紅色 <code>FAILED</code></h3>
+<p>色塊右邊那行字就是原因。常見三種：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>訊息大意</th><th>原因</th><th>處置</th></tr></thead>
+<tbody>
+<tr><td><code>chamber code 00 is not one the specification defines</code></td><td>沒選腔體（或選了規格沒定義的代號）</td><td>選一個腔體，<code>Save &amp; apply</code></td></tr>
+<tr><td>port 被佔用／位址無法繫結</td><td>同一台 PC 已有另一個程式（或另一套本 App）佔住該 port</td><td>換 port，或關掉另一個執行個體。<strong>兩套監測不同腔體時 port 必須分開</strong></td></tr>
+<tr><td>profile 相關的錯誤</td><td>手改 JSON 打錯位數／<code>ss</code>／<code>aa</code></td><td>照 7.2 修正，或刪掉範本檔讓它重新產生，再 <code>Restart interface</code></td></tr>
+</tbody></table></div>
+<h3 id="82-一直停在藍色-listeninghost-連不進來">8.2 一直停在藍色 <code>LISTENING</code>，Host 連不進來</h3>
+<p>設備端沒問題，問題在網路或 Host。依序檢查：</p>
+<ol>
+<li>Host 端設定的 IP／port 是否就是本機這組？（<code>Address</code> 若是 <code>0.0.0.0</code>，Host 要連的是這台 PC 的實際 IP）
+</li>
+<li>設備 PC 的<strong>防火牆</strong>是否放行該 port 的 inbound TCP？
+</li>
+<li>Host 是否被設成 passive？<strong>兩邊都在等對方連，就永遠連不起來。</strong> 設備端 <code>Connect out (active)</code> 應為取消勾選、Host 端為 active。
+</li>
+<li>網路是否通（ping、tracert）。
+</li>
+</ol>
+<h3 id="83-卡在橘色-selected-不變綠">8.3 卡在橘色 <code>SELECTED</code> 不變綠</h3>
+<p>TCP 通了，但通訊建立（S1F13/S1F14）沒完成。多半是 <strong>Device ID 不一致</strong>或 Host 端尚未送出建立通訊的請求。核對第 2 節表格的第 3 項，並看 Traffic 有沒有出現 S1F13。</p>
+<h3 id="84-綠燈但-host-讀不到值收到-s9f1">8.4 綠燈，但 Host 讀不到值／收到 S9F1</h3>
+<p><strong>九成是 Device ID 或腔體代號不一致。</strong> HSMS 交握不檢查 Device ID，所以不一致要到資料訊息階段才會被拒。</p>
+<ol>
+<li>對 Device ID。
+</li>
+<li>把狀態區的編號範例（<code>Leak rate SVID …</code>）唸給 Host 端核對——Host 若照別的腔體號來查，查到的 SVID 不存在，自然什麼都讀不到。
+</li>
+</ol>
+<h3 id="85-綠燈但沒收到任何警報">8.5 綠燈，但沒收到任何警報</h3>
+<p>依序確認：</p>
+<ol>
+<li><code>ReportingSummary</code> 是不是寫著 <code>alarms OFF</code>？→ 勾回 <code>Report alarms</code>，<code>Save &amp; apply</code>。
+</li>
+<li>現在是不是 <strong>test mode／Replay</strong>？（Leak Monitor 分頁會標示，SECS 分頁的 <code>ReportingSummary</code> 也會說 <code>test/replay data is not reported</code>）→ 這是預設行為，不是故障。
+</li>
+<li>App 這邊到底有沒有發生警報？→ 看 Leak Monitor 分頁與稽核日誌。SECS 只是轉送，不會自己產生警報。
+</li>
+<li>Host 端是不是用 ASCII 解析 ALID？→ 見第 2 節第 5 項。
+</li>
+</ol>
+<h3 id="86-host-端說某個警報沒有結束">8.6 Host 端說某個警報「沒有結束」</h3>
+<p>洩漏警報（ALID 002）是<strong>鎖存</strong>的：必須由操作者在 Leak Monitor 分頁按 <strong>Acknowledge</strong> 才會解除，並同時送出 CEID 502 事件。沒人按，它就會一直是 set 狀態——這是設計如此。</p>
+<h3 id="87-斷線期間發生的警報會補送嗎">8.7 斷線期間發生的警報會補送嗎</h3>
+<p><strong>不會。</strong> 本版不做 spooling，斷線期間送出的訊息會失敗，只記在 SECS 日誌檔裡（<code>[EQP] S5F1 ALID=… failed: …</code>）。本機的稽核紀錄與比值 CSV 仍然完整。客戶若要求「MES 重開後資料不能掉」，需要由 Host 送 S2F43 開啟 spooling，並另行評估。</p>
+<h3 id="88-找不到日誌檔">8.8 找不到日誌檔</h3>
+<p>分頁中段「Traffic log:」那行就是完整路徑（<code>…\Logs\secs_YYYYMMDD.log</code>，每日一檔）。畫面上的清單只留最近 500 行，<strong>要查久一點的事情看檔案</strong>。按 <code>Clear</code> 只清畫面，不動檔案。</p>
+<hr>
+<h2 id="9-對測驗收程序">9. 對測／驗收程序</h2>
+<p>不必等 fab 的 MES，用 <code>Test_SECS.exe</code> 當對測 Host 就能走完整套（該工具的 <code>使用手冊.md</code> 有雙視窗流程）。</p>
+<h3 id="91-基本連線必做">9.1 基本連線（必做）</h3>
+<ol>
+<li>App 設 <code>Address = 127.0.0.1</code>、<code>Port = 5000</code>、<code>Device ID = 0</code>、腔體 = 實際要用的代號，<code>Save &amp; apply</code>。
+</li>
+<li>啟動 <code>Test_SECS</code> 的 Host 端，連到 <code>127.0.0.1:5000</code>。
+</li>
+<li>確認兩邊都到 <strong><code>COMMUNICATING</code></strong>。
+</li>
+<li>Host 送 <strong>S1F3</strong>（查狀態）→ 應回 <strong>S1F4，26 個 SV</strong>，SVID 為 <code>1{cc}2700001</code>…<code>1{cc}2700026</code>。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
+</li>
+<li>Host 送 <strong>S1F17</strong> → 回 <code>ONLACK</code>（已在 online 時為 2）。
+</li>
+<li>Host 送 <strong>S5F5</strong>（查警報清單）→ 應回 <strong>5 條</strong>，ALID 為 <strong>ASCII</strong>（<code>&lt;A[8] "1{cc}27002"&gt;</code>），category 依序 6/4/5/5/8。
+</li>
+<li>Host 做一次 <strong>S2F23 Trace</strong> → 確認 S6F1 依週期回傳。
+</li>
+</ol>
+<h3 id="92-設備故障警報必做">9.2 設備故障警報（必做）</h3>
+<p>拔掉光譜儀 USB → Host 應收到 ALID <code>1{cc}27012</code> <strong>set</strong>；插回並重新連線 → 收到 <strong>clear</strong>。</p>
+<blockquote><p>注意 012 是<strong>轉態</strong>而非狀態：App 啟動時本來就沒連線，這不會送警報。要先連上、再拔掉才會觸發。</p></blockquote>
+<h3 id="93-洩漏警報全路徑用錄檔驗證">9.3 洩漏警報全路徑（用錄檔驗證）</h3>
+<p>這是唯一需要把測試模式閘門打開的場合：</p>
+<ol>
+<li>SECS 分頁勾 <strong><code>Report test / replay data too</code></strong>，確認 <code>Report alarms</code> 與 <code>Report events</code> 也勾著，<code>Save &amp; apply</code>。
+</li>
+<li>Replay 分頁勾 <strong><code>Raise leak alarms during replay</code></strong>，選一段<strong>含洩漏事件</strong>的錄檔。
+</li>
+<li>Connect（test mode）→ Start → Play。
+</li>
+<li>Host 端應依序收到：
+<ul>
+<li>CEID <code>1{cc}27508</code>（開始擷取）</li>
+<li>ALID <code>1{cc}27001</code> <strong>set</strong>（Warning）</li>
+<li>ALID <code>1{cc}27001</code> <strong>clear</strong> + ALID <code>1{cc}27002</code> <strong>set</strong>（升到 Alarm）</li>
+</ul>
+</li>
+<li>在 Leak Monitor 分頁按 <strong>Acknowledge</strong> → Host 收到 ALID <code>1{cc}27002</code> <strong>clear</strong> 與 CEID <code>1{cc}27502</code>。
+</li>
+<li>停止擷取 → CEID <code>1{cc}27509</code>。
+</li>
+<li><strong>反向驗證</strong>：取消 <code>Report test / replay data too</code>，重播同一段 → <strong>不應再收到任何 S5F1／S6F11</strong>，但 Host 送 S1F3 仍讀得到值，且 <strong>VID 016 = 1</strong>。
+</li>
+<li><strong>測完把 <code>Report test / replay data too</code> 取消勾選並 <code>Save &amp; apply</code>。</strong>
+</li>
+</ol>
+<h3 id="94-收尾">9.4 收尾</h3>
+<ul>
+<li>比對 <code>secs_YYYYMMDD.log</code> 與 Host 端的收送紀錄，逐則對上。
+</li>
+<li>把上報開關切回正式生產該有的狀態（alarms on、events on、test/replay off）。
+</li>
+<li>存一份日誌檔作為驗收附件。
+</li>
+</ul>
+<hr>
+<h2 id="10-交給-host-端的對照表">10. 交給 Host 端的對照表</h2>
+<p><code>cc</code> 請代入實際腔體代號（例：<code>cc=02</code> → SVID <code>1022700001</code>、ALID <code>10227002</code>）。</p>
+<h3 id="101-編碼規則">10.1 編碼規則</h3>
+<pre><code>SVID = 1 + cc + 27 + 00 + vvv    （10 碼）
+ALID = 1 + cc + 27 + nnn         （ 8 碼，ASCII 傳送）
+CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
+<h3 id="102-警報s5f1">10.2 警報（S5F1）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>ALID <code>1{cc}27nnn</code></th><th>名稱</th><th>category</th><th>何時 set</th><th>何時 clear</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>OES LEAK WARNING</td><td>6</td><td>綜合狀態升到 Warning</td><td>降回 Normal／Idle</td></tr>
+<tr><td>002</td><td>OES LEAK ALARM</td><td>4</td><td>綜合狀態升到 Alarm（<strong>鎖存</strong>）</td><td>操作者 Acknowledge 之後</td></tr>
+<tr><td>012</td><td>OES CONNECTION LOST</td><td>5</td><td>光譜儀連線由通變斷</td><td>重新連上</td></tr>
+<tr><td>013</td><td>OES ACQUISITION ERROR</td><td>5</td><td>擷取進入錯誤狀態</td><td>離開錯誤狀態</td></tr>
+<tr><td>014</td><td>OES DATA WRITE FAILURE</td><td>8</td><td>CSV 寫檔失敗</td><td>下次寫檔成功</td></tr>
+</tbody></table></div>
+<p>012–014 <strong>不受測試模式閘門影響</strong>。</p>
+<h3 id="103-事件s6f11">10.3 事件（S6F11）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>CEID <code>1{cc}27nnn</code></th><th>事件</th></tr></thead>
+<tbody>
+<tr><td>502</td><td>操作者確認（Acknowledge）了洩漏警報</td></tr>
+<tr><td>508</td><td>開始擷取</td></tr>
+<tr><td>509</td><td>停止擷取</td></tr>
+</tbody></table></div>
+<h3 id="104-狀態變數重點完整-26-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 26 項見 <a href="secs-integration.md"><code>secs-integration.md</code></a> §5）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>意義</th><th>備註</th></tr></thead>
+<tbody>
+<tr><td>001–005</td><td>洩漏率、σ、信心度、是否有效、是否超出校正範圍</td><td>未做洩漏率校正時 004 = 0</td></tr>
+<tr><td>006</td><td>校正狀態</td><td>0=未校正 / 1=生效 / 2=與基準不符</td></tr>
+<tr><td><strong>007</strong></td><td><strong>綜合洩漏等級</strong></td><td><strong>0=Idle / 1=Normal / 2=Warning / 3=Alarm。Host 端最該訂閱的一項</strong></td></tr>
+<tr><td>008–011</td><td>啟用／警告／警報／低訊號的比值數量</td><td></td></tr>
+<tr><td>012–014</td><td>是否有基準、目前 Golden Run 名稱、目前校正名稱</td><td></td></tr>
+<tr><td>015</td><td>擷取參數與基準不符</td><td>1 = 目前的曝光設定與擷取基準時不同，讀值不可信</td></tr>
+<tr><td><strong>016</strong></td><td><strong>測試／Replay 模式</strong></td><td><strong>1 = 這批數據不是量測值，不可用於製程判定</strong></td></tr>
+<tr><td>021–023</td><td>電漿是否存在、閘門是否可用、累計掉幀數</td><td>023 為<strong>本次執行</strong>累計，請以差值判讀</td></tr>
+<tr><td>024–026</td><td>積分時間、平均次數、實際幀率</td><td></td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="11-檢核表可列印">11. 檢核表（可列印）</h2>
+<h3 id="111-上線前engineer">11.1 上線前（Engineer）</h3>
+<ul>
+<li>[ ] 第 2 節的五項參數已與 Host 端逐項對過並簽字
+</li>
+<li>[ ] 防火牆已放行該 port 的 inbound TCP
+</li>
+<li>[ ] 腔體代號正確，狀態區的編號範例已唸給 Host 核對
+</li>
+<li>[ ] <code>Connect out (active)</code> 未勾選（設備端為 passive）
+</li>
+<li>[ ] 第 9.1 節的基本連線七步全部通過
+</li>
+<li>[ ] 第 9.2 節的設備故障警報已實測
+</li>
+<li>[ ] 第 9.3 節的洩漏警報全路徑已用錄檔驗證，<strong>且測試模式閘門已關回</strong>
+</li>
+<li>[ ] 上報開關為正式狀態：alarms <strong>on</strong>、events <strong>on</strong>、test/replay <strong>off</strong>
+</li>
+<li>[ ] 日誌保留天數 ≥ 30，驗收日誌已存檔
+</li>
+</ul>
+<h3 id="112-每班operator">11.2 每班（Operator）</h3>
+<ul>
+<li>[ ] SECS 分頁狀態燈為綠色 <code>COMMUNICATING</code>
+</li>
+<li>[ ] <code>ReportingSummary</code> 顯示 <code>alarms on, events on</code>
+</li>
+<li>[ ] Traffic 最新幾行的時間戳是最近的
+</li>
+<li>[ ] 有異常 → 記錄並通知工程師，<strong>不自行更改設定</strong>
+</li>
+</ul>
+<h3 id="113-交接異常回報時要附上">11.3 交接／異常回報時要附上</h3>
+<ul>
+<li>[ ] SECS 分頁的截圖（狀態燈 + <code>ReportingSummary</code> + 編號範例那三行）
+</li>
+<li>[ ] 當天的 <code>secs_YYYYMMDD.log</code>
+</li>
+<li>[ ] 當天的系統稽核 CSV（<code>Logs\</code> 底下）
+</li>
+</ul>
+<hr>
+<h2 id="附錄-a檔案位置">附錄 A：檔案位置</h2>
+<p><code>{Config}</code> = <code>C:\Users\&lt;登入帳號&gt;\AppData\Roaming\OES_Leak_Monitor</code></p>
+<div class="tablewrap"><table>
+<thead><tr><th>檔案</th><th>路徑</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>設定檔</td><td><code>{Config}\settings.json</code></td><td>含 <code>secs</code> 區塊（附錄 B）</td></tr>
+<tr><td><strong>Profile 範本（要改的是這份）</strong></td><td><code>{Config}\profiles\oes-leak-monitor.json</code></td><td>編號一律以 <code>cc=00</code> 書寫</td></tr>
+<tr><td>有效 profile（產生物，不要改）</td><td><code>{Config}\profiles\.effective\oes-leak-monitor.json</code></td><td>每次啟動依腔體號重寫</td></tr>
+<tr><td>SECS 收送日誌</td><td><code>{Config}\Logs\secs_YYYYMMDD.log</code></td><td>每日一檔，保留 <code>logRetentionDays</code> 天</td></tr>
+<tr><td>系統稽核日誌</td><td><code>{Config}\Logs\{YYMMDDHH}.csv</code></td><td><code>SecsStarted</code>／<code>SecsStopped</code>／<code>SecsSettingsSaved</code> 等記在這裡</td></tr>
+</tbody></table></div>
+<p>分頁中段會直接顯示前三個路徑的實際值——<strong>現場找檔案看那裡就好，不用背。</strong></p>
+<hr>
+<h2 id="附錄-bsettingsjson-的-secs-區塊">附錄 B：settings.json 的 <code>secs</code> 區塊</h2>
+<p>一般情況請用 SECS 分頁修改；直接改檔案只在遠端支援、或要批次佈署多台時才做（改完須重開 App）。</p>
+<pre class="lang-jsonc"><code>"secs": {
+  "enabled": false,              // 總開關
+  "reportAlarms": true,
+  "reportEvents": true,
+  "reportInTestMode": false,     // 測試模式閘門，預設關
+  "chamberCode": 2,              // cc：01-15 / 21-25 / 31-34
+  "isActive": false,             // 設備端 passive，等 Host 連進來
+  "ipAddress": "0.0.0.0",        // 監聽所有網卡；本機對測用 127.0.0.1
+  "port": 5000,
+  "deviceId": 0,                 // 必須與 Host 一致
+  "modelName": "OESLM",          // MDLN
+  "softwareRevision": "1.0.0",   // SOFTREV
+  "t3": 45, "t5": 10, "t6": 10, "t7": 10, "t8": 10,   // 逾時（秒）
+  "profileFileName": "oes-leak-monitor.json",
+  "logRetentionDays": 30
+}</code></pre>
+<p>舊版 <code>settings.json</code> 沒有這個區塊時取上述預設值，<strong>亦即升級之後 SECS 預設不啟動、不開任何 port</strong>，要用才開。</p>
+<h3 id="合法的腔體代號">合法的腔體代號</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>代號</th><th>名稱</th><th>代號</th><th>名稱</th></tr></thead>
+<tbody>
+<tr><td>01–05</td><td>Ch_1 … Ch_5</td><td>11</td><td>Buffer / Buffer 1</td></tr>
+<tr><td>06</td><td>Ch_A / VIA_1</td><td>12–13</td><td>Ch_C, Ch_D</td></tr>
+<tr><td>07–08</td><td>Ch_E, Ch_F</td><td>14–15</td><td>LLA, LLB</td></tr>
+<tr><td>09</td><td>Ch_B</td><td>21–25</td><td>X'fer Viewport 1–5</td></tr>
+<tr><td>10</td><td>X'fer / Buffer 2</td><td>31–34</td><td>Buffer Viewport 1–4</td></tr>
+</tbody></table></div>
+<p>代號不在此表內時，介面會拒絕啟動並顯示原因。</p>
+</main>
+</div>
+</body>
+</html>

@@ -307,6 +307,14 @@
             <TabItem Header="Logs">
                 <wpf:LogViewerPanel DataContext="{Binding LogViewer}"/>
             </TabItem>
+
+            <!-- SECS/GEM equipment interface. Deliberately NOT in IsEngineerGated: whether the
+                 tool is talking to the MES is something an Operator gets asked, and the answer
+                 should not need a sign-in. The settings inside the panel carry the gate instead
+                 (SecsViewModel.CanEdit). -->
+            <TabItem Header="SECS" x:Name="SecsTab">
+                <local:SecsPanel DataContext="{Binding Secs}"/>
+            </TabItem>
         </TabControl>
     </Grid>
 </Window>
