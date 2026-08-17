@@ -50,6 +50,49 @@
   </Target>
 
   <!--
+    Ship the Visual C++ runtime app-local.
+
+    UserApplication.dll statically imports libsodium.dll, which imports
+    VCRUNTIME140.dll. On a PC that has never had the Visual C++ 2015-2022 x64
+    redistributable installed, LoadLibrary fails with Win32 126 before a single
+    device is enumerated, and the SDK turns that into a silent test-mode
+    fallback: the app reports "Connected", writes synthetic spectra into the
+    real data folder, and logs nothing at all about why. Measured on a fab PC
+    on 2026-08-17 — the whole delivery folder was present and correct, the
+    driver was fine, the vendor software connected, and this was the difference.
+
+    Windows resolves a dependency from the executable's own folder before the
+    system directories, so three DLLs next to the .exe remove the prerequisite
+    entirely. vcruntime140_cor3.dll is WPF's renamed private copy and does NOT
+    satisfy an import of VCRUNTIME140.dll — it is not a substitute. All three
+    are needed together: msvcp140.dll imports VCRUNTIME140_1.dll.
+
+    Source: an explicit VcRuntimeSourceDir if the build sets one, else the VS
+    C++ redist folder when building from a developer prompt, else System32 —
+    the same binaries the redistributable installs. Warn rather than fail, like
+    CopyOperatorDocs; publish.cmd re-checks the folder and refuses to ship an
+    incomplete one.
+  -->
+  <PropertyGroup>
+    <VcRuntimeSourceDir Condition="'$(VcRuntimeSourceDir)' == '' And '$(VCToolsRedistDir)' != '' And Exists('$(VCToolsRedistDir)x64\Microsoft.VC143.CRT\vcruntime140.dll')">$(VCToolsRedistDir)x64\Microsoft.VC143.CRT\</VcRuntimeSourceDir>
+    <VcRuntimeSourceDir Condition="'$(VcRuntimeSourceDir)' == ''">$(SystemRoot)\System32\</VcRuntimeSourceDir>
+  </PropertyGroup>
+
+  <Target Name="CopyVcRuntime" AfterTargets="Build;Publish">
+    <ItemGroup>
+      <_VcRuntime Include="$(VcRuntimeSourceDir)vcruntime140.dll" />
+      <_VcRuntime Include="$(VcRuntimeSourceDir)vcruntime140_1.dll" />
+      <_VcRuntime Include="$(VcRuntimeSourceDir)msvcp140.dll" />
+    </ItemGroup>
+    <Warning Text="Visual C++ runtime not found at %(_VcRuntime.FullPath) — the output folder will ship without it, and the app will fall back to test mode (silently) on any PC without the VC++ 2015-2022 x64 redistributable installed. Install that redistributable on this build machine, or point -p:VcRuntimeSourceDir=&lt;folder&gt; at a copy."
+             Condition="!Exists('%(_VcRuntime.FullPath)')" />
+    <Copy SourceFiles="@(_VcRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true"
+          Condition="Exists('%(_VcRuntime.FullPath)')" />
+    <Copy SourceFiles="@(_VcRuntime)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true"
+          Condition="'$(PublishDir)' != '' And Exists('%(_VcRuntime.FullPath)')" />
+  </Target>
+
+  <!--
     Publish into an empty folder, always.
 
     An incremental `dotnet publish` (nothing changed since the last one) leaves
