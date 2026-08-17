@@ -172,6 +172,7 @@ Treat that NuGet surface as the framework. When something looks "missing," it is
 - `secs-integration.md` — the SECS/GEM equipment-side implementation spec: scope, chamber-code stamping, the VID/ALID/CEID tables with their app-side sources, the reporting switches, and what has been verified versus what needs a manual run.
 - `Satellite_SECS_Specification_v2.md` — **the upstream, host-facing protocol specification** (AQUSEN Satellite, all sensor types). It is the authority on field semantics; `secs-integration.md` says how this app implements them. A change to what goes on the wire has to be reflected in both.
 - `ratio-noise-pipeline.html` — a standalone illustrated note on the ratio noise defences.
+- `postmortem-test-mode-20260817.md` — the incident that produced `CopyVcRuntime`, `Device_TestModeFallback` and `tools/check-oes-connect.*`: a fab PC that ran on synthetic spectra for a whole session while reporting a healthy connect. Timeline, the four-link root-cause chain, the three diagnostic gaps that hid it, and the checklists. Read it before weakening any of those three, and before adding another fallback path that keeps running after something failed.
 
 ## Related skills
 
