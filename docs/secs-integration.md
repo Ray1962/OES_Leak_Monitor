@@ -12,7 +12,7 @@
 
 **狀態：** 已實作，並有自動化測試（§13.2–13.3，29 個）。連線、S1F3、S5F5 已在真機驗證；
 洩漏警報 S5F1 已用 2026-08-14 的實機錄檔重放驗證。**尚待人工驗收的只剩三個 CEID 事件**
-與 Replay 分頁的接線（§13.4）。
+與 Replay 分頁的接線——S6F11 這條路徑目前完全沒有自動化涵蓋，逐項狀態見 §13.4。
 
 ---
 
@@ -493,16 +493,32 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 
 ### 13.4 需人工驗收（要有電漿或 GUI）
 
-1. Replay 分頁播一段有洩漏的錄檔，勾「Raise leak alarms during replay」與「測試模式也上報」
-   → 應看到 S5F1 set/clear（ALID `1cc27001`／`1cc27002`）與 CEID `1cc27508`／`1cc27509`；
-   按 Acknowledge → CEID `1cc27502`。
-   （S5F1 那半已由 §13.3 自動化；這一步驗的是 **Replay 分頁到引擎的接線**與**三個 CEID**，
-   後者目前只有人工能觸發。）
-2. 取消「測試模式也上報」→ 同一段錄檔不應再送出任何 S5F1／S6F11，但 S1F3 仍回得到值且
-   VID 016 = 1。
-3. 拔掉光譜儀 → ALID `1cc27012` set；插回 → clear。
-4. 在 Host 端做一次 S2F23 Trace，確認 S6F1 依週期回傳。
-5. 全程比對 `secs_YYYYMMDD.log` 與 `Test_SECS` 兩邊的收送紀錄。
+狀態欄的意思：**⬜ = 沒有人跑過**，不是「應該會過」。跑過之後把該列改成
+`✅ YYYY-MM-DD（執行者）`，並把對應的 `secs_YYYYMMDD.log` 存成驗收附件。
+
+| # | 項目 | 狀態 |
+|---|---|---|
+| 1 | Replay 分頁播一段有洩漏的錄檔，勾「Raise leak alarms during replay」與「測試模式也上報」→ 應看到 S5F1 set/clear（ALID `1cc27001`／`1cc27002`）與 CEID `1cc27508`／`1cc27509`；按 Acknowledge → CEID `1cc27502` | ⬜ 未驗收 |
+| 2 | 取消「測試模式也上報」→ 同一段錄檔不應再送出任何 S5F1／S6F11，但 S1F3 仍回得到值且 VID 016 = 1 | ⬜ 未驗收 |
+| 3 | 拔掉光譜儀 → ALID `1cc27012` set；插回 → clear | ⬜ 未驗收 |
+| 4 | 在 Host 端做一次 S2F23 Trace，確認 S6F1 依週期回傳 | ⬜ 未驗收 |
+| 5 | 全程比對 `secs_YYYYMMDD.log` 與 `Test_SECS` 兩邊的收送紀錄 | ⬜ 未驗收 |
+
+第 1 項的 S5F1 那半已由 §13.3 自動化；它真正要驗的是 **Replay 分頁到引擎的接線**與**下面三個 CEID**。
+
+#### 三個 CEID 的狀態
+
+| CEID `1{cc}27nnn` | 事件 | 觸發點 | 自動化涵蓋 | 狀態 | 怎麼留證 |
+|---|---|---|---|---|---|
+| 502 | 警報已確認 | `LeakMonitorEngine.Acknowledged` → `SecsBridge.OnAcknowledged` | **無** | ⬜ 未驗收 | 在 Leak Monitor 分頁按 Acknowledge（需先有鎖存的 Alarm），Host 端收到 S6F11 |
+| 508 | 開始擷取 | `IsAcquiring` false→true → `OnAcquisitionChanged(true)` | **無** | ⬜ 未驗收 | 按 Start，Host 端收到 S6F11 |
+| 509 | 停止擷取 | `IsAcquiring` true→false → `OnAcquisitionChanged(false)` | **無** | ⬜ 未驗收 | 按 Stop，Host 端收到 S6F11 |
+
+**「自動化涵蓋：無」是字面意思。** `SecsWireTests` 只走警報路徑（S5F1／S5F5）；
+`SendEvent` 這條路——含 `EventsAllowed` 的測試模式閘門與 `Enqueue` 的排序——
+目前沒有任何自動化測試碰過，三個 CEID 的編號也只在 `SecsChamberCodingTests`
+裡以純算術驗過，沒有一則真的 S6F11 被送出去過。三者都只能由 GUI 觸發，
+所以在有人照上表跑一遍之前，這條路徑等於**未測**。
 
 `Test_SECS` 的 `使用手冊.md` 有完整的雙視窗驗收流程（使用例 1～14），可整套照走。
 
