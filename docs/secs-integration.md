@@ -10,7 +10,7 @@
 > 相關程式：`LeakMonitorEngine`、`MainViewModel`、`AppSettings`（見 `CLAUDE.md`）。
 > 通訊函式庫：`Aqusen.Secs`（維護於 `Ray1962/Test_SECS`，整合方式見該 repo 的 `整合指南.md`）。
 
-**狀態：** 已實作，並有自動化測試（§13.2–13.3，25 個）。連線、S1F3、S5F5 已在真機驗證；
+**狀態：** 已實作，並有自動化測試（§13.2–13.3，29 個）。連線、S1F3、S5F5 已在真機驗證；
 洩漏警報 S5F1 已用 2026-08-14 的實機錄檔重放驗證。**尚待人工驗收的只剩三個 CEID 事件**
 與 Replay 分頁的接線（§13.4）。
 
@@ -461,13 +461,14 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 ### 13.2 自動化測試（`tests/OES_Leak_Monitor.Tests`）
 
 `dotnet test tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug` —
-25 個測試，在有實機錄檔的機器上全過（沒有錄檔時 22 過、3 略過）：
+29 個測試，在有實機錄檔的機器上全過（沒有錄檔時 26 過、3 略過）：
 
 | 檔案 | 涵蓋 |
 |---|---|
 | `SecsChamberCodingTests` | 編號運算對照規格範例、腔體表、戳記的冪等與可重戳、錯誤 `ss`／`aa`／腔體被拒、非本系統的 id 不被動到 |
 | `SecsProfileTests` | 範本可載入、26 個 binding 全被 App 供應、既有 profile 永不被覆寫 |
 | `SecsWireTests` | 真的 `SecsBridge` 對真的 `GemHost` 走 loopback：S1F3 回 26 個 SV、S5F5 的 ALID 是 ASCII 且 category 正確、Warning→Alarm→Normal 送出正確的 set/clear 順序、故障警報去抖動 |
+| `AppSettingsDefaultsTests` | 全新 `settings.json` 的三個覆寫預設（觸發波長 337.1、記錄器預設啟用、`ForceTestMode` 為假），以及「已存檔的決定要被尊重」那半個契約 |
 | `RecordedRunTests` | **實機錄檔重放**，見下 |
 
 ### 13.3 實機錄檔重放（`RecordedRunTests`）
