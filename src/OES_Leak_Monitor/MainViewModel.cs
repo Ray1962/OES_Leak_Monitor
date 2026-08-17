@@ -597,7 +597,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void LoadDefaultsAll()
     {
-        foreach (var d in _devices) d.LoadDefaultsCommand.Execute(null);
+        foreach (var d in _devices)
+        {
+            d.LoadDefaultsCommand.Execute(null);
+            // Same reason as the logger lines below: the framework's device defaults are a
+            // demo's (ForceTestMode on), and Load Defaults has to land where a fresh install
+            // lands. Left alone it silently re-arms test mode, and the next Save persists it —
+            // a tool that quietly stops measuring and keeps writing files that look real.
+            d.ForceTestMode = AppSettings.DefaultForceTestMode;
+        }
         Logger.LoadDefaults();
         // LoadDefaults resets the logger to the framework's values, which are a general-purpose
         // recorder's, not this app's: disarmed, and triggering on 387 nm. "Load Defaults" has to
