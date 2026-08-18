@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Read [CONTEXT.md](CONTEXT.md) first. It is the definition of record for this project's own
+vocabulary; where a term's meaning here differs from the definition there, CONTEXT.md wins.
+This file explains how things are built and why they must stay that way — it is not where a
+word is defined.
+
 ## Build & run
 
 - WPF, .NET 8, Windows-only, x64-only (no AnyCPU). Configurations: `Debug|x64`, `Release|x64`.
