@@ -71,6 +71,7 @@ for %%F in (
     daily-inspection-plan-zh-TW.html
     secs-operation-sop-zh-TW.html
     secs-acceptance-sheet-zh-TW.html
+    CONTEXT-zh-TW.html
     check-oes-connect.ps1
     check-oes-connect.cmd
 ) do (
@@ -96,6 +97,7 @@ if defined MISSING (
     echo    python3 tools\md2html.py docs\user-manual-zh-TW.md docs\user-manual-zh-TW.html "OES Leak Monitor manual"
     echo    python3 tools\md2html.py docs\daily-inspection-plan-zh-TW.md docs\daily-inspection-plan-zh-TW.html "OES Plasma Monitor inspection plan"
     echo    python3 tools\md2html.py docs\secs-operation-sop-zh-TW.md docs\secs-operation-sop-zh-TW.html "OES Leak Monitor SECS SOP"
+echo    python3 tools\md2html.py docs\CONTEXT-zh-TW.md docs\CONTEXT-zh-TW.html "OES Leak Monitor terms"
     echo.
     echo  secs-acceptance-sheet-zh-TW.html has NO Markdown source - it is a form,
     echo  hand-authored as HTML. Do not regenerate it; restore it from git.
@@ -105,7 +107,7 @@ if defined MISSING (
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 18 files present ***
+echo  *** PUBLISH SUCCEEDED - all 19 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -121,6 +123,7 @@ echo    user-manual-zh-TW.html     operator manual
 echo    daily-inspection-plan-zh-TW.html   daily/weekly inspection plan
 echo    secs-operation-sop-zh-TW.html      SECS connection SOP
 echo    secs-acceptance-sheet-zh-TW.html   SECS acceptance sheet (print and sign)
+echo    CONTEXT-zh-TW.html         glossary of the terms on screen
 echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
 echo.
 
