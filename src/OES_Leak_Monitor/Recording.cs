@@ -81,6 +81,69 @@ public sealed class Recording
     }
 
     /// <summary>
+    /// Every full-spectrum recording under a data folder whose date falls in
+    /// <paramref name="fromDate"/>..<paramref name="toDate"/> — loose <c>*.csv</c> files and the
+    /// contents of archived day folders alike, in no particular order.
+    ///
+    /// <para>Shared by every tab that needs the list. A second copy of this walk would eventually
+    /// disagree with the first about which files count — the single-OES rule below is exactly the
+    /// kind of thing that gets fixed in one place and not the other.</para>
+    /// </summary>
+    public static IEnumerable<Recording> EnumerateSpectra(string baseDir, DateTime fromDate, DateTime toDate)
+    {
+        if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir)) yield break;
+
+        var from = fromDate.Date;
+        var to = toDate.Date;
+
+        foreach (var monthDir in Directory.EnumerateDirectories(baseDir))
+        {
+            var monthName = Path.GetFileName(monthDir);
+            if (monthName.Length != 6) continue;
+            if (!int.TryParse(monthName.Substring(0, 4), out var year)) continue;
+            if (!int.TryParse(monthName.Substring(4, 2), out var month)) continue;
+
+            DateTime monthStart;
+            try { monthStart = new DateTime(year, month, 1); } catch { continue; }
+            if (monthStart.AddMonths(1).AddTicks(-1) < from) continue;
+            if (monthStart > to.AddDays(1).AddTicks(-1)) continue;
+
+            foreach (var dayDir in Directory.EnumerateDirectories(monthDir))
+            {
+                var dayName = Path.GetFileName(dayDir);
+                if (dayName.Length != 2 || !int.TryParse(dayName, out var day)) continue;
+
+                DateTime date;
+                try { date = new DateTime(year, month, day); } catch { continue; }
+                if (date < from || date > to) continue;
+
+                foreach (var path in Directory.EnumerateFiles(dayDir, "*.csv"))
+                {
+                    var rec = TryParse(path);
+                    // Single-OES app: only the "OES1" files are spectra. The sibling "Ratio" file
+                    // belongs to the Ratio Review tab, and since it no longer shares a session
+                    // timestamp with an intensity CSV it would otherwise show up as a recording of
+                    // its own. Historical "OES2" files are ignored for the same reason.
+                    if (rec is not null && rec.DeviceTag.Equals("OES1", StringComparison.OrdinalIgnoreCase))
+                        yield return rec;
+                }
+            }
+
+            // Archived day folders (DD.zip) list their contents too, so compressing old data
+            // doesn't make it vanish — the CSVs are read straight out of the archive.
+            foreach (var zipPath in Directory.EnumerateFiles(monthDir, "*.zip"))
+            {
+                foreach (var rec in FromArchive(zipPath))
+                {
+                    if (!rec.DeviceTag.Equals("OES1", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (rec.SessionStart.Date < from || rec.SessionStart.Date > to) continue;
+                    yield return rec;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Parse a Recording out of a full file path; returns null if the path doesn't
     /// match the IntensityCsvWriter naming scheme or sits outside the expected
     /// YYYYMM/DD folder shape.

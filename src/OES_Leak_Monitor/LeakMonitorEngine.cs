@@ -1087,6 +1087,54 @@ public sealed class LeakMonitorEngine : IDisposable
     }
 
     /// <summary>
+    /// Stores a Golden Run built somewhere other than the live capture — today, from recordings
+    /// (<see cref="BaselineBuilder"/>). Deliberately re-uses the capture's own result type and
+    /// confirmation flow rather than inventing a second one: overwriting a stored run costs the
+    /// same thing either way (the ratios that had a baseline there and none here), and two
+    /// dialogs for one consequence teach an operator that they mean different things.
+    /// </summary>
+    /// <returns>A result whose <see cref="GoldenRunCaptureResult.NeedsConfirmation"/> the caller
+    /// must answer with <see cref="ConfirmCapturedRun"/>; when it is false the run is already
+    /// stored and active.</returns>
+    public GoldenRunCaptureResult ImportGoldenRun(GoldenRun run)
+    {
+        if (run is null) throw new ArgumentNullException(nameof(run));
+
+        GoldenRunCaptureResult result;
+        bool stored = false;
+        lock (_gate)
+        {
+            var replaced = _settings.FindGoldenRun(run.Name);
+            var have = run.Baselines.Select(b => b.Key).ToHashSet(StringComparer.Ordinal);
+            var lost = replaced is null
+                ? new List<GoldenRunRatioRejection>()
+                : replaced.Baselines.Where(b => !have.Contains(b.Key))
+                          .Select(b => Reject(b.Key, "had a baseline in the run being replaced"))
+                          .ToList();
+
+            if (lost.Count == 0)
+            {
+                StoreCapturedRun(run);
+                stored = true;
+            }
+
+            result = new GoldenRunCaptureResult
+            {
+                Run = run,
+                Accepted = true,
+                NeedsConfirmation = lost.Count > 0,
+                Lost = lost,
+                Replaced = replaced,
+                ActiveGoldenRun = _settings.ActiveGoldenRun,
+            };
+        }
+
+        // Outside the lock, as the capture path does: a handler persists settings.
+        if (stored) GoldenRunCaptured?.Invoke(this, run);
+        return result;
+    }
+
+    /// <summary>
     /// Answers a <see cref="GoldenRunCaptureResult.NeedsConfirmation"/> capture: <paramref
     /// name="keep"/> stores it and makes it active (raising <see cref="GoldenRunCaptured"/> so
     /// the host persists it), anything else discards it — the run it would have replaced, the

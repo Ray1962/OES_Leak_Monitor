@@ -1,0 +1,154 @@
+<UserControl x:Class="OES_Leak_Monitor.BaselineBuilderPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:oxy="http://oxyplot.org/wpf"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1100"
+             Background="#F4F6FA">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Baseline Builder"
+                   FontSize="16" FontWeight="Bold" Foreground="#1F3A66" Margin="6,4,6,8"/>
+
+        <Border Grid.Row="1" Background="#EEF4FF" BorderBrush="#B9CDEA" BorderThickness="1"
+                CornerRadius="4" Padding="10,7" Margin="0,0,0,8">
+            <TextBlock TextWrapping="Wrap" Foreground="#2A4A78">
+                Builds a Golden Run from recordings already on disk, for the processes a live capture cannot serve:
+                one that <Run FontWeight="Bold">ramps</Run> before it settles, and one whose whole run is
+                <Run FontWeight="Bold">shorter than a capture window</Run> — several of those pooled together.
+                Pick the steady stretch out of each recording by dragging on the chart. Same gates, same arithmetic
+                as a capture taken in front of the tool.
+            </TextBlock>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="440" MinWidth="320"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*" MinWidth="380"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: recordings -->
+            <Border Grid.Column="0" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#FAFAFA" BorderBrush="#EEE"
+                            BorderThickness="0,0,0,1" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="From" VerticalAlignment="Center" Foreground="#555" Margin="0,0,4,0"/>
+                            <DatePicker SelectedDate="{Binding StartDate}" Width="110"/>
+                            <TextBlock Text="to" VerticalAlignment="Center" Foreground="#555" Margin="6,0,4,0"/>
+                            <DatePicker SelectedDate="{Binding EndDate}" Width="110"/>
+                            <Button Content="Refresh" Command="{Binding RefreshCommand}"
+                                    Padding="10,3" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border DockPanel.Dock="Bottom" Background="#FAFAFA" BorderBrush="#EEE"
+                            BorderThickness="0,1,0,0" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Scan ticked" Command="{Binding ScanCommand}"
+                                    Padding="10,4" MinWidth="96"
+                                    ToolTip="Re-extract every ticked recording through the current ratio set. This is the expensive step."/>
+                            <TextBlock Text="{Binding Status}" Foreground="#555" VerticalAlignment="Center"
+                                       Margin="10,0,0,0" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Border>
+
+                    <DataGrid ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}"
+                              AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              SelectionMode="Single" BorderThickness="0">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="Use" Binding="{Binding Selected, UpdateSourceTrigger=PropertyChanged}" Width="38"/>
+                            <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Date" Binding="{Binding DateText}" Width="76" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Time" Binding="{Binding TimeText}" Width="62" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="64" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="zip" Binding="{Binding ArchivedText}" Width="30" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Window" Binding="{Binding WindowText}" Width="94" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="State" Binding="{Binding Status}" Width="130" IsReadOnly="True"/>
+                            <DataGridCheckBoxColumn Header="Keep anyway" Binding="{Binding KeepAnyway, UpdateSourceTrigger=PropertyChanged}" Width="80"/>
+                        </DataGrid.Columns>
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsOutlier}" Value="True">
+                                        <Setter Property="Background" Value="#FFF3E0"/>
+                                        <Setter Property="ToolTip" Value="Set aside by the consistency check — see the result panel. Tick &quot;Keep anyway&quot; to overrule."/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          Background="#DDD" ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"/>
+
+            <!-- Right: trace + window -->
+            <Border Grid.Column="2" Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#FAFAFA" BorderBrush="#EEE"
+                            BorderThickness="0,0,0,1" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Baseline window:" VerticalAlignment="Center" Foreground="#555"/>
+                            <TextBox Text="{Binding SelectedFile.FromSec, StringFormat={}{0:0.#}, UpdateSourceTrigger=LostFocus}"
+                                     Width="64" Margin="6,0,2,0" Padding="4,2"/>
+                            <TextBlock Text="–" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding SelectedFile.ToSec, StringFormat={}{0:0.#}, UpdateSourceTrigger=LostFocus}"
+                                     Width="64" Margin="2,0,6,0" Padding="4,2"/>
+                            <TextBlock Text="s" VerticalAlignment="Center" Foreground="#555" Margin="0,0,10,0"/>
+                            <Button Content="Suggest" Command="{Binding SuggestCommand}" Padding="10,3" Margin="0,0,4,0"
+                                    ToolTip="Fills the boxes with the flattest window of the length a live capture would take. It can see that a stretch is steady, never that it is leak-free."/>
+                            <Button Content="Whole file" Command="{Binding WholeFileCommand}" Padding="10,3"/>
+                            <TextBlock Text="drag on the chart to set the window"
+                                       Foreground="#999" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <oxy:PlotView x:Name="TracePlot" Model="{Binding TrendModel}" Background="White"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- Bottom: build / save / result -->
+        <Border Grid.Row="3" Background="White" BorderBrush="#DDD" BorderThickness="1"
+                CornerRadius="4" Padding="10" Margin="0,8,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Orientation="Horizontal">
+                    <TextBlock Text="Golden Run name" VerticalAlignment="Center" Foreground="#555"/>
+                    <TextBox Text="{Binding RunName, UpdateSourceTrigger=PropertyChanged}"
+                             Width="180" Margin="8,0,12,0" Padding="4,2"/>
+                    <Button Content="Build" Command="{Binding BuildCommand}" Padding="14,4" MinWidth="86"/>
+                    <Button Content="Save as active baseline" Command="{Binding SaveCommand}"
+                            Padding="14,4" MinWidth="150" Margin="8,0,0,0"/>
+                    <TextBlock Text="Engineer sign-in required to save" Foreground="#B36B00" FontSize="11"
+                               VerticalAlignment="Center" Margin="10,0,0,0"
+                               Visibility="{Binding NeedsSignIn, Converter={StaticResource BoolToVis}}"/>
+                </StackPanel>
+                <ScrollViewer Grid.Row="1" MaxHeight="180" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                    <TextBox Text="{Binding ResultText, Mode=OneWay}" IsReadOnly="True"
+                             BorderThickness="0" Background="Transparent" TextWrapping="Wrap"
+                             FontFamily="Consolas" FontSize="12"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

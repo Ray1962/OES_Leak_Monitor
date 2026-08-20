@@ -252,6 +252,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // points and fits a per-ratio sensitivity, persisted to settings.json (Engineer+).
         LeakCalibration = new LeakCalibrationViewModel(_leakMonitorEngine,
             () => PersistLeakMonitorSettings("LeakCalibrationSaved"), _systemLogger);
+        // Constructed after the logger has been hydrated, for the same reason the review tabs
+        // are: it reads the data directory and the save trigger out of it, and against the
+        // factory defaults it would list the AppData fallback folder and gate on a threshold
+        // nobody configured.
+        BaselineBuilder = new BaselineBuilderViewModel(_leakMonitorEngine, Logger,
+            _paths.DataDirectory, _systemLogger);
 
         // Ratio-trend CSV: its own recorder, running for as long as the OES acquires —
         // deliberately NOT tied to the threshold logger's save sessions, so disarming the
@@ -318,6 +324,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup.SetRole(IsEngineerOrHigher);
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
+        BaselineBuilder.SetRole(IsEngineerOrHigher);
         Replay.SetRole(IsEngineerOrHigher);
         Secs.SetRole(IsEngineerOrHigher);
 
@@ -513,6 +520,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RatioSetup.SetRole(IsEngineerOrHigher);
         WavelengthCorrection.SetRole(IsEngineerOrHigher);
         LeakCalibration.SetRole(IsEngineerOrHigher);
+        BaselineBuilder.SetRole(IsEngineerOrHigher);
         Replay.SetRole(IsEngineerOrHigher);
         Secs.SetRole(IsEngineerOrHigher);
 
@@ -872,6 +880,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RatioSetupViewModel  RatioSetup  { get; }
     public WavelengthCorrectionViewModel WavelengthCorrection { get; }
     public LeakCalibrationViewModel LeakCalibration { get; }
+
+    /// <summary>Baseline Builder tab — a Golden Run pooled from recordings already on disk.</summary>
+    public BaselineBuilderViewModel BaselineBuilder { get; }
     public WavelengthTrendViewModel WavelengthTrend { get; }
     public ReplayViewModel Replay { get; }
 

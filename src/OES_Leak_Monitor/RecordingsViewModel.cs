@@ -527,76 +527,22 @@ public sealed class RecordingsViewModel : INotifyPropertyChanged, IDisposable
 
         try
         {
-            foreach (var monthDir in Directory.EnumerateDirectories(baseDir))
+            // One walk of the tree, shared with the Baseline Builder — see
+            // Recording.EnumerateSpectra for why this is not two loops.
+            foreach (var rec in Recording.EnumerateSpectra(baseDir, StartDate, EndDate))
             {
-                var monthName = Path.GetFileName(monthDir);
-                if (monthName.Length != 6) continue;
-                if (!int.TryParse(monthName.Substring(0, 4), out var year)) continue;
-                if (!int.TryParse(monthName.Substring(4, 2), out var month)) continue;
-
-                DateTime monthStart;
-                try { monthStart = new DateTime(year, month, 1); } catch { continue; }
-                var monthEnd = monthStart.AddMonths(1).AddTicks(-1);
-                if (monthEnd < StartDate.Date) continue;
-                if (monthStart > EndDate.Date.AddDays(1).AddTicks(-1)) continue;
-
-                foreach (var dayDir in Directory.EnumerateDirectories(monthDir))
+                fileCount++;
+                if (!groups.TryGetValue(rec.GroupKey, out var grp))
                 {
-                    var dayName = Path.GetFileName(dayDir);
-                    if (dayName.Length != 2 || !int.TryParse(dayName, out var day)) continue;
-
-                    DateTime date;
-                    try { date = new DateTime(year, month, day); } catch { continue; }
-                    if (date < StartDate.Date || date > EndDate.Date) continue;
-
-                    foreach (var path in Directory.EnumerateFiles(dayDir, "*.csv"))
+                    grp = new RecordingGroup
                     {
-                        var rec = Recording.TryParse(path);
-                        if (rec is null) continue;
-                        // Single-OES app: only the "OES1" files are spectra. The sibling
-                        // "Ratio" file belongs to the Ratio Review tab, and since it no
-                        // longer shares a session timestamp with an intensity CSV it would
-                        // otherwise create an empty group of its own here. Historical
-                        // "OES2" files are ignored for the same reason.
-                        if (!rec.DeviceTag.Equals("OES1", StringComparison.OrdinalIgnoreCase)) continue;
-                        fileCount++;
-                        if (!groups.TryGetValue(rec.GroupKey, out var grp))
-                        {
-                            grp = new RecordingGroup
-                            {
-                                Prefix        = rec.Prefix,
-                                SessionStart  = rec.SessionStart,
-                                RotationIndex = rec.RotationIndex,
-                            };
-                            groups[rec.GroupKey] = grp;
-                        }
-                        grp.Oes1 = rec;
-                    }
+                        Prefix        = rec.Prefix,
+                        SessionStart  = rec.SessionStart,
+                        RotationIndex = rec.RotationIndex,
+                    };
+                    groups[rec.GroupKey] = grp;
                 }
-
-                // Archived day folders (DD.zip) list their contents too, so compressing old
-                // data doesn't make it vanish from this tab — the CSVs are read straight out
-                // of the archive when one is selected.
-                foreach (var zipPath in Directory.EnumerateFiles(monthDir, "*.zip"))
-                {
-                    foreach (var rec in Recording.FromArchive(zipPath))
-                    {
-                        if (!rec.DeviceTag.Equals("OES1", StringComparison.OrdinalIgnoreCase)) continue;
-                        if (rec.SessionStart.Date < StartDate.Date || rec.SessionStart.Date > EndDate.Date) continue;
-                        fileCount++;
-                        if (!groups.TryGetValue(rec.GroupKey, out var grp))
-                        {
-                            grp = new RecordingGroup
-                            {
-                                Prefix        = rec.Prefix,
-                                SessionStart  = rec.SessionStart,
-                                RotationIndex = rec.RotationIndex,
-                            };
-                            groups[rec.GroupKey] = grp;
-                        }
-                        grp.Oes1 = rec;
-                    }
-                }
+                grp.Oes1 = rec;
             }
         }
         catch (Exception ex)

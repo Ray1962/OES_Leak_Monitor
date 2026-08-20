@@ -140,6 +140,14 @@
                 <local:LeakCalibrationPanel DataContext="{Binding LeakCalibration}"/>
             </TabItem>
 
+            <!-- Golden Run built from recordings on disk, for recipes a live capture cannot
+                 serve (a ramp before the plateau; a run shorter than a capture window).
+                 Not tab-gated, like Ratio Setup and Leak Calibration beside it: reading a
+                 recording changes nothing, and the Save command carries the Engineer gate. -->
+            <TabItem Header="Baseline Builder">
+                <local:BaselineBuilderPanel DataContext="{Binding BaselineBuilder}"/>
+            </TabItem>
+
             <!-- Replays a recorded full-spectrum CSV through the live pipeline (test mode
                  only). Engineer-gated with the Configuration tab: it drives the recorders
                  and the alarm gate, which is not an Operator action. -->
