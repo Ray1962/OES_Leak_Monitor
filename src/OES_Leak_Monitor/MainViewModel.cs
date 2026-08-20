@@ -690,6 +690,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void EndReplayOutput(bool finished)
     {
         if (!_replayOutputActive) return;
+        // Drop the monitors' live state *before* the recorders are closed and the prefix
+        // restored. The replay's last frames leave an EMA, a confirmation timer and possibly a
+        // latched alarm behind; the first synthetic frame after teardown then opens a session
+        // under the ordinary prefix and writes that state into it. A real run did exactly that:
+        // P_Ratio_0820153410.csv, three quarters of a minute after the recording ended, whose
+        // first row carries the replay's own σ-scores and OverallState=Alarm — a production
+        // filename holding replayed data, and an audit trail showing an alarm nobody caused.
+        // Clearing the latch is the deliberate half of this: an alarm confirmed against a
+        // recording is not a fact about the chamber, and carrying it into live monitoring would
+        // ask an operator to acknowledge something that never happened here. It is logged.
+        _leakMonitorEngine.ResetRuntimeState(clearAlarms: true,
+            reason: "recorded-spectrum replay ended; alarms confirmed against the recording " +
+                    "do not carry into live monitoring");
         _intensityLogger.Stop();
         _ratioCsvLogger.Stop();
         _replayOutputActive = false;

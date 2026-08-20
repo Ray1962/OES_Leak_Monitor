@@ -670,8 +670,8 @@ public sealed class LeakMonitorEngine : IDisposable
         if (cleared.Count > 0)
             _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorAcknowledged",
                 $"Operator acknowledged the leak alarm — {cleared.Count} latched ratio alarm(s) " +
-                $"cleared, composite {oldOverall} → {newOverall}. A latch only ever clears here, " +
-                "so nothing else can have ended this alarm.",
+                $"cleared, composite {oldOverall} → {newOverall}. Nothing clears a latch without " +
+                "an entry of its own, so this alarm ended here.",
                 related: $"User={user ?? "(unknown)"}",
                 value: string.Join(", ", cleared));
 
@@ -698,17 +698,39 @@ public sealed class LeakMonitorEngine : IDisposable
     /// change, so pre-change frames don't bleed into the post-change EMA. Leaves the Golden Run
     /// baseline, the ratio configuration, and any calibration untouched; latched alarms are kept
     /// unless <paramref name="clearAlarms"/> is set.
+    /// <para><paramref name="clearAlarms"/> ends a confirmed alarm without an operator
+    /// acknowledgement, which is the one thing the audit trail must never show happening by
+    /// itself. It is therefore logged in its own right, naming <paramref name="reason"/> and the
+    /// ratios that were latched — say why, or the entry is the same silence it exists to
+    /// prevent.</para>
     /// </summary>
-    public void ResetRuntimeState(bool clearAlarms)
+    /// <param name="reason">Why the alarms are being cleared, for the log entry. Required in
+    /// substance whenever <paramref name="clearAlarms"/> is set.</param>
+    public void ResetRuntimeState(bool clearAlarms, string? reason = null)
     {
         LeakAlarmLevel oldOverall, newOverall;
+        List<string> cleared;
         lock (_gate)
         {
+            cleared = clearAlarms
+                ? _monitors.Where(m => m.HasLatchedAlarm)
+                           .Select(m => _defs.TryGetValue(m.Key, out var d) ? d.DisplayName : m.Key)
+                           .ToList()
+                : new List<string>();
             foreach (var mon in _monitors) mon.ResetRuntime(clearAlarms);
             oldOverall = _overall;
             _overall = ComputeOverall();
             newOverall = _overall;
         }
+
+        if (cleared.Count > 0)
+            _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorAlarmLatchCleared",
+                $"{cleared.Count} latched ratio alarm(s) cleared without an operator " +
+                $"acknowledgement — {reason ?? "no reason given"}. Composite {oldOverall} → " +
+                $"{newOverall}.",
+                related: $"Reason={reason ?? "(none)"}",
+                value: string.Join(", ", cleared));
+
         if (newOverall != oldOverall)
             AlarmStateChanged?.Invoke(this, new LeakAlarmEventArgs
             {
