@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor Golden Run baseline troubleshooting</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#0-開始之前一條原則">0. 開始之前：一條原則</a>
+<a class="l2" href="#1-先分辨這條線屬於哪一種-regime">1. 先分辨：這條線屬於哪一種 regime</a>
+<a class="l2" href="#2-兩個孿生失敗">2. 兩個孿生失敗</a>
+<a class="l3" href="#21-no-baseline誠實的拒絕">2.1 No Baseline：誠實的拒絕</a>
+<a class="l3" href="#22-假-baseline通過每一道-gate量到的是背景">2.2 假 baseline：通過每一道 gate，量到的是背景</a>
+<a class="l2" href="#3-對照表擷取後跳出的那句話">3. 對照表：擷取後跳出的那句話</a>
+<a class="l2" href="#4-交叉表同一句話在不同模式下的意義">4. 交叉表：同一句話在不同模式下的意義</a>
+<a class="l2" href="#5-regime-1-的建議做法">5. regime 1 的建議做法</a>
+<a class="l2" href="#6-regime-2-的判斷準則與調校">6. regime 2 的判斷準則與調校</a>
+<a class="l2" href="#7-已知盲點目前診斷不到的東西">7. 已知盲點：目前診斷不到的東西</a>
+<a class="l2" href="#附錄-a本機現況核對與處方">附錄 A：本機現況核對與處方</a>
+<a class="l2" href="#附錄-b常數與它們的出處">附錄 B：常數與它們的出處</a>
+</nav>
+<main>
+<h1 id="golden-run-baseline-建不起來判讀與處置">Golden Run baseline 建不起來：判讀與處置</h1>
+<blockquote><p><strong>用途</strong>：Golden Run 擷取完成後，某些 ratio 顯示 <strong>No Baseline</strong>（或整次擷取被丟棄）時，判斷它是<strong>故障</strong>還是<strong>這個工具的正常狀態</strong>，並決定要不要動、動哪裡。</p>
+<p><strong>這份文件寫給誰</strong></p>
+<ul>
+<li><strong>Operator</strong>：只看第 <a href="#0-開始之前一條原則">0</a> 節。你要做的只有一件事——<strong>把對話框上那句英文原文抄下來</strong>（連同時間），交給 Engineer。那句話是唯一保證存在的證據，按下「確定」之後畫面上不會再有它。
+</li>
+<li><strong>Engineer／設備工程師</strong>：全部。所有補救動作都在 Engineer 權限的 Ratio Setup／Configuration 分頁。
+</li>
+</ul>
+<p><strong>相關文件</strong></p>
+<ul>
+<li>名詞定義（Golden Run baseline、Absent-line baseline、Reactant-gas regime、Pedestal）：<a href="CONTEXT-zh-TW.md"><code>CONTEXT-zh-TW.md</code></a>
+</li>
+<li>App 操作與參數表：<a href="user-manual-zh-TW.md"><code>user-manual-zh-TW.md</code></a>
+</li>
+<li>巡檢分工（L1／L2）：<a href="daily-inspection-plan-zh-TW.md"><code>daily-inspection-plan-zh-TW.md</code></a>
+</li>
+<li>洩漏率校正的數學：<a href="leak-rate-calibration.md"><code>leak-rate-calibration.md</code></a>
+</li>
+</ul></blockquote>
+<hr>
+<h2 id="目錄">目錄</h2>
+<ul>
+<li><a href="#0-開始之前一條原則">0. 開始之前：一條原則</a>
+</li>
+<li><a href="#1-先分辨這條線屬於哪一種-regime">1. 先分辨：這條線屬於哪一種 regime</a>
+</li>
+<li><a href="#2-兩個孿生失敗">2. 兩個孿生失敗</a>
+</li>
+<li><a href="#3-對照表擷取後跳出的那句話">3. 對照表：擷取後跳出的那句話</a>
+</li>
+<li><a href="#4-交叉表同一句話在不同模式下的意義">4. 交叉表：同一句話在不同模式下的意義</a>
+</li>
+<li><a href="#5-regime-1-的建議做法">5. regime 1 的建議做法</a>
+</li>
+<li><a href="#6-regime-2-的判斷準則與調校">6. regime 2 的判斷準則與調校</a>
+</li>
+<li><a href="#7-已知盲點目前診斷不到的東西">7. 已知盲點：目前診斷不到的東西</a>
+</li>
+<li><a href="#附錄-a本機現況核對與處方">附錄 A：本機現況核對與處方</a>
+</li>
+<li><a href="#附錄-b常數與它們的出處">附錄 B：常數與它們的出處</a>
+</li>
+</ul>
+<hr>
+<h2 id="0-開始之前一條原則">0. 開始之前：一條原則</h2>
+<p><strong>先問「這條線在無洩漏時該不該在？」，再問「為什麼沒有 baseline」。</strong></p>
+<p>順序反過來的話，你會把一個正確的拒絕當成故障來排除，而排除故障的動作（把 <code>Min SNR</code> 調到 0、把記錄器的觸發門檻調低、把波長容差放寬）確實會讓紅字消失——它會給你一份<strong>通過每一道檢查、但量的是背景雜訊</strong>的 baseline，而且之後不會再有任何警告。那比 No Baseline 危險得多，詳見 <a href="#22-假-baseline通過每一道-gate量到的是背景">2.2</a>。</p>
+<p>給 Operator 的三件事：</p>
+<ol>
+<li>對話框標題是 <strong><code>Golden Run captured with warnings</code></strong>（部分項目沒拿到）或 <strong><code>Golden Run capture failed</code></strong>（整次被丟棄，原本的基準值沒被換掉）。
+</li>
+<li><strong>把 <code>•</code> 開頭的每一行原文抄下來</strong>，包含 ratio 名稱與後面那句英文。同一份紀錄也會寫進 Logs 分頁與系統紀錄 CSV（事件代碼 <code>GoldenRunRatioDropped</code>／<code>GoldenRunRatioLowSnr</code>／<code>GoldenRunRatioUnstableBaseline</code>）。
+</li>
+<li><strong>不要重按一次擷取就當作解決了</strong>。同名擷取會覆蓋，覆蓋前那次的證據就沒了。
+</li>
+</ol>
+<hr>
+<h2 id="1-先分辨這條線屬於哪一種-regime">1. 先分辨：這條線屬於哪一種 regime</h2>
+<p>這個工具偵測的是<strong>空氣漏進真空腔</strong>，也就是氮與氧。所以被監看的元素在腔體裡的正常存量，取決於製程本身：</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th><strong>regime 1：製程不通被監看元素</strong></th><th><strong>regime 2：製程刻意通入 N₂／O₂ 當反應氣體</strong></th></tr></thead>
+<tbody>
+<tr><td>無洩漏時，訊號線</td><td>不存在，讀數就是雜訊水準</td><td>明確存在，而且很強</td></tr>
+<tr><td>要偵測的是</td><td>譜線的<strong>出現</strong></td><td>大訊號上的<strong>小增量</strong></td></tr>
+<tr><td>正確的判準</td><td>高於雜訊 N 個 σ</td><td>佔基準值的百分之幾（% of baseline）</td></tr>
+<tr><td>Golden Run baseline 的真面目</td><td><strong>零基線</strong>（Absent-line baseline）</td><td>真實訊號</td></tr>
+<tr><td>擷取時會發生什麼</td><td>減背景的萃取模式<strong>必然</strong>被 <code>mean &gt; 10 σ</code> 拒絕</td><td>正常通過</td></tr>
+<tr><td><strong>No Baseline 代表</strong></td><td><strong>預期行為，不是故障</strong></td><td><strong>故障，要查</strong></td></tr>
+<tr><td>靈敏度</td><td>最好（零背景）</td><td>差，且與氣體流量本身的變動競爭</td></tr>
+</tbody></table></div>
+<p><strong>判斷方式</strong>：看這台機器該 recipe 的氣體表。被監看的元素（N 或 O）有沒有出現在 MFC 的設定裡？有 → regime 2；沒有 → regime 1。同一台機器的不同 step 可以分屬不同 regime，這時以<strong>要監測的那個 step</strong> 為準。</p>
+<blockquote><p><strong>兩個 regime 是兩個不同的偵測問題，不是同一題的難易差別。</strong> 把 regime 1 的項目套上 regime 2 的判準（% of baseline），得到的不是比較不準的答案，而是沒有意義的答案——分母本來就該是零。</p></blockquote>
+<hr>
+<h2 id="2-兩個孿生失敗">2. 兩個孿生失敗</h2>
+<p>兩者同源：<strong>Golden Run baseline 同時被當成「參考點」和「除數」用</strong>。只有除數需要平均值明顯離零。</p>
+<h3 id="21-no-baseline誠實的拒絕">2.1 No Baseline：誠實的拒絕</h3>
+<p>程式在擷取結束時對每一筆 ratio 做這個檢查（<code>LeakMonitorEngine.FinalizeCapture</code>）：</p>
+<pre><code>mean &lt;= 0  或  mean &lt; 10 × σ   →  拒絕，記 GoldenRunRatioUnstableBaseline</code></pre>
+<p>它保護的是<strong>除法</strong>，不是偵測：<code>% of baseline</code>、<code>warn 1.05×</code>／<code>alarm 1.12×</code> 這種倍率門檻、以及洩漏率校正的 <code>x = value / baseMean − 1</code>，全都要除以這個平均值。平均值若不明顯離零，這些量算出來只是雜訊的正負號。</p>
+<p>所以在 regime 1，一條<strong>沒有洩漏就不存在的譜線</strong>，用 <code>PeakHeight</code> 或 <code>Integral</code>（會減掉連續背景）萃取時，平均值本來就在零附近，甚至因為連續背景是凸的、線性內插畫出來的基線壓在上面而<strong>系統性為負</strong>——它一定被拒絕。這時：</p>
+<ul>
+<li>程式邏輯是對的（它不該讓你除以零）；
+</li>
+<li>但<strong>模型是錯位的</strong>（這個場景根本不該用除法）；
+</li>
+<li>正確的處置在 <a href="#5-regime-1-的建議做法">第 5 節</a>，不是放寬檢查。
+</li>
+</ul>
+<h3 id="22-假-baseline通過每一道-gate量到的是背景">2.2 假 baseline：通過每一道 gate，量到的是背景</h3>
+<p><code>RawMean</code> 模式<strong>什麼都不減</strong>，所以它讀到的是「連續背景 + 譜線」。在 regime 1，譜線不存在，讀到的就是純連續背景——一個又大又穩的數字（實測案例：440.7 nm 無譜線處為 <code>3745 ± 19</code>）。於是：</p>
+<ul>
+<li><code>mean &gt; 10 σ</code> <strong>輕鬆通過</strong>（3745 / 19 ≈ 197）；
+</li>
+<li>SNR 檢查<strong>完全不作用</strong>（<code>RawMean</code> 不估雜訊，<code>LineMeasurement.Snr</code> 回傳 <code>NaN</code>，而低訊號判斷只在 <code>!IsNaN(Snr)</code> 時成立）；
+</li>
+<li>畫面上得到一筆平均值漂亮、σ 極小的 baseline；
+</li>
+<li><strong>它量的是背景，不是那個元素。而這件事不會亮任何紅字。</strong>
+</li>
+</ul>
+<p><strong>現場檢查法</strong>（不需要停機）：</p>
+<ol>
+<li>到 <strong>Recordings</strong> 分頁，載入一段含電漿的錄製。
+</li>
+<li>在 line view 同時加入 <strong>該監看波長</strong> 與 <strong>一段確定沒有譜線的鄰近波長</strong>（例如 440.7 nm；catalog 給不出這種波長，要用手打，這正是手打欄位存在的理由）。
+</li>
+<li>勾選 <strong>Normalize</strong>（各自除以自身平均）。
+</li>
+<li><strong>兩條線若形狀一致、相對散度也一致 → 這筆 ratio 沒有在量該元素</strong>，它量的是連續背景。
+</li>
+</ol>
+<p><strong>數值判準</strong>：該 ratio 的 baseline 平均值，與鄰近無譜線波長的 <code>RawMean</code> 是否落在同一量級且同步變動。是 → 假 baseline。</p>
+<hr>
+<h2 id="3-對照表擷取後跳出的那句話">3. 對照表：擷取後跳出的那句話</h2>
+<p>程式只會給出下面這幾句（<code>LeakMonitorEngine.ReportDroppedRatio</code> 及兩個後續檢查）。找到你抄下來的那一句，往右讀。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>對話框／紀錄裡的句子（節錄）</th><th>它實際在說什麼</th><th>動作</th><th>怎麼確認有效</th></tr></thead>
+<tbody>
+<tr><td><code>fell outside the spectrometer wavelength range in every frame</code></td><td>監看波長不在這次的光譜軸上</td><td>查光譜軸。紀錄裡若同時有 <code>axis 1904 → 1000, axis 179.8–850.3 → 200–799.4 nm</code>，代表這是<strong>測試模式的合成軸</strong>，不是真的量測</td><td>重新擷取後這句消失；<code>DevicePanel</code> 頁尾沒有紅色 <code>Test Mode</code></td></tr>
+<tr><td><code>no frame passed the plasma-present gate</code></td><td><strong>不是「沒有光」</strong>，是記錄器的觸發量測沒跨過門檻。電漿閘刻意與記錄器觸發同一個量測</td><td>對照 Configuration 的 <code>TriggerMode</code>／<code>TriggerPercentile</code>／<code>SaveStartThresholdIntensity</code></td><td>資料夾 <code>YYYYMM\DD\</code> 下有 <code>P_OES1_*.csv</code> 正在長大——這等同於閘門是開的</td></tr>
+<tr><td><code>no frame produced a usable value while the gate was open</code></td><td>絕對強度模式：閘門開著但算不出值</td><td>檢查該譜線的萃取視窗與波長是否在軸上</td><td>同上</td></tr>
+<tr><td><code>the reference line X never registered</code></td><td>比值模式的<strong>分母</strong> NaN 或 ≤ 0。凸型連續背景會讓減背景的分母系統性為負</td><td>分母改用 <code>RawMean</code>，或換一條參考線（<code>ReferenceLineCatalog</code>）</td><td>下次擷取該項有 baseline，且分母平均值為正</td></tr>
+<tr><td><code>stayed below the SNR floor … in every usable frame</code></td><td><strong>只可能來自分母</strong>——<code>RawMean</code> 分子的 SNR 是 <code>NaN</code>，不參與判斷</td><td>先動分母的萃取模式，<strong>不要先動 <code>Min SNR</code></strong></td><td>下一句（<code>only k of m</code>）的比例過半</td></tr>
+<tr><td><code>only k of m frames cleared the SNR floor</code></td><td>譜線在雜訊邊緣游走，通過率不足一半（<code>MinBaselineAcceptFraction = 0.5</code>）</td><td>同上；若確認是分子太弱，回到 <a href="#5-regime-1-的建議做法">第 5 節</a>，不是調低門檻</td><td>同上</td></tr>
+<tr><td><code>no frame had both lines valid</code></td><td>混合型：分子與分母各有一部分無效</td><td>先把分母解決，再看剩下什麼</td><td>句子換成更明確的另一句</td></tr>
+<tr><td><code>the ratio was disabled for the whole capture</code></td><td>設定問題，不是量測問題</td><td>Ratio Setup 勾選啟用，重新擷取</td><td>—</td></tr>
+<tr><td><code>no spectrum frames were processed during the capture window</code></td><td>整段沒有任何幀進到引擎：沒在 acquiring，或 Leak Monitor 未啟用</td><td>確認 Start 已按下、<code>leakMonitor.enabled = true</code></td><td>這屬於「整次失敗」，不是部分失敗</td></tr>
+<tr><td><strong><code>mean X ± Y is not clear of zero (needs mean &gt; 10 σ)</code></strong></td><td><strong>在 regime 1 這是預期結果</strong>，不是故障</td><td>到 <a href="#5-regime-1-的建議做法">第 5 節</a>。在 regime 2 出現才要查訊號為何消失</td><td>—</td></tr>
+</tbody></table></div>
+<blockquote><p><strong><code>Min SNR</code> 幾乎永遠不是第一個該動的東西。</strong> 你目前的設定裡分子全是 <code>RawMean</code>，它的 SNR 是 <code>NaN</code>，所以 <code>Min SNR</code> 對分子完全沒有作用——調它只會改變分母的判斷。</p></blockquote>
+<hr>
+<h2 id="4-交叉表同一句話在不同模式下的意義">4. 交叉表：同一句話在不同模式下的意義</h2>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th><code>PeakHeight</code> / <code>Integral</code>（減連續背景）</th><th><code>RawMean</code>（什麼都不減）</th></tr></thead>
+<tbody>
+<tr><td>SNR 是否存在</td><td>有（值 ÷ 局部連續背景雜訊）</td><td><strong>沒有</strong>（<code>NaN</code>）——SNR 相關的兩句話對它<strong>不可能出現</strong></td></tr>
+<tr><td>regime 1 的平均值</td><td>約為零，或系統性為負</td><td>大而穩，但那是<strong>連續背景</strong></td></tr>
+<tr><td><code>mean &gt; 10 σ</code> 檢查</td><td><strong>必然失敗</strong> → No Baseline</td><td><strong>必然通過</strong> → 有 baseline，但可能是假的</td></tr>
+<tr><td>帶 pedestal？</td><td>否</td><td>是</td></tr>
+<tr><td><code>ValueHasPedestal</code> 判定</td><td>否</td><td><strong>僅在 <code>AbsoluteIntensity</code> 模式下為真</strong>（見 <a href="#7-已知盲點目前診斷不到的東西">第 7 節</a>）</td></tr>
+<tr><td>門檻怎麼算</td><td><code>max(倍率×mean, mean + 3σ)</code></td><td>pedestal 成立時只用 σ 項；不成立時仍走倍率</td></tr>
+</tbody></table></div>
+<p><strong>兩個直接可用的推論</strong>：</p>
+<ul>
+<li>看到 SNR 相關的句子 → 問題<strong>一定</strong>在分母（比值模式），或該項不是 <code>RawMean</code>。
+</li>
+<li>看到 <code>mean … not clear of zero</code> → 分子<strong>一定</strong>是減背景的模式；在 regime 1 這是正確拒絕。
+</li>
+</ul>
+<hr>
+<h2 id="5-regime-1-的建議做法">5. regime 1 的建議做法</h2>
+<p><strong>主推：<code>MonitorMode = AbsoluteIntensity</code> + 分子 <code>LineExtractMode = RawMean</code>。</strong></p>
+<p>這是目前引擎中<strong>唯一從擷取、判讀、顯示到洩漏率校正都一致</strong>的路徑。它讓 <code>RatioDefinition.ValueHasPedestal</code> 成立，於是：</p>
+<ul>
+<li><strong>門檻</strong>：忽略 <code>WarnFactor</code>／<code>AlarmFactor</code>（對 pedestal 而言 1.05× 是幾十個 σ），只用 <code>mean + SigmaWarn·σ</code>（預設 3σ／6σ）；
+</li>
+<li><strong>顯示</strong>：% -of-baseline 欄位改成 σ 分數 <code>100 + (20/SigmaWarn)·(ema − baseMean)/σ</code>——基準仍是 100，一個 warn-σ 落在 120，所以 100/120/150 三條參考線照用；
+</li>
+<li><strong>趨勢斜率</strong>：讀數為 σ/min；
+</li>
+<li><strong>洩漏率校正</strong>：擬合<strong>絕對增量</strong> <code>Δ = value − baseMean</code>，而不是分數增量；
+</li>
+<li><strong>CSV 欄位名</strong>：<code>_sigmaScore</code>（不是 <code>_pctBaseline</code>），所以一年後打開檔案的人知道那一欄是什麼。
+</li>
+</ul>
+<p><strong>代價，要寫在交接文件上</strong>：</p>
+<ul>
+<li>不再除以 Ar 參考線，<strong>失去電漿條件漂移的抵消</strong>。需要穩定的操作點，並且要比比值模式<strong>更常重新擷取 Golden Run</strong>。
+</li>
+<li>曝光時間／平均次數／背景移除開關一改，絕對強度就整個重新縮放。引擎會記 <code>LeakMonitorAcquisitionMismatch</code> 並在 Leak Monitor 橫幅提示，看到就要重新擷取。
+</li>
+</ul>
+<p><strong>明確不建議：<code>MonitorMode = Ratio</code> + 分子 <code>RawMean</code>。</strong> 它可以設定、也會通過所有檢查，但它落在 <code>ValueHasPedestal</code> 的判斷式之外（該判斷式只涵蓋絕對強度模式），因此得到的是「連續背景 ÷ Ar」的百分比：數字看得懂，語意卻不是「該元素相對基準上升了幾 %」。實務後果是門檻被 pedestal 稀釋——以實測基準 <code>0.02895 ± 0.00024</code>（mean/σ ≈ 120）為例，<code>warn 1.05×</code> 等於 <code>mean + 6σ</code>，比設定上寫的 <code>SigmaWarn = 3</code> 嚴格一倍，而你不會從任何畫面看出這件事。</p>
+<p><strong><code>AbsoluteIntensity</code> + <code>PeakHeight</code></strong>（真的減掉連續背景、平均值誠實地趨近零）在目前版本<strong>必定</strong>被 <code>mean &gt; 10 σ</code> 拒絕。這是已知限制，見 <a href="#7-已知盲點目前診斷不到的東西">第 7 節</a>。</p>
+<hr>
+<h2 id="6-regime-2-的判斷準則與調校">6. regime 2 的判斷準則與調校</h2>
+<p>製程刻意通入被監看元素時，該譜線的存在不構成漏氣證據。要先回答一個問題：</p>
+<blockquote><p><strong>漏氣預期造成的增量，有沒有大過製程氣體本身造成的變動？</strong></p></blockquote>
+<p>用一個可以現場估的比值：</p>
+<pre><code>判斷比 =  漏氣預期增量 ÷ (該譜線在正常運轉下的 σ)</code></pre>
+<p>分母直接讀 Golden Run 擷取後那筆 baseline 的 σ；分子若沒有校正漏，用「可接受漏率造成的分壓」除以「製程氣體分壓」乘上目前讀數估算即可，量級對就夠了。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>判斷比</th><th>結論</th><th>做法</th></tr></thead>
+<tbody>
+<tr><td>明顯 &gt; 6</td><td>可以監測</td><td>用 % of baseline，門檻照常</td></tr>
+<tr><td>3 – 6</td><td>勉強，容易誤報／漏報</td><td>收緊 <code>WarnFactor</code>／<code>AlarmFactor</code>，同時<strong>拉長</strong> <code>ConfirmSeconds</code>（預設 15 s），倚賴引擎的即時 σ 加寬去吸收氣體流量抖動</td></tr>
+<tr><td>&lt; 3</td><td><strong>這個 step 不要用這條線判漏</strong></td><td>改看<strong>另一個元素</strong>（通 N₂ 就看 O，通 O₂ 就看 N），或只在<strong>不通該氣體的 step</strong> 監測</td></tr>
+</tbody></table></div>
+<p><strong>兩個常犯的錯</strong>：</p>
+<ul>
+<li>用同一組 ratio 涵蓋整個 recipe。通氣與不通氣的 step 屬於不同 regime，同一個基準值不可能同時對兩者成立。正確做法是為要監測的 step 各自擷取 Golden Run，並在切換 recipe 時一併切換基準值（引擎會自動配對綁定的校正）。
+</li>
+<li>只監測氮。空氣是氮<strong>加</strong>氧，只有氮的項目時，通 N₂ 的 step 就完全沒有第二意見。至少配一條氧或 OH 的項目當獨立判斷。
+</li>
+</ul>
+<hr>
+<h2 id="7-已知盲點目前診斷不到的東西">7. 已知盲點：目前診斷不到的東西</h2>
+<p>以下是目前版本<strong>測不到或無法區分</strong>的事。列出來是為了讓現場知道哪一格只能靠人工判讀，不是待辦清單。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>盲點</th><th>後果</th><th>現在只能怎麼辦</th></tr></thead>
+<tbody>
+<tr><td>擷取診斷把「分母系統性為負」與「分母 NaN」併成同一個計數（<code>ReferenceMissing</code>）</td><td>兩種完全不同的原因給出同一句話</td><td>到 Recordings 看該分母波長的原始值是負的還是缺的</td></tr>
+<tr><td><code>mean &gt; 10 σ</code> 的檢查只在整個擷取窗結束後才做</td><td>設 120 秒就要等滿 120 秒才知道失敗</td><td>先用短擷取（10 秒）試一次，確認會過再擷取正式的</td></tr>
+<tr><td>沒有任何地方記錄「這次擷取電漿閘開了幾成」</td><td>「部分幀被丟掉」看不出來</td><td>對照同時段 <code>P_OES1_*.csv</code> 的列數與擷取秒數 × 幀率</td></tr>
+<tr><td><strong><code>ValueHasPedestal</code> 不涵蓋 <code>Ratio</code> + <code>RawMean</code></strong></td><td>帶 pedestal 的量走一般百分比與倍率門檻，語意與門檻都被稀釋（見 <a href="#5-regime-1-的建議做法">第 5 節</a>）</td><td>改用 <code>AbsoluteIntensity</code> + <code>RawMean</code>；或知道那個百分比不是「該元素上升幾 %」</td></tr>
+<tr><td><code>AbsoluteIntensity</code> + <code>PeakHeight</code> 在 regime 1 必定被拒</td><td>誠實的零基線目前無法被接受</td><td>用 <code>RawMean</code> 走 pedestal 路徑</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="附錄-a本機現況核對與處方">附錄 A：本機現況核對與處方</h2>
+<p>依 <code>%AppData%\OES_Leak_Monitor\settings.json</code>（作用中基準值 <code>Recipe Ar</code>，2026-08-14 擷取，8 筆 baseline）。</p>
+<blockquote><p><strong>照做之後必須重新擷取 Golden Run。</strong> 更動 <code>MonitorMode</code> 會讓 <code>Recipe Ar</code> 裡對應那筆 baseline 被判定為「量的是不同的東西」，開機時會記 <code>LeakMonitorBaselineMismatch</code>，該項在重新擷取前不參與警報。紀錄裡已有兩筆同類前例（2026-08-14 22:03，<code>uN2 335.5</code>／<code>uN2 324.7</code>）。<strong>這是預期後果，不是新的故障。</strong></p></blockquote>
+<div class="tablewrap"><table>
+<thead><tr><th>key</th><th>名稱</th><th>現況</th><th>啟用</th><th>判讀語意</th><th>建議</th><th>立即後果</th></tr></thead>
+<tbody>
+<tr><td><code>R_ec3adb8f</code></td><td>N2 337.1 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td><strong>pedestal 走一般百分比</strong>，門檻實為 6σ 而非 3σ</td><td>改 <code>AbsoluteIntensity</code>（分子保持 <code>RawMean</code>）</td><td>該項 baseline 失效，須重擷取</td></tr>
+<tr><td><code>R_54c914c8</code></td><td>N2 337.1 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>是</td><td><strong>正確</strong>：σ 分數、σ 門檻、Δ 校正</td><td>維持。這是 337.1 目前唯一語意正確的來源</td><td>無</td></tr>
+<tr><td><code>R_7a6c5d0f</code></td><td>uN2 335.5 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td>同 <code>R_ec3adb8f</code></td><td>改 <code>AbsoluteIntensity</code>，或另建一條 abs 版本並停用本項</td><td>同上</td></tr>
+<tr><td><code>R_353b7e10</code></td><td>N2 353.7 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td>同上</td><td>同上</td><td>同上</td></tr>
+<tr><td><code>R_7c40d2f9</code></td><td>NO 237 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>同上</td><td>若要啟用，直接建成 <code>AbsoluteIntensity</code></td><td>—</td></tr>
+<tr><td><code>R_54858314</code></td><td>NO 237 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>否</td><td>正確</td><td>需要第二個元素的獨立意見時啟用這條</td><td>—</td></tr>
+<tr><td><code>R_a2ff1794</code></td><td>N2+ 391.4 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>同上</td><td>同 <code>R_7c40d2f9</code></td><td>—</td></tr>
+<tr><td><code>R_df502a98</code></td><td>N2+ 391.4 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>否</td><td>正確</td><td>需要時啟用</td><td>—</td></tr>
+<tr><td><code>R_e3b669d5</code></td><td>uN2 324.7 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>同上</td><td>同 <code>R_7c40d2f9</code></td><td>—</td></tr>
+</tbody></table></div>
+<p><strong>兩個與上表無關、但一起看才看得出來的觀察</strong>：</p>
+<ul>
+<li>這九筆的 <code>MinSnr</code>（2 或 5）<strong>目前幾乎不起作用</strong>：分子全是 <code>RawMean</code>（SNR 為 <code>NaN</code>），所以它只在比值模式下作用於分母 <code>Ar 750.4 PeakHeight</code>，在絕對強度模式下完全不作用。調它之前先確認你想影響的是哪一條線。
+</li>
+<li><strong>沒有任何一筆 ratio 監測氧。</strong> <code>MonitoredWavelengths</code> 有 308.9／309.3 nm（OH），但那只進到強度 CSV 與趨勢圖，不構成判斷。空氣漏是氮加氧；目前所有判斷都建立在氮上，通 N₂ 的 step 會完全失去獨立意見。建議至少建一條 <code>AbsoluteIntensity</code> + <code>RawMean</code> 的 O 或 OH 項目。
+</li>
+</ul>
+<hr>
+<h2 id="附錄-b常數與它們的出處">附錄 B：常數與它們的出處</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>常數</th><th>值</th><th>在哪</th><th>它保護什麼</th></tr></thead>
+<tbody>
+<tr><td><code>MinBaselineMeanToSigma</code></td><td>10</td><td><code>LeakMonitorEngine</code></td><td>除法：<code>% of baseline</code>、倍率門檻、洩漏率擬合的分母</td></tr>
+<tr><td><code>MinBaselineAcceptFraction</code></td><td>0.5</td><td><code>LeakMonitorEngine</code></td><td>防止只用「向上雜訊」那一小撮通過的幀去組成基準</td></tr>
+<tr><td><code>RatioDefinition.MinSnr</code></td><td>預設 5</td><td><code>LeakMonitorSettings</code></td><td>兩條線是否可信；對 <code>RawMean</code> 無效</td></tr>
+<tr><td><code>SigmaWarn</code> / <code>SigmaAlarm</code></td><td>3 / 6</td><td><code>LeakMonitorSettings</code></td><td>σ 門檻；pedestal 成立時是<strong>唯一</strong>的門檻</td></tr>
+<tr><td><code>WarnFactor</code> / <code>AlarmFactor</code></td><td>本機 1.05 / 1.12</td><td><code>settings.json</code></td><td>倍率門檻；pedestal 成立時被忽略</td></tr>
+<tr><td><code>ConfirmSeconds</code></td><td>15 s</td><td><code>LeakMonitorSettings</code></td><td>把突波和洩漏分開</td></tr>
+<tr><td><code>GoldenRunCaptureSeconds</code></td><td>本機 120 s</td><td><code>settings.json</code></td><td>擷取窗長度</td></tr>
+<tr><td>擷取期間的電漿地板</td><td>站下（floor = 0）</td><td><code>LeakMonitorEngine.ProcessSample</code></td><td>讓上一份 Golden Run 的地板不會擋住新的擷取</td></tr>
+</tbody></table></div>
+<p>門檻的完整式子：<code>Warning</code> 觸發於 <code>max(WarnFactor × mean, mean + SigmaWarn × σ)</code>；<code>ValueHasPedestal</code> 成立時倍率項被丟棄。</p>
+</main>
+</div>
+</body>
+</html>
