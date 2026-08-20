@@ -159,10 +159,20 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _bannerDirty = false;
     }
 
+    /// <summary>
+    /// The banner sentence. Deliberately names no species: what a leak actually moves depends on
+    /// the process — one machine's known-leak measurement put the whole response in nitrogen with
+    /// oxygen not moving at all — and a recipe that admits the watched gas changes it again.
+    /// Naming O₂ told an operator to look for something the tool may not be watching.
+    /// <para>It also stops short of asserting a leak. The instrument measures a sustained
+    /// deviation from a Golden Run; that the chamber is leaking is the conclusion, and it belongs
+    /// to whoever checks. Saying "suspected" every time had the opposite problem — a red banner
+    /// that always hedges is one that gets read as "here we go again".</para>
+    /// </summary>
     public string OverallText => _overallState switch
     {
-        LeakAlarmLevel.Alarm   => "ALARM — suspected O₂ / air leak",
-        LeakAlarmLevel.Warning => "WARNING — oxygen ratio rising",
+        LeakAlarmLevel.Alarm   => "ALARM — leak signal confirmed",
+        LeakAlarmLevel.Warning => "WARNING — leak signal rising",
         LeakAlarmLevel.Normal  => "OK — within baseline",
         _                      => "Idle — waiting for plasma / baseline",
     };
@@ -316,7 +326,8 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _dispatcher.BeginInvoke(() =>
         {
             if (e.NewLevel == LeakAlarmLevel.Alarm)
-                StatusMessage = "ALARM raised — check for an air / O₂ leak.";
+                StatusMessage = "ALARM raised — a monitored ratio stayed above the alarm " +
+                                "threshold. Check the chamber.";
             else if (e.NewLevel == LeakAlarmLevel.Normal && e.OldLevel != LeakAlarmLevel.Idle)
                 StatusMessage = "Recovered to baseline.";
         });

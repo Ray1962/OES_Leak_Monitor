@@ -22,7 +22,7 @@
 
 ## 1. 這個軟體在做什麼
 
-OES Leak Monitor 用**光學發射光譜（OES）**即時偵測製程腔體的**空氣／氧氣洩漏**。
+OES Leak Monitor 用**光學發射光譜（OES）**即時偵測製程腔體的**空氣洩漏**。
 
 核心方法是 **actinometry（比值法）**：
 
@@ -430,8 +430,8 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 |---|---|---|
 | `Idle — waiting for plasma / baseline` | 灰 | 沒電漿、沒基準線，或監控被關閉 |
 | `OK — within baseline` | 綠 | 在基準線範圍內 |
-| `WARNING — oxygen ratio rising` | 橘 | 有比值持續超過警告門檻 |
-| `ALARM — suspected O₂ / air leak` | 紅 | 達警報條件（**鎖存**，必須人工 Acknowledge） |
+| `WARNING — leak signal rising` | 橘 | 有比值持續超過警告門檻 |
+| `ALARM — leak signal confirmed` | 紅 | 達警報條件（**鎖存**，必須人工 Acknowledge） |
 
 橫幅下方可能出現兩行小字：
 - **測試模式註記** —— 提醒現在是模擬資料。
