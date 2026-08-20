@@ -33,7 +33,23 @@ readings mean something relative to; the tool has no absolute scale of its own.
 
 **Golden Run baseline**:
 One ratio's share of a Golden Run — its mean and scatter. A ratio can lack one while
-others have theirs, and it is then unjudgeable rather than normal.
+others have theirs, and it is then unjudgeable rather than normal. It is asked to be two
+things at once: the reference point a reading is compared against, and the divisor that
+every percentage, threshold factor and leak-rate fit divides by. Only the second needs a
+mean clear of zero — which is why a baseline can be refused for a line that is behaving
+exactly as it should.
+
+**Absent-line baseline**:
+A Golden Run baseline whose leak-free value is the noise floor, because the species being
+watched is not in the chamber unless there is a leak. It is this tool's ordinary condition
+rather than a failed capture: what is being detected is the line's appearance, not its
+change. Such a quantity cannot be judged as a fraction of its own mean, so it belongs in
+σ units.
+
+**Reactant-gas regime**:
+A recipe that deliberately admits the species being watched. The line is then present with
+no leak, so its presence is not evidence of one, and a leak shows only as a small increment
+on a large signal.
 
 **Plasma gate**:
 The test for whether a frame is worth judging at all, phrased as "would the recorder be
