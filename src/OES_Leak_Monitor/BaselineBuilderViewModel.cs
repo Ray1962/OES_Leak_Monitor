@@ -88,7 +88,6 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
     private readonly string _defaultDataDirectory;
     private readonly SystemLogger? _log;
 
-    private readonly ObservableCollection<BuilderFileViewModel> _files = new();
     private CancellationTokenSource? _scanCts;
     private bool _engineerPlus;
     private bool _busy;
@@ -104,8 +103,11 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
         _log = log;
 
         Files = new ObservableCollection<BuilderFileViewModel>();
-        EndDate = DateTime.Today;
-        StartDate = DateTime.Today.AddDays(-14);
+        // Straight to the fields: the properties rescan on set, and a rescan before the commands
+        // exist walks into RaiseCanExec with every one of them still null. The single Refresh()
+        // at the end of this constructor is the one that is meant to happen.
+        _endDate = DateTime.Today;
+        _startDate = DateTime.Today.AddDays(-14);
 
         TrendModel = NewTrendModel();
 
