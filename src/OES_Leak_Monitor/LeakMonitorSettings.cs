@@ -227,6 +227,42 @@ public sealed class PlasmaFloorEntry
 /// A leak-free reference capture for one recipe: per-ratio baseline mean/sigma plus the
 /// minimum reference intensity that counts as "plasma on" for that recipe, per reference line.
 /// </summary>
+/// <summary>Where a Golden Run's numbers came from.</summary>
+public sealed class GoldenRunSource
+{
+    public const string LiveCapture = "LiveCapture";
+    public const string OfflineBuild = "OfflineBuild";
+
+    /// <summary><see cref="LiveCapture"/> — a minute in front of the tool — or
+    /// <see cref="OfflineBuild"/>, pooled from recordings already on disk.</summary>
+    public string Kind { get; set; } = LiveCapture;
+
+    /// <summary>The recordings and windows an offline build drew on. Empty for a live capture,
+    /// whose window is simply the time it was taken.</summary>
+    public List<GoldenRunSourceWindow> Files { get; set; } = new();
+
+    /// <summary>Recordings the consistency check set aside, and why. Kept because that judgement
+    /// leaves no other trace, and "which runs did we decide not to trust" is exactly what gets
+    /// asked when a baseline is later doubted.</summary>
+    public List<GoldenRunSourceExclusion> Excluded { get; set; } = new();
+}
+
+/// <summary>One recording and the window taken from it. The path is absolute and stays as it was
+/// written: this is a record of what happened, not a reference to be resolved later.</summary>
+public sealed class GoldenRunSourceWindow
+{
+    public string Path { get; set; } = "";
+    public DateTime FromUtc { get; set; }
+    public DateTime ToUtc { get; set; }
+    public int FramesAccepted { get; set; }
+}
+
+public sealed class GoldenRunSourceExclusion
+{
+    public string Path { get; set; } = "";
+    public string Reason { get; set; } = "";
+}
+
 public sealed class GoldenRun
 {
     public string Name { get; set; } = "";
@@ -265,6 +301,11 @@ public sealed class GoldenRun
     public AcquisitionFingerprint? Acquisition { get; set; }
 
     public List<GoldenRunRatioBaseline> Baselines { get; set; } = new();
+
+    /// <summary>Where these numbers came from — a live capture or an offline build, and in the
+    /// second case which recordings and windows. Null for a run stored before this existed, which
+    /// is the only thing a missing Source now means.</summary>
+    public GoldenRunSource? Source { get; set; }
 
     public GoldenRunRatioBaseline? Find(string key) =>
         Baselines.FirstOrDefault(b => b.Key == key);

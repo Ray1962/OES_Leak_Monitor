@@ -199,7 +199,7 @@ public sealed class LeakMonitorEngine : IDisposable
 
     // Bumped when a change alters the units/scale of an extracted value; stamped onto every
     // captured baseline. See GoldenRunRatioBaseline.ExtractionRevision.
-    private const int CurrentExtractionRevision = 1;
+    public const int CurrentExtractionRevision = 1;
 
     private readonly object _gate = new();
     private readonly LeakMonitorSettings _settings;
@@ -243,11 +243,11 @@ public sealed class LeakMonitorEngine : IDisposable
     private double _captureSeconds;
     private bool _captureHasStart;
     private DateTime _captureStart, _captureLast;
-    private readonly Dictionary<string, Accum> _captureAccum = new();
+    private readonly Dictionary<string, RunningStats> _captureAccum = new();
     private readonly Dictionary<string, CaptureDiag> _captureDiag = new();
     // Reference-line readings during a capture, keyed by LineRegion.MeasurementKey: ratios that
     // read the same line the same way pool into one floor, ratios that don't never mix.
-    private readonly Dictionary<string, Accum> _captureDenoms = new();
+    private readonly Dictionary<string, RunningStats> _captureDenoms = new();
 
     // Plasma-present floor per ratio key, resolved from the active Golden Run's per-reference
     // floors. Rebuilt in ApplyGoldenRun — the only place either the baseline or _defs changes.
@@ -261,7 +261,7 @@ public sealed class LeakMonitorEngine : IDisposable
     private double _calSeconds;
     private bool _calHasStart;
     private DateTime _calStart, _calLast;
-    private readonly Dictionary<string, Accum> _calAccum = new();
+    private readonly Dictionary<string, RunningStats> _calAccum = new();
 
     public LeakMonitorEngine(LeakMonitorSettings settings, SystemLogger? systemLogger = null)
     {
@@ -426,23 +426,11 @@ public sealed class LeakMonitorEngine : IDisposable
                     continue;
                 }
 
-                var numM = LineIntensityExtractor.Extract(wl, inten, def.Numerator);
-                var denM = LineIntensityExtractor.Extract(wl, inten, def.Denominator);
-                double num = numM.Value, den = denM.Value;
-
                 bool absolute = def.MonitorMode == MonitorMode.AbsoluteIntensity;
                 // An unusable / unmeasurable gate leaves the ratio ungated rather than dark:
                 // "we can't tell" is not "plasma off", and a silently dead ratio is the failure
                 // mode this gate exists to remove. Said once in the log.
                 if (triggerPlasma is null) WarnGateUnusableOnce();
-                bool gateOpen = triggerPlasma ?? true;
-                // Ratio mode additionally needs its own reference line, because it divides by it.
-                // But the reference check alone is not a plasma test: a frame the spectrometer
-                // returns blank still carries ~75 counts at the reference wavelength, which
-                // clears "> 0" — and clears a PlasmaPresentFloor derived from a capture that
-                // those same blank frames contaminated. Ten such frames in one real run poisoned
-                // a Golden Run baseline (σ 2.6× the mean) and skewed the offline analysis before
-                // anyone noticed. Both conditions now have to hold.
                 // The floor is this ratio's own reference line's leak-free level, not a level
                 // pooled across every ratio: a floor derived from a brighter reference sits
                 // above a fainter one's normal reading and closes that ratio permanently.
@@ -452,14 +440,12 @@ public sealed class LeakMonitorEngine : IDisposable
                 // itself in FinalizeCapture().
                 double floor = _capturing || absolute ? 0.0
                     : _floorByRatio.TryGetValue(mon.Key, out var f) ? f : 0.0;
-                bool plasma = absolute
-                    ? gateOpen
-                    : gateOpen && !double.IsNaN(den) && den > 0 && den > floor;
-                mon.Update(numM, denM, sample.Timestamp, plasma);
-
-                // The monitored quantity: the signal/reference ratio, or — in absolute mode —
-                // the signal line's intensity (the reference is not involved at all).
-                double value = absolute ? num : (den != 0 ? num / den : double.NaN);
+                // What this frame says about this ratio, and whether it may feed a baseline.
+                // Shared with the offline builder — see RatioFrameSampling for why that must be
+                // one definition and not two.
+                var fs = RatioFrameSampling.Evaluate(def, wl, inten, triggerPlasma, floor);
+                mon.Update(fs.Numerator, fs.Denominator, sample.Timestamp, fs.PlasmaPresent);
+                double value = fs.Value;
 
                 if (_capturing)
                 {
@@ -467,21 +453,12 @@ public sealed class LeakMonitorEngine : IDisposable
                     // that ends the capture with no samples can be explained in the log.
                     var diag = GetDiag(mon.Key);
                     diag.Frames++;
-                    if (double.IsNaN(num)) diag.NumeratorMissing++;
-                    if (!gateOpen) diag.GateClosed++;
-                    if (!absolute && (double.IsNaN(den) || den <= 0)) diag.ReferenceMissing++;
-                    if (plasma && (absolute || den != 0) && !double.IsNaN(value))
+                    if (fs.NumeratorMissing) diag.NumeratorMissing++;
+                    if (!fs.GateOpen) diag.GateClosed++;
+                    if (fs.ReferenceMissing) diag.ReferenceMissing++;
+                    if (fs.Evaluable)
                     {
-                        // Mirror the runtime LowSignal gate: only frames whose lines clear the
-                        // SNR floor feed the baseline, so a near-noise capture doesn't produce
-                        // an unreliable mean/σ. MinSnr 0 disables the gate (legacy behaviour).
-                        // In absolute mode only the monitored line is judged — the reference is
-                        // not part of the measurement, so its SNR must not veto the baseline.
-                        double minSnr = def.MinSnr;
-                        bool lowSnr = minSnr > 0 &&
-                            ((!double.IsNaN(numM.Snr) && numM.Snr < minSnr) ||
-                             (!absolute && !double.IsNaN(denM.Snr) && denM.Snr < minSnr));
-                        if (lowSnr)
+                        if (fs.LowSnr)
                         {
                             diag.LowSnr++;
                         }
@@ -493,7 +470,7 @@ public sealed class LeakMonitorEngine : IDisposable
                             // recipe's plasma floor; an absolute ratio's reference is inert.
                             // Pooled by measurement key, so two ratios sharing a reference
                             // share its floor and get it from twice the frames.
-                            if (!absolute) GetDenomAccum(def.Denominator.MeasurementKey).Add(den);
+                            if (!absolute) GetDenomAccum(def.Denominator.MeasurementKey).Add(fs.Denominator.Value);
                         }
                     }
                 }
@@ -505,8 +482,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 // the pedestal. Everywhere else the fractional rise is the better-conditioned
                 // quantity (it is immune to a pure re-scaling). The fit's Absolute flag records
                 // which unit was used, and refuses a reading in the other one.
-                if (_calCapturing && mon.HasBaseline && plasma &&
-                    mon.BaselineMean > 0 && (absolute || den != 0) && !double.IsNaN(value))
+                if (_calCapturing && mon.HasBaseline && fs.Evaluable && mon.BaselineMean > 0)
                 {
                     double x = def.ValueHasPedestal
                         ? value - mon.BaselineMean
@@ -945,6 +921,9 @@ public sealed class LeakMonitorEngine : IDisposable
             CapturedUtc = DateTime.UtcNow,
             DurationSeconds = (_captureLast - _captureStart).TotalSeconds,
             Acquisition = _acquisition?.Clone(),
+            // Stamped so that a run with no Source means "stored before this existed" and
+            // nothing else — in particular, not "built offline".
+            Source = new GoldenRunSource { Kind = GoldenRunSource.LiveCapture },
         };
         // One floor per reference line at 20 % of its own leak-free level. Ordered so the same
         // capture always writes the same settings.json, which makes a diff mean something.
@@ -1506,17 +1485,17 @@ public sealed class LeakMonitorEngine : IDisposable
         return _estimator.Estimate(readings, CurrentReferenceLabels(), CurrentValueUnits());
     }
 
-    private Accum GetAccum(string key)
+    private RunningStats GetAccum(string key)
     {
         if (!_captureAccum.TryGetValue(key, out var acc))
-            _captureAccum[key] = acc = new Accum();
+            _captureAccum[key] = acc = new RunningStats();
         return acc;
     }
 
-    private Accum GetDenomAccum(string referenceKey)
+    private RunningStats GetDenomAccum(string referenceKey)
     {
         if (!_captureDenoms.TryGetValue(referenceKey, out var acc))
-            _captureDenoms[referenceKey] = acc = new Accum();
+            _captureDenoms[referenceKey] = acc = new RunningStats();
         return acc;
     }
 
@@ -1527,10 +1506,10 @@ public sealed class LeakMonitorEngine : IDisposable
         return d;
     }
 
-    private Accum GetCalAccum(string key)
+    private RunningStats GetCalAccum(string key)
     {
         if (!_calAccum.TryGetValue(key, out var acc))
-            _calAccum[key] = acc = new Accum();
+            _calAccum[key] = acc = new RunningStats();
         return acc;
     }
 
@@ -1563,27 +1542,5 @@ public sealed class LeakMonitorEngine : IDisposable
         public int Accepted;
         /// <summary>The ratio was excluded by the operator for the whole capture.</summary>
         public bool Disabled;
-    }
-
-    /// <summary>Running mean / standard deviation accumulator.</summary>
-    private sealed class Accum
-    {
-        private double _sum, _sumSq;
-        public int Count { get; private set; }
-
-        public void Add(double v) { _sum += v; _sumSq += v * v; Count++; }
-        public void Reset() { _sum = _sumSq = 0; Count = 0; }
-
-        public double Mean => Count > 0 ? _sum / Count : 0.0;
-        public double StdDev
-        {
-            get
-            {
-                if (Count < 2) return 0.0;
-                double m = Mean;
-                double var = _sumSq / Count - m * m;
-                return var > 0 ? Math.Sqrt(var) : 0.0;
-            }
-        }
     }
 }
