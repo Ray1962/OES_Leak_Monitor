@@ -29,7 +29,26 @@ exists to cancel drift in plasma conditions; where an entry does not divide, it 
 **Golden Run**:
 A named, stored record of what every ratio reads with no leak present, captured over a
 window and kept with the conditions it was captured under. It is the thing today's
-readings mean something relative to; the tool has no absolute scale of its own.
+readings mean something relative to; the tool has no absolute scale of its own. It
+describes **one** steady operating point, and one of them is active at a time — a recipe
+with several needs several, switched by hand. See `docs/adr/0001`.
+
+**Recipe / run / step**:
+A recipe is the named process program; a run is one execution of it; a step is a stretch of
+a run with its own setpoints. A Golden Run is named for the recipe but describes only one
+step of it.
+
+**Steady segment**:
+The part of a step where the operating point actually holds still — the only thing a
+baseline can be taken from. A soft start's first seconds belong to the step but not to its
+steady segment, which is why the segment sometimes has to be chosen after the fact, from
+the recorded trace, rather than by standing at the tool for a minute.
+
+**Baseline build**:
+Producing a Golden Run from recordings already on disk instead of from live frames. It
+exists for the runs a live capture cannot reach: one that ramps before it settles, and one
+too short to fill a capture window on its own, several of which are pooled into one
+baseline.
 
 **Golden Run baseline**:
 One ratio's share of a Golden Run — its mean and scatter. A ratio can lack one while

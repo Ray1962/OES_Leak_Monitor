@@ -1298,6 +1298,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _systemLogger.LogIntensityLogger("FilesChanged",
             "Intensity logger writers opened or closed",
             value: summary);
+
+        // A recording says nothing about the exposure it was taken at, so a baseline built from
+        // it later cannot answer the mismatch question. Write the conditions beside it while they
+        // are still known. Best-effort: the recording is what matters, and a missing sidecar
+        // leaves things exactly as they were before it existed.
+        var acquisition = _leakMonitorEngine.CurrentAcquisition;
+        foreach (var f in files)
+        {
+            if (string.IsNullOrEmpty(f)) continue;
+            var failure = AcquisitionSidecar.TryWrite(f, acquisition);
+            if (failure is not null)
+                _systemLogger.LogSystemEvent(LogSeverity.Warning, "AcquisitionSidecarFailed",
+                    $"Could not record the acquisition conditions beside {System.IO.Path.GetFileName(f)}: " +
+                    $"{failure}. The recording is unaffected, but a Golden Run built from it later " +
+                    "will not know the integration time or averaging it was taken at.",
+                    value: f);
+        }
         // Writers opening again is the evidence that whatever stopped the last write is over.
         if (files.Any(f => !string.IsNullOrEmpty(f)))
             _secs.ReportFault(SecsFault.DataWriteFailure, set: false);

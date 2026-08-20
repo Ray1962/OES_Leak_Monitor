@@ -131,10 +131,11 @@ td code{white-space:nowrap;}
 <a class="l3" href="#64-ratio-setup比值設定">6.4 Ratio Setup（比值設定）</a>
 <a class="l3" href="#65-wavelength-calibration波長校正">6.5 Wavelength Calibration（波長校正）</a>
 <a class="l3" href="#66-leak-calibration洩漏率校正">6.6 Leak Calibration（洩漏率校正）</a>
-<a class="l3" href="#67-replay重播驗證">6.7 Replay（重播驗證）</a>
-<a class="l3" href="#68-recordings光譜回放">6.8 Recordings（光譜回放）</a>
-<a class="l3" href="#69-ratio-review比值回放">6.9 Ratio Review（比值回放）</a>
-<a class="l3" href="#610-logs系統日誌">6.10 Logs（系統日誌）</a>
+<a class="l3" href="#67-baseline-builder離線建基準">6.7 Baseline Builder（離線建基準）</a>
+<a class="l3" href="#68-replay重播驗證">6.8 Replay（重播驗證）</a>
+<a class="l3" href="#69-recordings光譜回放">6.9 Recordings（光譜回放）</a>
+<a class="l3" href="#610-ratio-review比值回放">6.10 Ratio Review（比值回放）</a>
+<a class="l3" href="#611-logs系統日誌">6.11 Logs（系統日誌）</a>
 <a class="l2" href="#7-檔案與資料夾">7. 檔案與資料夾</a>
 <a class="l3" href="#71-位置">7.1 位置</a>
 <a class="l3" href="#72-檔名規則">7.2 檔名規則</a>
@@ -283,7 +284,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </li>
 <li><strong>警報預設被抑制</strong>（<code>SuppressAlarmsInTestMode</code>），比值照算照畫，但不會真的跳 ALARM。要演練警報，在 <strong>Replay</strong> 分頁勾 <strong>Raise leak alarms during replay</strong>。
 </li>
-<li>可以在 <strong>Replay</strong> 分頁選一個已錄製的全光譜 CSV 來取代合成波形，用真實電漿資料驗證偵測演算法（見 §6.7 與 §8.5）。
+<li>可以在 <strong>Replay</strong> 分頁選一個已錄製的全光譜 CSV 來取代合成波形，用真實電漿資料驗證偵測演算法（見 §6.8 與 §8.5）。
 </li>
 </ul>
 <hr>
@@ -389,6 +390,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </li>
 </ol>
 <p>此時洩漏偵測就已經在運作了 —— 狀態列會顯示 <code>OK — within baseline</code>。</p>
+<blockquote><p><strong>製程不是一直穩定的怎麼辦？</strong> 緩啟動（前幾秒還在爬升）或短製程（一次 run 比擷取視窗還短），現場擷取抓不到乾淨的一段。改用 <strong>Baseline Builder</strong> 分頁：事後從錄製檔上把穩定段挑出來，短製程還可以把好幾次 run 合起來（見 §6.7）。多步驟製程則需要每個 step 各一份基準、換 step 時人工切換。</p></blockquote>
 <h3 id="步驟-5選用-洩漏率定量校正">步驟 5（選用）— 洩漏率定量校正</h3>
 <p>只有需要把「比值上升」讀成 <strong>mbar·L/s</strong> 時才要做。見 §6.5。</p>
 <h3 id="步驟-6-開啟資料記錄">步驟 6 — 開啟資料記錄</h3>
@@ -577,7 +579,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <blockquote><p><strong>出廠預設是「已武裝」。</strong> 全新安裝（以及按下 <strong>Load Defaults</strong>）之後，記錄器就是 armed 的狀態， 不必先按 Start Save —— 一台不在錄的洩漏監控器，事後沒有任何東西可以回頭查，而武裝開關又在 Engineer 才進得去的 Configuration 分頁，Operator 根本看不到它。 若 <code>settings.json</code> 裡寫的是 <code>"enabled": false</code>，那是有人<strong>存過</strong>的決定，程式會照著走，不會自作主張改回來。</p></blockquote>
 <p><strong>Logger Status</strong> 區塊顯示狀態機目前狀態（<code>Idle</code> / <code>WaitingToStart</code> / <code>Saving</code> / <code>WaitingToStop</code>）與目前檔名。本專案是單一 OES，所以只會看到一列 <strong>"OES #1 file"</strong>。</p>
 <h4 id="624-測試模式光譜播放">6.2.4 測試模式光譜播放</h4>
-<p>已經搬到專屬的 <strong>Replay</strong> 分頁（見 §6.7）。驗證演算法需要的是播放控制、倍速與進度，不是一個選檔按鈕。底部動作列這裡只留一行提示。</p>
+<p>已經搬到專屬的 <strong>Replay</strong> 分頁（見 §6.8）。驗證演算法需要的是播放控制、倍速與進度，不是一個選檔按鈕。底部動作列這裡只留一行提示。</p>
 <hr>
 <h3 id="63-leak-monitor洩漏監控主畫面">6.3 Leak Monitor（洩漏監控主畫面）</h3>
 <p>這是日常監看時盯著的畫面。由上而下四層：</p>
@@ -851,9 +853,56 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <p>若某個比值的 <code>x</code> 單位在校正之後被改過（改了監控方式或擷取方式，使讀值從「帶基座」變成「不帶基座」或反之），該比值的擬合會被拒用 —— 兩種單位的斜率不能互相套用。這也代表<strong>升級到本版之後，絕對強度比值的舊校正一律要重做</strong>。</p>
 <blockquote><p>完整的數學模型與設計文件見 <code>docs/leak-rate-calibration.md</code>。</p></blockquote>
 <hr>
-<h3 id="67-replay重播驗證">6.7 Replay（重播驗證）</h3>
+<h3 id="67-baseline-builder離線建基準">6.7 Baseline Builder（離線建基準）</h3>
+<blockquote><p>權限：分頁<strong>人人可看</strong>，<strong>Save 需要 Engineer 以上</strong>。</p></blockquote>
+<p>用<strong>已經存在硬碟上的錄製檔</strong>產生 Golden Run，補現場擷取搆不到的兩種製程：</p>
+<ul>
+<li><strong>緩啟動</strong>：前幾秒功率還在爬升，穩定段從哪裡開始只有曲線看得出來，站在機台前按下 Capture 是猜的。
+</li>
+<li><strong>短製程</strong>：一次 run 比擷取視窗還短，單獨一次湊不出足夠的幀，得把好幾次合起來。
+</li>
+</ul>
+<p><strong>不適用：多步驟製程。</strong> 一個 Golden Run 只描述<strong>一個</strong>穩定操作點。要監測多個 step，就每個 step 各錄一份基準、換 step 時人工切換作用中的基準。原因與代價寫在 <code>docs/adr/0001</code>。</p>
+<h4 id="操作步驟">操作步驟</h4>
+<ol>
+<li>選日期範圍 → <strong>Refresh</strong>，列出資料夾裡的全光譜錄製（壓縮進 <code>DD.zip</code> 的也會列出來）。
+</li>
+<li>勾要用的錄製 → <strong>Scan ticked</strong>。這一步會用<strong>現在</strong>的 Ratio Setup 與波長修正把每一幀重新萃取一次，所以改過那些設定之後要重掃。這是整個流程唯一花時間的一步。
+</li>
+<li>點清單裡的一筆看它的曲線。
+</li>
+<li><strong>在圖上按住左鍵拖曳</strong>選出穩定段；也可以按 <strong>Suggest</strong> 讓它填入「最平的一段」，或直接在上方兩個框裡打數字。
+<ul>
+<li>Suggest 只找得出「這一段很平」，<strong>找不出「這一段沒有漏」</strong>——它的工作是把游標放到對的地方附近，判斷仍然是你的。</li>
+</ul>
+</li>
+<li>每個檔各自選一段（<strong>一個檔只能一段</strong>，理由見下）。
+</li>
+<li>下方填 Golden Run 名稱 → <strong>Build</strong> → 看結果面板 → <strong>Save as active baseline</strong>。
+</li>
+</ol>
+<h4 id="圖怎麼看">圖怎麼看</h4>
+<p>每條比值都除以它自己在整段錄製的中位數，所以量級差很多的線可以共用一個縱軸；軸上直接寫 <code>× own median</code>。這<strong>不是</strong> Leak Monitor 的「% of baseline」——這個分頁的前提就是基準還不存在。</p>
+<h4 id="結果面板的四件事">結果面板的四件事</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>區塊</th><th>意思</th></tr></thead>
+<tbody>
+<tr><td>接受的 baseline</td><td>每個比值的 <code>mean ± σ</code>、<code>mean/σ</code>、採用幀數</td></tr>
+<tr><td>沒拿到基準的比值</td><td>原因和現場擷取用的是同一批句子，可對照 §9.5</td></tr>
+<tr><td>被擱置的錄製</td><td>某個檔的水準和其他檔差太多會<strong>預設排除</strong>，該列變橘底。勾 <code>Keep anyway</code> 可以覆寫</td></tr>
+<tr><td>回套檢查</td><td>每個檔在<strong>自己視窗以外</strong>最遠跑到幾 σ</td></tr>
+</tbody></table></div>
+<p><strong>被擱置代表什麼</strong>：這道檢查擋的是最危險的一種錯誤——把一份<strong>當時真的在漏</strong>的錄製混進基準。一旦混進去，那個漏就變成「正常」，之後永遠測不到它。所以預設是排除、要你明確覆寫。真要覆寫也未必成功：一份差很遠的錄製合進來會讓 σ 膨脹，<code>mean &gt; 10σ</code> 那道門檻通常會自己把結果擋掉。</p>
+<p><strong>回套檢查的數字大不代表壞</strong>：視窗以外本來就是製程在變的地方。但如果那份錄製裡真的有一次洩漏，這個數字就是它。</p>
+<h4 id="為什麼一個檔只能選一段">為什麼一個檔只能選一段</h4>
+<p>兩段若是<strong>同一個</strong>操作點，它們本來就該是連續的一段（中間有空隙不影響）；若是<strong>不同</strong>操作點，把它們平均成一個 mean 正是這整件事要避免的錯誤。允許多段等於偷偷開始做多步驟支援，而且做的是錯的版本。</p>
+<h4 id="取像條件acqjson">取像條件（<code>.acq.json</code>）</h4>
+<p>錄製的 CSV 本身<strong>沒有</strong>記錄積分時間與平均次數，而絕對強度會隨這些設定整個縮放。所以現在每開一個錄製檔，app 會在它旁邊寫一個同名的 <code>{檔名}.acq.json</code> 記下當時的取像條件；壓縮成 <code>DD.zip</code> 時會一起收進去。</p>
+<p><strong>在這個功能之前錄的檔沒有這個伴隨檔</strong>，用它們建出來的基準只帶得了波長軸（軸可以從 CSV 標頭還原），<code>LeakMonitorAcquisitionMismatch</code> 也就只比得了軸。這是刻意的：猜一個積分時間填進去，會讓那道檢查在該擋的時候通過。</p>
+<hr>
+<h3 id="68-replay重播驗證">6.8 Replay（重播驗證）</h3>
 <blockquote><p>權限：<strong>Engineer 以上</strong>。</p></blockquote>
-<p>把一份<strong>已錄製的全光譜 CSV</strong> 當成即時光譜餵進整條流程 —— Leak Monitor、兩張趨勢圖、以及兩個記錄器都會收到 —— 用來在<strong>沒有硬體</strong>的情況下驗證偵測演算法。與 §6.8 Recordings 的差別：Recordings 是把資料畫出來給人看，Replay 是把資料<strong>重新跑一遍給程式判斷</strong>。</p>
+<p>把一份<strong>已錄製的全光譜 CSV</strong> 當成即時光譜餵進整條流程 —— Leak Monitor、兩張趨勢圖、以及兩個記錄器都會收到 —— 用來在<strong>沒有硬體</strong>的情況下驗證偵測演算法。與 §6.9 Recordings 的差別：Recordings 是把資料畫出來給人看，Replay 是把資料<strong>重新跑一遍給程式判斷</strong>。</p>
 <p><strong>控制項</strong></p>
 <div class="tablewrap"><table>
 <thead><tr><th>控制</th><th>說明</th></tr></thead>
@@ -888,7 +937,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <blockquote><p>⚠️ <strong>重播的第一秒會跳一次 <code>LeakMonitorAcquisitionMismatch</code>。</strong> 按下 Start 時裝置回報的還是合成軸（1000 點），基線若是從重播抓的（1896 點）就對不上。等重播的幀開始流動，比對對象換成錄檔的軸，警告就不再出現。只要基線與待驗證的錄檔來自同一台機、同一組曝光參數，這一次警告可以忽略。</p></blockquote>
 <blockquote><p>⚠️ <strong>不要拿實機抓的 Golden Run 去驗證重播。</strong> 錄檔裡沒有當初的曝光參數，重播的幀帶的是裝置目前的設定。基線請從重播本身抓 —— 完整做法見 §8.5。</p></blockquote>
 <hr>
-<h3 id="68-recordings光譜回放">6.8 Recordings（光譜回放）</h3>
+<h3 id="69-recordings光譜回放">6.9 Recordings（光譜回放）</h3>
 <p>回放記錄器寫出的光譜 CSV。<strong>已被壓縮的日期也會列出</strong>（標示 <code>zip</code>），選取時直接從壓縮檔讀取，不必先解壓縮（見 §7.4）。</p>
 <p><strong>工具列</strong></p>
 <div class="tablewrap"><table>
@@ -903,7 +952,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td><strong>Clear Compare</strong></td><td>移除比較用的第二個 session</td></tr>
 </tbody></table></div>
 <p><strong>篩選</strong>：Search（日期／時間／檔名關鍵字）、From / To 日期。</p>
-<h4 id="681-線圖的波長可多條">6.8.1 線圖的波長（可多條）</h4>
+<h4 id="691-線圖的波長可多條">6.9.1 線圖的波長（可多條）</h4>
 <p>線圖上方有一排波長控制，<strong>最多同時畫 6 條波長</strong>（Heatmap 模式時會收起來）：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>控制</th><th>說明</th></tr></thead>
@@ -931,7 +980,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </li>
 </ul>
 <hr>
-<h3 id="69-ratio-review比值回放">6.9 Ratio Review（比值回放）</h3>
+<h3 id="610-ratio-review比值回放">6.10 Ratio Review（比值回放）</h3>
 <p>回放記錄器寫出的比值 CSV（<code>{prefix}_Ratio_*.csv</code>）。<strong>已被壓縮的日期一併列出</strong>（標示 <code>zip</code>），直接從壓縮檔讀取。</p>
 <p><strong>三種檢視模式</strong>（同樣以綠框標示目前模式）：</p>
 <div class="tablewrap"><table>
@@ -945,7 +994,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <blockquote><p>📝 <strong>Leak rate</strong> 模式只有在該 CSV 含有 <code>LeakRate</code> / <code>LeakRateSigma</code> 欄位時才有東西可畫。校正功能上線前錄的舊檔沒有這兩欄，仍然可以正常開啟與檢視前兩種模式。</p></blockquote>
 <p>其餘按鈕（Refresh / Open Base / Open Folder / Open File / Zoom All / Save PNG / Copy Image / Search）用法同 Recordings。</p>
 <hr>
-<h3 id="610-logs系統日誌">6.10 Logs（系統日誌）</h3>
+<h3 id="611-logs系統日誌">6.11 Logs（系統日誌）</h3>
 <p>顯示系統稽核日誌，記錄：</p>
 <ul>
 <li>裝置連線／中斷、擷取啟停
@@ -1253,6 +1302,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <p>若日誌寫的是 <strong><code>GoldenRunRatioUnstableBaseline</code></strong>，原因不同：基準均值本身不夠遠離 0（例如 <code>−25 ± 95</code>）。這代表該波長沒有峰，扣背景後只剩雜訊 —— 把 <strong>Extraction</strong> 改成 <code>RawMean</code> 再錄一次。</p>
 <p>若日誌寫的是 <strong><code>LeakMonitorBaselineMismatch</code></strong>，基準線是好的，但你之後改了某個讓它失效的設定（參考譜線、監控方式、擷取方式、或升級後積分單位改變）—— 重錄即可。</p>
 <p><strong>若是「所有」比值都沒有基準線</strong>（跳出的是錯誤視窗、日誌記 <code>GoldenRunEmpty</code>），這次擷取已被整份丟棄 —— 原本使用中的基準線與洩漏率校正都沒有被動到，機台仍在用舊基準線監控。先照上面的原因排除，再重錄一次即可，<strong>不必</strong>擔心要去把舊基準線救回來。最常見的原因是電漿沒開／記錄器觸發門檻設得太高，讓電漿閘門整段關著（§10.2）。</p>
+<blockquote><p>若原因是「電漿還沒穩定」或「製程太短，擷取視窗湊不到足夠的幀」，那不是設定問題，是現場擷取本身不適用——改用 <strong>Baseline Builder</strong>（§6.7）從錄製檔事後挑穩定段，短製程可以把多次 run 合起來。</p></blockquote>
 <h3 id="96-日誌出現-spectrumframedropout">9.6 日誌出現 <code>SpectrumFrameDropout</code></h3>
 <p>代表<strong>光譜儀送回了整幀全暗的資料</strong>（正常幀最亮處約數萬 counts，全暗幀只有幾十）。這不是製程事件 —— 真正的電漿熄滅會持續超過一秒，而這種掉幀通常只有一到兩幀、約 0.3 秒。</p>
 <p>程式的電漿閘門會把這些幀丟掉，所以<strong>讀值不會被汙染</strong>；記這筆日誌是因為丟得無聲無息，你需要知道儀器有沒有在出這種狀況。實測曾在 13 分鐘內出現 20 幀，其中<strong>一幀落在 Golden Run 擷取視窗內就足以讓該比值的基準線被拒絕</strong>（σ 變成均值的 2.4 倍）。</p>

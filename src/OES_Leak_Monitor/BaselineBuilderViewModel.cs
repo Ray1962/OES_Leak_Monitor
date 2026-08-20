@@ -261,8 +261,12 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
                         using var reader = file.Recording.OpenText();
                         var parsed = RecordingCsvParser.ReadFull(reader, ct)
                             ?? throw new InvalidOperationException("not a full-spectrum recording");
+                        // Conditions from the sidecar written when the recording was made; null
+                        // for anything older, in which case the fingerprint carries only the axis
+                        // the CSV itself proves.
+                        var acq = AcquisitionSidecar.TryRead(file.Recording);
                         return BaselineBuilder.Scan(file.Recording.FilePath, file.FileName,
-                            file.Recording.SessionStart, parsed, defs, gate, null, null, ct);
+                            file.Recording.SessionStart, parsed, defs, gate, acq, null, ct);
                     }, ct);
 
                     file.Scan = scan;

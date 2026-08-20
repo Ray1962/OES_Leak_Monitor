@@ -122,7 +122,10 @@ td code{white-space:nowrap;}
 <p><strong>Ratio（比值項）</strong>： 被監看的清單裡的一筆設定——一條 signal line、它的萃取方式、它的門檻，以及（只有在真的做除法時）一條 reference line。這個名字講的是常見情況而不是保證：設成絕對強度的項目不做任何除法，它的 reference line 完全不參與判讀。</p>
 <p><strong>Monitored value（受監看值）</strong>： 一筆 ratio 從每一幀算出來的那一個數字，也是所有判斷真正拿來比的東西。它的意義取決於該項的模式，所以凡是 談單位、談 pedestal、談「這兩個數能不能比」，講的都是它。</p>
 <p><strong>Signal line / Reference line（訊號譜線／參考譜線）</strong>： 一筆 ratio 裡面，被問的那條譜線，和拿來除它的那條。reference line 的作用是抵銷電漿條件的漂移；不做除法的 項目沒有這條線。</p>
-<p><strong>Golden Run（基準錄製）</strong>： 一份具名、已存檔的紀錄，記下無洩漏時每一筆 ratio 各讀到多少，錄製一段時間窗，並連同當時的條件一起保存。 今天的讀數是相對於它才有意義的——這個工具本身沒有絕對刻度。</p>
+<p><strong>Golden Run（基準錄製）</strong>： 一份具名、已存檔的紀錄，記下無洩漏時每一筆 ratio 各讀到多少，錄製一段時間窗，並連同當時的條件一起保存。 今天的讀數是相對於它才有意義的——這個工具本身沒有絕對刻度。它描述的是<strong>一個</strong>穩定操作點，而且同時只有一份 生效；一個有多個操作點的配方需要多份，並且要人工切換。見 <code>docs/adr/0001</code>。</p>
+<p><strong>Recipe / run / step（配方／執行／製程步）</strong>： 配方是具名的製程程式；一次 run 是它執行一次；一個 step 是 run 裡設定值固定的一段。Golden Run 以配方命名， 但它描述的只是其中一個 step。</p>
+<p><strong>Steady segment（穩定段）</strong>： 一個 step 裡操作點真的穩住的那部分——<strong>唯一能拿來當基準的東西</strong>。緩啟動的前幾秒屬於那個 step，但不屬於它的 穩定段；這就是為什麼這一段有時必須事後從錄下來的曲線上挑，而不是站在機台前等一分鐘。</p>
+<p><strong>Baseline build（離線建基準）</strong>： 用已經存在硬碟上的錄製檔產生 Golden Run，而不是用現場的即時訊框。它的存在是為了現場擷取搆不到的那些 run：先爬升才穩定的，以及單獨一次不夠長、要好幾次合起來才湊得出一份基準的。</p>
 <p><strong>Golden Run baseline（基準值）</strong>： 某一筆 ratio 在一份 Golden Run 裡分到的那份——它的平均值與散佈。有可能其他項都有、就這一項沒有，這時該項 是「無法判讀」，而不是「正常」。它同時被當成兩個東西用：讀數要拿來比對的<strong>參考點</strong>，以及所有百分比、門檻 倍率、洩漏率擬合要拿來除的<strong>除數</strong>。只有後者需要平均值明顯離零——所以一條行為完全正確的譜線，也可能被拒 絕給基準值。</p>
 <p><strong>Absent-line baseline（零基線）</strong>： 一種 Golden Run baseline：它在無洩漏時的值就是雜訊水準，因為被監看的元素在沒有漏氣時根本不在腔體裡。這是 這個工具的<strong>正常狀態</strong>，不是擷取失敗——要偵測的是那條譜線的「出現」，而不是它的「變化」。這種量不能用 「佔自身平均值的百分之幾」來判讀，它屬於 σ 單位。</p>
 <p><strong>Reactant-gas regime（反應氣體態）</strong>： 製程刻意通入被監看元素的配方。這時譜線在沒有漏氣的情況下也會存在，所以它的存在不構成漏氣的證據；漏氣只會 表現成一個大訊號上的小增量。</p>

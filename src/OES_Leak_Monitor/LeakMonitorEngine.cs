@@ -335,6 +335,18 @@ public sealed class LeakMonitorEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// The conditions frames are currently arriving under — the same object a Golden Run is
+    /// stamped with, axis included once a frame has been seen. Exposed so the recording written
+    /// alongside can carry it too: a CSV says nothing about the exposure it was taken at, which
+    /// is what leaves an offline-built baseline unable to answer the question the mismatch check
+    /// asks. Null before <see cref="ConfigureAcquisition"/> has been called.
+    /// </summary>
+    public AcquisitionFingerprint? CurrentAcquisition
+    {
+        get { lock (_gate) return _acquisition?.Clone(); }
+    }
+
     /// <summary>Raised for every processed frame. Fires on the acquisition thread.</summary>
     public event EventHandler<LeakMonitorSnapshot>? SampleProcessed;
 
