@@ -260,8 +260,8 @@ td code{white-space:nowrap;}
 <tr><td>regime 1 的平均值</td><td>約為零，或系統性為負</td><td>大而穩，但那是<strong>連續背景</strong></td></tr>
 <tr><td><code>mean &gt; 10 σ</code> 檢查</td><td><strong>必然失敗</strong> → No Baseline</td><td><strong>必然通過</strong> → 有 baseline，但可能是假的</td></tr>
 <tr><td>帶 pedestal？</td><td>否</td><td>是</td></tr>
-<tr><td><code>ValueHasPedestal</code> 判定</td><td>否</td><td><strong>僅在 <code>AbsoluteIntensity</code> 模式下為真</strong>（見 <a href="#7-已知盲點目前診斷不到的東西">第 7 節</a>）</td></tr>
-<tr><td>門檻怎麼算</td><td><code>max(倍率×mean, mean + 3σ)</code></td><td>pedestal 成立時只用 σ 項；不成立時仍走倍率</td></tr>
+<tr><td><code>ValueHasPedestal</code> 判定</td><td>否</td><td><strong>是——兩種監測模式皆然</strong>（除以參考線只是把 pedestal 縮放，不會移除它）</td></tr>
+<tr><td>門檻怎麼算</td><td><code>max(倍率×mean, mean + 3σ)</code></td><td>只用 σ 項（<code>mean + SigmaWarn·σ</code>），倍率被丟棄</td></tr>
 </tbody></table></div>
 <p><strong>兩個直接可用的推論</strong>：</p>
 <ul>
@@ -272,8 +272,8 @@ td code{white-space:nowrap;}
 </ul>
 <hr>
 <h2 id="5-regime-1-的建議做法">5. regime 1 的建議做法</h2>
-<p><strong>主推：<code>MonitorMode = AbsoluteIntensity</code> + 分子 <code>LineExtractMode = RawMean</code>。</strong></p>
-<p>這是目前引擎中<strong>唯一從擷取、判讀、顯示到洩漏率校正都一致</strong>的路徑。它讓 <code>RatioDefinition.ValueHasPedestal</code> 成立，於是：</p>
+<p><strong>主推：分子 <code>LineExtractMode = RawMean</code>。</strong> 監測模式再依有沒有可信的參考線來選（見本節末的選擇準則）。</p>
+<p>關鍵在分子而不在模式：<code>RawMean</code> 讓 <code>RatioDefinition.ValueHasPedestal</code> 成立，於是整條路徑——擷取、判讀、顯示、洩漏率校正——用的是同一套 σ 語言：</p>
 <ul>
 <li><strong>門檻</strong>：忽略 <code>WarnFactor</code>／<code>AlarmFactor</code>（對 pedestal 而言 1.05× 是幾十個 σ），只用 <code>mean + SigmaWarn·σ</code>（預設 3σ／6σ）；
 </li>
@@ -286,15 +286,22 @@ td code{white-space:nowrap;}
 <li><strong>CSV 欄位名</strong>：<code>_sigmaScore</code>（不是 <code>_pctBaseline</code>），所以一年後打開檔案的人知道那一欄是什麼。
 </li>
 </ul>
-<p><strong>代價，要寫在交接文件上</strong>：</p>
+<p><strong>選哪一種監測模式</strong>：<code>ValueHasPedestal</code> 只看分子是不是 <code>RawMean</code>，不看模式——除以參考線只是把 pedestal 乘上 <code>1/den</code>，並不會把它移除，所以判讀方式兩種模式相同。差別只剩「要不要漂移抵消」與「有沒有可信的參考線」：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>情況</th><th>選</th></tr></thead>
+<tbody>
+<tr><td>有穩定可信的參考線（如 Ar 750.4）</td><td><code>Ratio</code> + 分子 <code>RawMean</code> —— σ 判讀 <strong>加上</strong> 漂移抵消</td></tr>
+<tr><td>沒有可信參考線，或參考線本身在雜訊邊緣</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td></tr>
+</tbody></table></div>
+<p><strong>選 <code>AbsoluteIntensity</code> 的代價，要寫在交接文件上</strong>：</p>
 <ul>
-<li>不再除以 Ar 參考線，<strong>失去電漿條件漂移的抵消</strong>。需要穩定的操作點，並且要比比值模式<strong>更常重新擷取 Golden Run</strong>。
+<li>不除以參考線，<strong>沒有電漿條件漂移的抵消</strong>。需要穩定的操作點，並且要比比值模式<strong>更常重新擷取 Golden Run</strong>。
 </li>
 <li>曝光時間／平均次數／背景移除開關一改，絕對強度就整個重新縮放。引擎會記 <code>LeakMonitorAcquisitionMismatch</code> 並在 Leak Monitor 橫幅提示，看到就要重新擷取。
 </li>
 </ul>
-<p><strong>明確不建議：<code>MonitorMode = Ratio</code> + 分子 <code>RawMean</code>。</strong> 它可以設定、也會通過所有檢查，但它落在 <code>ValueHasPedestal</code> 的判斷式之外（該判斷式只涵蓋絕對強度模式），因此得到的是「連續背景 ÷ Ar」的百分比：數字看得懂，語意卻不是「該元素相對基準上升了幾 %」。實務後果是門檻被 pedestal 稀釋——以實測基準 <code>0.02895 ± 0.00024</code>（mean/σ ≈ 120）為例，<code>warn 1.05×</code> 等於 <code>mean + 6σ</code>，比設定上寫的 <code>SigmaWarn = 3</code> 嚴格一倍，而你不會從任何畫面看出這件事。</p>
-<p><strong><code>AbsoluteIntensity</code> + <code>PeakHeight</code></strong>（真的減掉連續背景、平均值誠實地趨近零）在目前版本<strong>必定</strong>被 <code>mean &gt; 10 σ</code> 拒絕。這是已知限制，見 <a href="#7-已知盲點目前診斷不到的東西">第 7 節</a>。</p>
+<blockquote><p><strong>這是 2026-08-20 才修正的行為。</strong> 在此之前 <code>ValueHasPedestal</code> 只涵蓋絕對強度模式，<code>Ratio</code> + <code>RawMean</code> 走的是一般的倍率門檻：以實測基準 <code>0.02895 ± 0.00024</code>（mean/σ ≈ 119）為例，<code>warn 1.05×</code> 等於 <code>mean + 5.9σ</code>、<code>alarm 1.12×</code> 等於 <code>mean + 14.2σ</code>，而設定上寫的是 3σ／6σ——畫面上沒有任何地方顯示這件事。倍率項只有在 <code>mean/σ &gt; SigmaWarn/(WarnFactor−1)</code>（本機為 60）時才會蓋過 σ 項，所以同一份設定裡 mean/σ ≈ 35 的項目其實不受影響。<strong>升級後這些項目的門檻會變靈敏</strong>，上線前請確認 3σ 在這台機器上不是誤報。</p></blockquote>
+<p><strong><code>PeakHeight</code> / <code>Integral</code> 分子</strong>（真的減掉連續背景、平均值誠實地趨近零）在 regime 1 於<strong>兩種模式下都必定</strong>被 <code>mean &gt; 10 σ</code> 拒絕。這是已知限制，見 <a href="#7-已知盲點目前診斷不到的東西">第 7 節</a>。</p>
 <hr>
 <h2 id="6-regime-2-的判斷準則與調校">6. regime 2 的判斷準則與調校</h2>
 <p>製程刻意通入被監看元素時，該譜線的存在不構成漏氣證據。要先回答一個問題：</p>
@@ -325,31 +332,34 @@ td code{white-space:nowrap;}
 <tr><td>擷取診斷把「分母系統性為負」與「分母 NaN」併成同一個計數（<code>ReferenceMissing</code>）</td><td>兩種完全不同的原因給出同一句話</td><td>到 Recordings 看該分母波長的原始值是負的還是缺的</td></tr>
 <tr><td><code>mean &gt; 10 σ</code> 的檢查只在整個擷取窗結束後才做</td><td>設 120 秒就要等滿 120 秒才知道失敗</td><td>先用短擷取（10 秒）試一次，確認會過再擷取正式的</td></tr>
 <tr><td>沒有任何地方記錄「這次擷取電漿閘開了幾成」</td><td>「部分幀被丟掉」看不出來</td><td>對照同時段 <code>P_OES1_*.csv</code> 的列數與擷取秒數 × 幀率</td></tr>
-<tr><td><strong><code>ValueHasPedestal</code> 不涵蓋 <code>Ratio</code> + <code>RawMean</code></strong></td><td>帶 pedestal 的量走一般百分比與倍率門檻，語意與門檻都被稀釋（見 <a href="#5-regime-1-的建議做法">第 5 節</a>）</td><td>改用 <code>AbsoluteIntensity</code> + <code>RawMean</code>；或知道那個百分比不是「該元素上升幾 %」</td></tr>
-<tr><td><code>AbsoluteIntensity</code> + <code>PeakHeight</code> 在 regime 1 必定被拒</td><td>誠實的零基線目前無法被接受</td><td>用 <code>RawMean</code> 走 pedestal 路徑</td></tr>
+<tr><td><code>PeakHeight</code> / <code>Integral</code> 在 regime 1 必定被拒（兩種模式皆然）</td><td>誠實的零基線目前無法被接受</td><td>用 <code>RawMean</code> 走 pedestal 路徑</td></tr>
+<tr><td>pedestal 的判定是「分子是不是 <code>RawMean</code>」，不是實測</td><td><code>Integral</code> 在寬帶上其實也帶部分 pedestal，判不出來</td><td>目前無法；設計上已知</td></tr>
 </tbody></table></div>
 <hr>
 <h2 id="附錄-a本機現況核對與處方">附錄 A：本機現況核對與處方</h2>
 <p>依 <code>%AppData%\OES_Leak_Monitor\settings.json</code>（作用中基準值 <code>Recipe Ar</code>，2026-08-14 擷取，8 筆 baseline）。</p>
-<blockquote><p><strong>照做之後必須重新擷取 Golden Run。</strong> 更動 <code>MonitorMode</code> 會讓 <code>Recipe Ar</code> 裡對應那筆 baseline 被判定為「量的是不同的東西」，開機時會記 <code>LeakMonitorBaselineMismatch</code>，該項在重新擷取前不參與警報。紀錄裡已有兩筆同類前例（2026-08-14 22:03，<code>uN2 335.5</code>／<code>uN2 324.7</code>）。<strong>這是預期後果，不是新的故障。</strong></p></blockquote>
+<blockquote><p><strong>不需要更動任何一筆設定，也不需要重新擷取 Golden Run。</strong> <code>ValueHasPedestal</code> 修正後，<code>Ratio</code> + <code>RawMean</code> 的項目會自動改用 σ 判讀；baseline 存的是同一個受監看值的 mean/σ，比對用的 <code>Mode</code>／<code>ReferenceLabel</code>／<code>ExtractionRevision</code> 都沒有變，所以 <code>Recipe Ar</code> 原封不動繼續適用。</p>
+<p><strong>但門檻會變</strong>：受影響的項目從下表的「舊 warn」降到 <code>SigmaWarn = 3</code>。這是<strong>行為變更</strong>，第一次啟動後請盯著看，確認 3σ 在這台機器上不是誤報。</p></blockquote>
 <div class="tablewrap"><table>
-<thead><tr><th>key</th><th>名稱</th><th>現況</th><th>啟用</th><th>判讀語意</th><th>建議</th><th>立即後果</th></tr></thead>
+<thead><tr><th>key</th><th>名稱</th><th>現況</th><th>啟用</th><th>mean/σ</th><th>舊 warn / alarm</th><th>新 warn / alarm</th><th>需要動嗎</th></tr></thead>
 <tbody>
-<tr><td><code>R_ec3adb8f</code></td><td>N2 337.1 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td><strong>pedestal 走一般百分比</strong>，門檻實為 6σ 而非 3σ</td><td>改 <code>AbsoluteIntensity</code>（分子保持 <code>RawMean</code>）</td><td>該項 baseline 失效，須重擷取</td></tr>
-<tr><td><code>R_54c914c8</code></td><td>N2 337.1 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>是</td><td><strong>正確</strong>：σ 分數、σ 門檻、Δ 校正</td><td>維持。這是 337.1 目前唯一語意正確的來源</td><td>無</td></tr>
-<tr><td><code>R_7a6c5d0f</code></td><td>uN2 335.5 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td>同 <code>R_ec3adb8f</code></td><td>改 <code>AbsoluteIntensity</code>，或另建一條 abs 版本並停用本項</td><td>同上</td></tr>
-<tr><td><code>R_353b7e10</code></td><td>N2 353.7 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td>同上</td><td>同上</td><td>同上</td></tr>
-<tr><td><code>R_7c40d2f9</code></td><td>NO 237 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>同上</td><td>若要啟用，直接建成 <code>AbsoluteIntensity</code></td><td>—</td></tr>
-<tr><td><code>R_54858314</code></td><td>NO 237 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>否</td><td>正確</td><td>需要第二個元素的獨立意見時啟用這條</td><td>—</td></tr>
-<tr><td><code>R_a2ff1794</code></td><td>N2+ 391.4 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>同上</td><td>同 <code>R_7c40d2f9</code></td><td>—</td></tr>
-<tr><td><code>R_df502a98</code></td><td>N2+ 391.4 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>否</td><td>正確</td><td>需要時啟用</td><td>—</td></tr>
-<tr><td><code>R_e3b669d5</code></td><td>uN2 324.7 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>同上</td><td>同 <code>R_7c40d2f9</code></td><td>—</td></tr>
+<tr><td><code>R_ec3adb8f</code></td><td>N2 337.1 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td>119</td><td>5.9σ / 14.2σ</td><td><strong>3σ / 6σ</strong></td><td>否</td></tr>
+<tr><td><code>R_7a6c5d0f</code></td><td>uN2 335.5 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td>140</td><td>7.0σ / 16.8σ</td><td><strong>3σ / 6σ</strong></td><td>否</td></tr>
+<tr><td><code>R_e3b669d5</code></td><td>uN2 324.7 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>239</td><td>11.9σ / 28.6σ</td><td><strong>3σ / 6σ</strong></td><td>否</td></tr>
+<tr><td><code>R_7c40d2f9</code></td><td>NO 237 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>36</td><td>3σ / 6σ</td><td>3σ / 6σ</td><td>否（本來就未受影響）</td></tr>
+<tr><td><code>R_a2ff1794</code></td><td>N2+ 391.4 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>否</td><td>35</td><td>3σ / 6σ</td><td>3σ / 6σ</td><td>否（同上）</td></tr>
+<tr><td><code>R_54c914c8</code></td><td>N2 337.1 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>是</td><td>121</td><td>3σ / 6σ</td><td>3σ / 6σ</td><td>否</td></tr>
+<tr><td><code>R_54858314</code></td><td>NO 237 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>否</td><td>36</td><td>3σ / 6σ</td><td>3σ / 6σ</td><td>否</td></tr>
+<tr><td><code>R_df502a98</code></td><td>N2+ 391.4 (abs)</td><td><code>AbsoluteIntensity</code> + <code>RawMean</code></td><td>否</td><td>35</td><td>3σ / 6σ</td><td>3σ / 6σ</td><td>否</td></tr>
+<tr><td><code>R_353b7e10</code></td><td>N2 353.7 / Ar 750.4</td><td><code>Ratio</code> + 分子 <code>RawMean</code></td><td>是</td><td>—</td><td>—</td><td>—</td><td><strong>見下</strong></td></tr>
 </tbody></table></div>
-<p><strong>兩個與上表無關、但一起看才看得出來的觀察</strong>：</p>
+<p><strong>三個要處理的觀察</strong>：</p>
 <ul>
-<li>這九筆的 <code>MinSnr</code>（2 或 5）<strong>目前幾乎不起作用</strong>：分子全是 <code>RawMean</code>（SNR 為 <code>NaN</code>），所以它只在比值模式下作用於分母 <code>Ar 750.4 PeakHeight</code>，在絕對強度模式下完全不作用。調它之前先確認你想影響的是哪一條線。
+<li><strong><code>R_353b7e10</code>（N2 353.7）已啟用，但 <code>Recipe Ar</code> 裡沒有它的 baseline。</strong> 它是那次擷取之後才加的，所以現在就是 No Baseline、不參與複合警報——而畫面上它看起來和其他項目一樣。下次重新擷取才會補上。
 </li>
-<li><strong>沒有任何一筆 ratio 監測氧。</strong> <code>MonitoredWavelengths</code> 有 308.9／309.3 nm（OH），但那只進到強度 CSV 與趨勢圖，不構成判斷。空氣漏是氮加氧；目前所有判斷都建立在氮上，通 N₂ 的 step 會完全失去獨立意見。建議至少建一條 <code>AbsoluteIntensity</code> + <code>RawMean</code> 的 O 或 OH 項目。
+<li>這九筆的 <code>MinSnr</code>（2 或 5）<strong>只作用在分母</strong>：分子全是 <code>RawMean</code>（SNR 為 <code>NaN</code>），所以比值模式下它 gate <code>Ar 750.4 PeakHeight</code>，絕對強度模式下完全不作用。調它之前先確認你想影響的是哪一條線。
+</li>
+<li><strong>沒有任何一筆 ratio 監測氧。</strong> <code>MonitoredWavelengths</code> 有 308.9／309.3 nm（OH），但那只進到強度 CSV 與趨勢圖，不構成判斷。空氣漏是氮加氧；目前所有判斷都建立在氮上，通 N₂ 的 step 會完全失去獨立意見。建議至少建一條 O 或 OH 的項目（有可信參考線就用 <code>Ratio</code> + <code>RawMean</code>）。
 </li>
 </ul>
 <hr>
@@ -361,7 +371,7 @@ td code{white-space:nowrap;}
 <tr><td><code>MinBaselineAcceptFraction</code></td><td>0.5</td><td><code>LeakMonitorEngine</code></td><td>防止只用「向上雜訊」那一小撮通過的幀去組成基準</td></tr>
 <tr><td><code>RatioDefinition.MinSnr</code></td><td>預設 5</td><td><code>LeakMonitorSettings</code></td><td>兩條線是否可信；對 <code>RawMean</code> 無效</td></tr>
 <tr><td><code>SigmaWarn</code> / <code>SigmaAlarm</code></td><td>3 / 6</td><td><code>LeakMonitorSettings</code></td><td>σ 門檻；pedestal 成立時是<strong>唯一</strong>的門檻</td></tr>
-<tr><td><code>WarnFactor</code> / <code>AlarmFactor</code></td><td>本機 1.05 / 1.12</td><td><code>settings.json</code></td><td>倍率門檻；pedestal 成立時被忽略</td></tr>
+<tr><td><code>WarnFactor</code> / <code>AlarmFactor</code></td><td>本機 1.05 / 1.12</td><td><code>settings.json</code></td><td>倍率門檻；pedestal 成立時被忽略。不成立時，只有在 <code>mean/σ &gt; SigmaWarn/(WarnFactor−1)</code>（本機 60）時才會蓋過 σ 項</td></tr>
 <tr><td><code>ConfirmSeconds</code></td><td>15 s</td><td><code>LeakMonitorSettings</code></td><td>把突波和洩漏分開</td></tr>
 <tr><td><code>GoldenRunCaptureSeconds</code></td><td>本機 120 s</td><td><code>settings.json</code></td><td>擷取窗長度</td></tr>
 <tr><td>擷取期間的電漿地板</td><td>站下（floor = 0）</td><td><code>LeakMonitorEngine.ProcessSample</code></td><td>讓上一份 Golden Run 的地板不會擋住新的擷取</td></tr>

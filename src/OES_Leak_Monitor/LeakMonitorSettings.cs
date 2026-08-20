@@ -62,22 +62,30 @@ public sealed class RatioDefinition
     public double MinSnr { get; set; } = 5.0;
 
     /// <summary>
-    /// True when the monitored value carries the continuum pedestal — absolute-intensity mode
-    /// reading a <see cref="LineExtractMode.RawMean"/> line. Everything that divides by the
-    /// baseline mean has to know: with a mean of a few thousand counts and a σ of twenty, a
-    /// real signal moves the ratio-to-baseline by fractions of a percent, so
+    /// True when the monitored value carries the continuum pedestal — the monitored line is read
+    /// as a <see cref="LineExtractMode.RawMean"/>, which subtracts nothing. Everything that
+    /// divides by the baseline mean has to know: with a mean of a few thousand counts and a σ of
+    /// twenty, a real signal moves the ratio-to-baseline by fractions of a percent, so
     /// <list type="bullet">
     /// <item>the Warn/Alarm <em>factors</em> are meaningless (1.2× is tens of σ, never reached)
     /// and only the σ terms are used;</item>
     /// <item>the % -of-baseline display is σ-normalized rather than <c>value/mean·100</c>;</item>
     /// <item>the leak-rate calibration fits the absolute rise Δ, not the fractional one.</item>
     /// </list>
-    /// A ratio, or an absolute reading of a baseline-subtracted line, has no pedestal: its mean
-    /// <em>is</em> the signal, so the ordinary multiplicative forms apply.
+    /// A baseline-subtracted line has no pedestal in either mode: its mean <em>is</em> the
+    /// signal, so the ordinary multiplicative forms apply.
+    /// <para><b>Dividing by a reference line does not remove the pedestal.</b> This read on the
+    /// monitor mode until it was measured: <c>(pedestal + line) / reference</c> is the same
+    /// affine offset scaled by <c>1/reference</c>, so the fraction-of-baseline is compressed
+    /// exactly as it is in absolute mode — while the reading looked, on every screen, like an
+    /// ordinary ratio. How badly depends on the baseline's own mean/σ, because
+    /// <c>Math.Max</c> picks the multiplicative branch only once
+    /// <c>mean/σ &gt; SigmaWarn/(WarnFactor−1)</c>; at the factory 1.05/1.12 that is 60 and 50.
+    /// Measured on one machine: <c>N₂ 337.1 RawMean / Ar 750.4</c> at mean/σ ≈ 119 was warning at
+    /// 5.9 σ and alarming at 14.2 σ against a configured 3/6, and nothing said so.</para>
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]   // derived; see LineRegion.MeasurementKey
-    public bool ValueHasPedestal =>
-        MonitorMode == MonitorMode.AbsoluteIntensity && Numerator.Mode == LineExtractMode.RawMean;
+    public bool ValueHasPedestal => Numerator.Mode == LineExtractMode.RawMean;
 
     /// <summary>
     /// True when <paramref name="other"/> monitors the same quantity — same mode, same monitored

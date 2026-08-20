@@ -210,7 +210,7 @@
                                                Text="Raw: no continuum subtraction and no peak search — unbiased where there is no peak to find, but the reading carries the continuum pedestal, so it also follows window fogging and exposure changes. Re-capture the Golden Run whenever those change."
                                                Visibility="{Binding SignalIsRaw, Converter={StaticResource BoolToVis}}"/>
                                     <TextBlock FontSize="11" Foreground="#7A5A00" TextWrapping="Wrap" Margin="0,4,0,0"
-                                               Text="In this combination the Warn/Alarm factors below are ignored (σ thresholds only), the trend is plotted as a σ-score on the same 100/120/150 scale, and Min SNR does not apply."
+                                               Text="Because of that pedestal the Warn/Alarm factors below are ignored (σ thresholds only), the trend is plotted as a σ-score on the same 100/120/150 scale, and Min SNR no longer applies to the monitored line, which has no noise estimate to gate. This holds in ratio mode too — dividing by the reference line scales the pedestal rather than removing it — where Min SNR still gates the reference line."
                                                Visibility="{Binding ValueHasPedestal, Converter={StaticResource BoolToVis}}"/>
                                 </StackPanel>
                             </Border>

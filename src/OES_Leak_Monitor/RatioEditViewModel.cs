@@ -174,11 +174,14 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     public bool SignalIsRaw => _signalMode == LineExtractMode.RawMean;
 
     /// <summary>
-    /// Raw extraction in absolute mode: the reading carries the continuum pedestal, so the
+    /// Raw extraction, in either mode: the reading carries the continuum pedestal, so the
     /// Warn/Alarm <em>factors</em> stop being used (σ terms only), the trend becomes a σ-score,
-    /// and SNR is not measurable. Shown in the editor so none of that is a surprise.
+    /// and SNR is not measurable. Shown in the editor so none of that is a surprise — dividing
+    /// by a reference line scales the pedestal, it does not remove it. Mirrors
+    /// <see cref="RatioDefinition.ValueHasPedestal"/>; the two must agree or the editor promises
+    /// something the engine does not do.
     /// </summary>
-    public bool ValueHasPedestal => IsAbsolute && SignalIsRaw;
+    public bool ValueHasPedestal => SignalIsRaw;
 
     // --- reference (denominator) line ----------------------------------------
 

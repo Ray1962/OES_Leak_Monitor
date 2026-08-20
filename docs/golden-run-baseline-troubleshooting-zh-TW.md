@@ -132,8 +132,8 @@ mean <= 0  或  mean < 10 × σ   →  拒絕，記 GoldenRunRatioUnstableBaseli
 | regime 1 的平均值 | 約為零，或系統性為負 | 大而穩，但那是**連續背景** |
 | `mean > 10 σ` 檢查 | **必然失敗** → No Baseline | **必然通過** → 有 baseline，但可能是假的 |
 | 帶 pedestal？ | 否 | 是 |
-| `ValueHasPedestal` 判定 | 否 | **僅在 `AbsoluteIntensity` 模式下為真**（見 [第 7 節](#7-已知盲點目前診斷不到的東西)） |
-| 門檻怎麼算 | `max(倍率×mean, mean + 3σ)` | pedestal 成立時只用 σ 項；不成立時仍走倍率 |
+| `ValueHasPedestal` 判定 | 否 | **是——兩種監測模式皆然**（除以參考線只是把 pedestal 縮放，不會移除它） |
+| 門檻怎麼算 | `max(倍率×mean, mean + 3σ)` | 只用 σ 項（`mean + SigmaWarn·σ`），倍率被丟棄 |
 
 **兩個直接可用的推論**：
 
@@ -144,9 +144,9 @@ mean <= 0  或  mean < 10 × σ   →  拒絕，記 GoldenRunRatioUnstableBaseli
 
 ## 5. regime 1 的建議做法
 
-**主推：`MonitorMode = AbsoluteIntensity` + 分子 `LineExtractMode = RawMean`。**
+**主推：分子 `LineExtractMode = RawMean`。** 監測模式再依有沒有可信的參考線來選（見本節末的選擇準則）。
 
-這是目前引擎中**唯一從擷取、判讀、顯示到洩漏率校正都一致**的路徑。它讓 `RatioDefinition.ValueHasPedestal` 成立，於是：
+關鍵在分子而不在模式：`RawMean` 讓 `RatioDefinition.ValueHasPedestal` 成立，於是整條路徑——擷取、判讀、顯示、洩漏率校正——用的是同一套 σ 語言：
 
 - **門檻**：忽略 `WarnFactor`／`AlarmFactor`（對 pedestal 而言 1.05× 是幾十個 σ），只用 `mean + SigmaWarn·σ`（預設 3σ／6σ）；
 - **顯示**：% -of-baseline 欄位改成 σ 分數 `100 + (20/SigmaWarn)·(ema − baseMean)/σ`——基準仍是 100，一個 warn-σ 落在 120，所以 100/120/150 三條參考線照用；
@@ -154,15 +154,21 @@ mean <= 0  或  mean < 10 × σ   →  拒絕，記 GoldenRunRatioUnstableBaseli
 - **洩漏率校正**：擬合**絕對增量** `Δ = value − baseMean`，而不是分數增量；
 - **CSV 欄位名**：`_sigmaScore`（不是 `_pctBaseline`），所以一年後打開檔案的人知道那一欄是什麼。
 
-**代價，要寫在交接文件上**：
+**選哪一種監測模式**：`ValueHasPedestal` 只看分子是不是 `RawMean`，不看模式——除以參考線只是把 pedestal 乘上 `1/den`，並不會把它移除，所以判讀方式兩種模式相同。差別只剩「要不要漂移抵消」與「有沒有可信的參考線」：
 
-- 不再除以 Ar 參考線，**失去電漿條件漂移的抵消**。需要穩定的操作點，並且要比比值模式**更常重新擷取 Golden Run**。
+| 情況 | 選 |
+|---|---|
+| 有穩定可信的參考線（如 Ar 750.4） | `Ratio` + 分子 `RawMean` —— σ 判讀 **加上** 漂移抵消 |
+| 沒有可信參考線，或參考線本身在雜訊邊緣 | `AbsoluteIntensity` + `RawMean` |
+
+**選 `AbsoluteIntensity` 的代價，要寫在交接文件上**：
+
+- 不除以參考線，**沒有電漿條件漂移的抵消**。需要穩定的操作點，並且要比比值模式**更常重新擷取 Golden Run**。
 - 曝光時間／平均次數／背景移除開關一改，絕對強度就整個重新縮放。引擎會記 `LeakMonitorAcquisitionMismatch` 並在 Leak Monitor 橫幅提示，看到就要重新擷取。
 
-**明確不建議：`MonitorMode = Ratio` + 分子 `RawMean`。**
-它可以設定、也會通過所有檢查，但它落在 `ValueHasPedestal` 的判斷式之外（該判斷式只涵蓋絕對強度模式），因此得到的是「連續背景 ÷ Ar」的百分比：數字看得懂，語意卻不是「該元素相對基準上升了幾 %」。實務後果是門檻被 pedestal 稀釋——以實測基準 `0.02895 ± 0.00024`（mean/σ ≈ 120）為例，`warn 1.05×` 等於 `mean + 6σ`，比設定上寫的 `SigmaWarn = 3` 嚴格一倍，而你不會從任何畫面看出這件事。
+> **這是 2026-08-20 才修正的行為。** 在此之前 `ValueHasPedestal` 只涵蓋絕對強度模式，`Ratio` + `RawMean` 走的是一般的倍率門檻：以實測基準 `0.02895 ± 0.00024`（mean/σ ≈ 119）為例，`warn 1.05×` 等於 `mean + 5.9σ`、`alarm 1.12×` 等於 `mean + 14.2σ`，而設定上寫的是 3σ／6σ——畫面上沒有任何地方顯示這件事。倍率項只有在 `mean/σ > SigmaWarn/(WarnFactor−1)`（本機為 60）時才會蓋過 σ 項，所以同一份設定裡 mean/σ ≈ 35 的項目其實不受影響。**升級後這些項目的門檻會變靈敏**，上線前請確認 3σ 在這台機器上不是誤報。
 
-**`AbsoluteIntensity` + `PeakHeight`**（真的減掉連續背景、平均值誠實地趨近零）在目前版本**必定**被 `mean > 10 σ` 拒絕。這是已知限制，見 [第 7 節](#7-已知盲點目前診斷不到的東西)。
+**`PeakHeight` / `Integral` 分子**（真的減掉連續背景、平均值誠實地趨近零）在 regime 1 於**兩種模式下都必定**被 `mean > 10 σ` 拒絕。這是已知限制，見 [第 7 節](#7-已知盲點目前診斷不到的東西)。
 
 ---
 
@@ -202,8 +208,8 @@ mean <= 0  或  mean < 10 × σ   →  拒絕，記 GoldenRunRatioUnstableBaseli
 | 擷取診斷把「分母系統性為負」與「分母 NaN」併成同一個計數（`ReferenceMissing`） | 兩種完全不同的原因給出同一句話 | 到 Recordings 看該分母波長的原始值是負的還是缺的 |
 | `mean > 10 σ` 的檢查只在整個擷取窗結束後才做 | 設 120 秒就要等滿 120 秒才知道失敗 | 先用短擷取（10 秒）試一次，確認會過再擷取正式的 |
 | 沒有任何地方記錄「這次擷取電漿閘開了幾成」 | 「部分幀被丟掉」看不出來 | 對照同時段 `P_OES1_*.csv` 的列數與擷取秒數 × 幀率 |
-| **`ValueHasPedestal` 不涵蓋 `Ratio` + `RawMean`** | 帶 pedestal 的量走一般百分比與倍率門檻，語意與門檻都被稀釋（見 [第 5 節](#5-regime-1-的建議做法)） | 改用 `AbsoluteIntensity` + `RawMean`；或知道那個百分比不是「該元素上升幾 %」 |
-| `AbsoluteIntensity` + `PeakHeight` 在 regime 1 必定被拒 | 誠實的零基線目前無法被接受 | 用 `RawMean` 走 pedestal 路徑 |
+| `PeakHeight` / `Integral` 在 regime 1 必定被拒（兩種模式皆然） | 誠實的零基線目前無法被接受 | 用 `RawMean` 走 pedestal 路徑 |
+| pedestal 的判定是「分子是不是 `RawMean`」，不是實測 | `Integral` 在寬帶上其實也帶部分 pedestal，判不出來 | 目前無法；設計上已知 |
 
 ---
 
@@ -211,24 +217,27 @@ mean <= 0  或  mean < 10 × σ   →  拒絕，記 GoldenRunRatioUnstableBaseli
 
 依 `%AppData%\OES_Leak_Monitor\settings.json`（作用中基準值 `Recipe Ar`，2026-08-14 擷取，8 筆 baseline）。
 
-> **照做之後必須重新擷取 Golden Run。** 更動 `MonitorMode` 會讓 `Recipe Ar` 裡對應那筆 baseline 被判定為「量的是不同的東西」，開機時會記 `LeakMonitorBaselineMismatch`，該項在重新擷取前不參與警報。紀錄裡已有兩筆同類前例（2026-08-14 22:03，`uN2 335.5`／`uN2 324.7`）。**這是預期後果，不是新的故障。**
+> **不需要更動任何一筆設定，也不需要重新擷取 Golden Run。** `ValueHasPedestal` 修正後，`Ratio` + `RawMean` 的項目會自動改用 σ 判讀；baseline 存的是同一個受監看值的 mean/σ，比對用的 `Mode`／`ReferenceLabel`／`ExtractionRevision` 都沒有變，所以 `Recipe Ar` 原封不動繼續適用。
+>
+> **但門檻會變**：受影響的項目從下表的「舊 warn」降到 `SigmaWarn = 3`。這是**行為變更**，第一次啟動後請盯著看，確認 3σ 在這台機器上不是誤報。
 
-| key | 名稱 | 現況 | 啟用 | 判讀語意 | 建議 | 立即後果 |
-|---|---|---|---|---|---|---|
-| `R_ec3adb8f` | N2 337.1 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 是 | **pedestal 走一般百分比**，門檻實為 6σ 而非 3σ | 改 `AbsoluteIntensity`（分子保持 `RawMean`） | 該項 baseline 失效，須重擷取 |
-| `R_54c914c8` | N2 337.1 (abs) | `AbsoluteIntensity` + `RawMean` | 是 | **正確**：σ 分數、σ 門檻、Δ 校正 | 維持。這是 337.1 目前唯一語意正確的來源 | 無 |
-| `R_7a6c5d0f` | uN2 335.5 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 是 | 同 `R_ec3adb8f` | 改 `AbsoluteIntensity`，或另建一條 abs 版本並停用本項 | 同上 |
-| `R_353b7e10` | N2 353.7 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 是 | 同上 | 同上 | 同上 |
-| `R_7c40d2f9` | NO 237 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 否 | 同上 | 若要啟用，直接建成 `AbsoluteIntensity` | — |
-| `R_54858314` | NO 237 (abs) | `AbsoluteIntensity` + `RawMean` | 否 | 正確 | 需要第二個元素的獨立意見時啟用這條 | — |
-| `R_a2ff1794` | N2+ 391.4 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 否 | 同上 | 同 `R_7c40d2f9` | — |
-| `R_df502a98` | N2+ 391.4 (abs) | `AbsoluteIntensity` + `RawMean` | 否 | 正確 | 需要時啟用 | — |
-| `R_e3b669d5` | uN2 324.7 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 否 | 同上 | 同 `R_7c40d2f9` | — |
+| key | 名稱 | 現況 | 啟用 | mean/σ | 舊 warn / alarm | 新 warn / alarm | 需要動嗎 |
+|---|---|---|---|---|---|---|---|
+| `R_ec3adb8f` | N2 337.1 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 是 | 119 | 5.9σ / 14.2σ | **3σ / 6σ** | 否 |
+| `R_7a6c5d0f` | uN2 335.5 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 是 | 140 | 7.0σ / 16.8σ | **3σ / 6σ** | 否 |
+| `R_e3b669d5` | uN2 324.7 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 否 | 239 | 11.9σ / 28.6σ | **3σ / 6σ** | 否 |
+| `R_7c40d2f9` | NO 237 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 否 | 36 | 3σ / 6σ | 3σ / 6σ | 否（本來就未受影響） |
+| `R_a2ff1794` | N2+ 391.4 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 否 | 35 | 3σ / 6σ | 3σ / 6σ | 否（同上） |
+| `R_54c914c8` | N2 337.1 (abs) | `AbsoluteIntensity` + `RawMean` | 是 | 121 | 3σ / 6σ | 3σ / 6σ | 否 |
+| `R_54858314` | NO 237 (abs) | `AbsoluteIntensity` + `RawMean` | 否 | 36 | 3σ / 6σ | 3σ / 6σ | 否 |
+| `R_df502a98` | N2+ 391.4 (abs) | `AbsoluteIntensity` + `RawMean` | 否 | 35 | 3σ / 6σ | 3σ / 6σ | 否 |
+| `R_353b7e10` | N2 353.7 / Ar 750.4 | `Ratio` + 分子 `RawMean` | 是 | — | — | — | **見下** |
 
-**兩個與上表無關、但一起看才看得出來的觀察**：
+**三個要處理的觀察**：
 
-- 這九筆的 `MinSnr`（2 或 5）**目前幾乎不起作用**：分子全是 `RawMean`（SNR 為 `NaN`），所以它只在比值模式下作用於分母 `Ar 750.4 PeakHeight`，在絕對強度模式下完全不作用。調它之前先確認你想影響的是哪一條線。
-- **沒有任何一筆 ratio 監測氧。** `MonitoredWavelengths` 有 308.9／309.3 nm（OH），但那只進到強度 CSV 與趨勢圖，不構成判斷。空氣漏是氮加氧；目前所有判斷都建立在氮上，通 N₂ 的 step 會完全失去獨立意見。建議至少建一條 `AbsoluteIntensity` + `RawMean` 的 O 或 OH 項目。
+- **`R_353b7e10`（N2 353.7）已啟用，但 `Recipe Ar` 裡沒有它的 baseline。** 它是那次擷取之後才加的，所以現在就是 No Baseline、不參與複合警報——而畫面上它看起來和其他項目一樣。下次重新擷取才會補上。
+- 這九筆的 `MinSnr`（2 或 5）**只作用在分母**：分子全是 `RawMean`（SNR 為 `NaN`），所以比值模式下它 gate `Ar 750.4 PeakHeight`，絕對強度模式下完全不作用。調它之前先確認你想影響的是哪一條線。
+- **沒有任何一筆 ratio 監測氧。** `MonitoredWavelengths` 有 308.9／309.3 nm（OH），但那只進到強度 CSV 與趨勢圖，不構成判斷。空氣漏是氮加氧；目前所有判斷都建立在氮上，通 N₂ 的 step 會完全失去獨立意見。建議至少建一條 O 或 OH 的項目（有可信參考線就用 `Ratio` + `RawMean`）。
 
 ---
 
@@ -240,7 +249,7 @@ mean <= 0  或  mean < 10 × σ   →  拒絕，記 GoldenRunRatioUnstableBaseli
 | `MinBaselineAcceptFraction` | 0.5 | `LeakMonitorEngine` | 防止只用「向上雜訊」那一小撮通過的幀去組成基準 |
 | `RatioDefinition.MinSnr` | 預設 5 | `LeakMonitorSettings` | 兩條線是否可信；對 `RawMean` 無效 |
 | `SigmaWarn` / `SigmaAlarm` | 3 / 6 | `LeakMonitorSettings` | σ 門檻；pedestal 成立時是**唯一**的門檻 |
-| `WarnFactor` / `AlarmFactor` | 本機 1.05 / 1.12 | `settings.json` | 倍率門檻；pedestal 成立時被忽略 |
+| `WarnFactor` / `AlarmFactor` | 本機 1.05 / 1.12 | `settings.json` | 倍率門檻；pedestal 成立時被忽略。不成立時，只有在 `mean/σ > SigmaWarn/(WarnFactor−1)`（本機 60）時才會蓋過 σ 項 |
 | `ConfirmSeconds` | 15 s | `LeakMonitorSettings` | 把突波和洩漏分開 |
 | `GoldenRunCaptureSeconds` | 本機 120 s | `settings.json` | 擷取窗長度 |
 | 擷取期間的電漿地板 | 站下（floor = 0） | `LeakMonitorEngine.ProcessSample` | 讓上一份 Golden Run 的地板不會擋住新的擷取 |
