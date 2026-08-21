@@ -246,6 +246,86 @@ public class BaselineBuilderTests
         Assert.True(best!.FromSec >= 10, $"suggested window starts at {best.FromSec} s, inside the ramp");
     }
 
+    // --- how steady is the window ------------------------------------------
+
+    /// <summary>
+    /// The failure this was written from: three whole recordings selected end to end, each
+    /// containing the excursion the baseline was supposed to exclude. One ratio squeaked over the
+    /// mean &gt; 10 σ floor at 10.2 and looked, on the Leak Monitor tab, exactly like a clean one —
+    /// with thresholds ten times wider.
+    /// </summary>
+    [Fact]
+    public void AWindowOverARampClearsTheFloorButIsFlaggedAsMarginal()
+    {
+        var ramp = Enumerable.Range(0, 100).Select(i => 2000.0 + i * 6).ToList();   // 2000 → 2594
+
+        var result = BaselineBuilder.Build(
+            new[] { (Fake("ramp.csv", ramp), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "ramp", MinFrames = 60 });
+
+        var b = Assert.Single(result.Run.Baselines);
+        double meanOverSigma = b.Mean / b.Sigma;
+        Assert.True(meanOverSigma > BaselineBuilder.MinBaselineMeanToSigma,
+            $"expected it to clear the floor, got {meanOverSigma:0.#}");
+        Assert.True(meanOverSigma < BaselineBuilder.MarginalMeanToSigma,
+            $"expected it to read as marginal, got {meanOverSigma:0.#}");
+    }
+
+    /// <summary>
+    /// σ alone cannot tell a ramp from noise, and the two want different answers: one means the
+    /// window is in the wrong place, the other that the plasma is unsteady.
+    /// </summary>
+    [Fact]
+    public void DriftSeparatesARampFromNoise()
+    {
+        var ramp = Enumerable.Range(0, 100).Select(i => 2000.0 + i * 6).ToList();
+        var noisy = Enumerable.Range(0, 100).Select(i => 2300.0 + (i % 2 == 0 ? 170 : -170)).ToList();
+
+        var rampBuild = BaselineBuilder.Build(
+            new[] { (Fake("ramp.csv", ramp), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "ramp", MinFrames = 60 });
+        var noiseBuild = BaselineBuilder.Build(
+            new[] { (Fake("noise.csv", noisy), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "noise", MinFrames = 60 });
+
+        var rampRow = Assert.Single(rampBuild.Steadiness);
+        var noiseRow = Assert.Single(noiseBuild.Steadiness);
+
+        // Comparable scatter…
+        Assert.True(rampRow.RelativeSigma > 0.05);
+        Assert.True(noiseRow.RelativeSigma > 0.05);
+        // …and only one of them is going anywhere.
+        Assert.True(rampRow.RelativeDrift > 0.1, $"ramp drift {rampRow.RelativeDrift:P1}");
+        Assert.True(noiseRow.RelativeDrift < 0.01, $"noise drift {noiseRow.RelativeDrift:P1}");
+    }
+
+    /// <summary>
+    /// A window that swallows its whole recording silently disables the back-check — there is
+    /// nothing outside it left to compare. Saying so is the point: an empty section reads as a
+    /// clean bill of health.
+    /// </summary>
+    [Fact]
+    public void AWholeRecordingWindowIsReportedAndLeavesNoBackCheck()
+    {
+        var result = BaselineBuilder.Build(
+            new[] { (Fake("whole.csv", Flat(100, 2000)), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "whole", MinFrames = 60 });
+
+        Assert.True(Assert.Single(result.Steadiness).WindowCoversWholeRecording);
+        Assert.Empty(result.BackChecks);
+    }
+
+    [Fact]
+    public void APartialWindowIsNotReportedAsCoveringTheRecording()
+    {
+        var result = BaselineBuilder.Build(
+            new[] { (Fake("part.csv", Flat(200, 2000)), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "part", MinFrames = 60 });
+
+        Assert.False(Assert.Single(result.Steadiness).WindowCoversWholeRecording);
+        Assert.NotEmpty(result.BackChecks);
+    }
+
     // --- the claim -----------------------------------------------------------
 
     /// <summary>

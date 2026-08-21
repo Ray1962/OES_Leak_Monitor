@@ -382,13 +382,23 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
         if (r.Run.Baselines.Count > 0)
         {
             sb.AppendLine($"Baselines ({r.Run.Baselines.Count}):");
+            bool anyMarginal = false;
             foreach (var b in r.Run.Baselines)
             {
                 string name = _engine.Settings.Ratios.FirstOrDefault(x => x.Key == b.Key)?.DisplayName ?? b.Key;
                 double snr = b.Sigma > 0 ? b.Mean / b.Sigma : double.PositiveInfinity;
+                bool marginal = snr < BaselineBuilder.MarginalMeanToSigma;
+                anyMarginal |= marginal;
                 sb.AppendLine($"  {name}: {Fmt(b.Mean)} ± {Fmt(b.Sigma)}  " +
-                              $"(mean/σ {snr:0.#}, {b.SampleCount} frames)");
+                              $"(mean/σ {snr:0.#}, {b.SampleCount} frames)" +
+                              (marginal ? "   << only just clears the floor" : ""));
             }
+            if (anyMarginal)
+                sb.AppendLine()
+                  .AppendLine($"  A baseline barely over mean/σ {BaselineBuilder.MinBaselineMeanToSigma:0} " +
+                              "has thresholds several times wider than a clean one, and looks exactly " +
+                              "the same on the Leak Monitor tab. Usually it means the window took in " +
+                              "something that was not steady — check the σ/mean figures below.");
             sb.AppendLine();
         }
 
@@ -407,6 +417,31 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
             sb.AppendLine();
         }
 
+        if (r.Steadiness.Count > 0)
+        {
+            sb.AppendLine("How steady each chosen window is (worst ratio in it):");
+            foreach (var st in r.Steadiness)
+            {
+                string file = System.IO.Path.GetFileName(st.Path);
+                if (double.IsNaN(st.RelativeSigma))
+                {
+                    sb.AppendLine($"  {file} — no ratio produced a usable value in this window.");
+                }
+                else
+                {
+                    sb.AppendLine($"  {file} — σ/mean {st.RelativeSigma * 100:0.##} %, " +
+                                  $"drift {st.RelativeDrift * 100:0.##} % on {st.RatioDisplayName}" +
+                                  (st.WindowCoversWholeRecording ? "   << window is the whole recording" : ""));
+                }
+            }
+            sb.AppendLine();
+            sb.AppendLine("A steady plateau reads around 1 %. Ten times that means the window took in " +
+                          "something the process was doing — drift says it was a ramp, σ alone says " +
+                          "it was noise.");
+            sb.AppendLine();
+        }
+
+        bool nothingOutside = r.Steadiness.Count > 0 && r.Steadiness.All(s => s.WindowCoversWholeRecording);
         if (r.BackChecks.Count > 0)
         {
             sb.AppendLine("Furthest each recording goes outside its own window, against this baseline:");
@@ -416,6 +451,13 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
             sb.AppendLine();
             sb.AppendLine("A large figure is not a fault by itself: outside the window is where the " +
                           "process changes, and on a recording that contained a leak it is the leak.");
+        }
+        else if (nothingOutside)
+        {
+            sb.AppendLine("No back-check: every window covers its whole recording, so there is nothing " +
+                          "outside it to compare. That check is what would otherwise notice a window " +
+                          "containing an excursion — with it unavailable, the σ/mean figures above are " +
+                          "the only thing saying whether these windows are steady.");
         }
         return sb.ToString().TrimEnd();
     }

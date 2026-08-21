@@ -890,8 +890,12 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>接受的 baseline</td><td>每個比值的 <code>mean ± σ</code>、<code>mean/σ</code>、採用幀數</td></tr>
 <tr><td>沒拿到基準的比值</td><td>原因和現場擷取用的是同一批句子，可對照 §9.5</td></tr>
 <tr><td>被擱置的錄製</td><td>某個檔的水準和其他檔差太多會<strong>預設排除</strong>，該列變橘底。勾 <code>Keep anyway</code> 可以覆寫</td></tr>
+<tr><td><strong>視窗穩定度</strong></td><td>每個檔在<strong>自己視窗以內</strong>的 <code>σ/mean</code> 與漂移（取該檔最差的那條比值）</td></tr>
 <tr><td>回套檢查</td><td>每個檔在<strong>自己視窗以外</strong>最遠跑到幾 σ</td></tr>
 </tbody></table></div>
+<p><strong><code>mean/σ</code> 剛好過門檻要當回事</strong>。門檻是 10；<code>mean/σ = 10.2</code> 和 <code>mean/σ = 97</code> 在 Leak Monitor 分頁上長得<strong>一模一樣</strong>（都只是「有基準」），但前者的警報門檻寬了十倍——看起來設定完成、真的漏氣時不會叫。低於 20 時結果面板會標 <code>&lt;&lt; only just clears the floor</code>。通常代表視窗framed進了不該進來的東西。</p>
+<p><strong>視窗穩定度怎麼讀</strong>：一段真正的平台大約是 <code>σ/mean ≈ 1 %</code>。十倍於此，代表視窗吃進了製程正在做的事——<strong>漂移大</strong>說明那是一段爬升（視窗放錯位置），<strong>只有 σ 大、漂移小</strong>說明是雜訊（電漿本身不穩）。</p>
+<p><strong>整檔框選會讓回套檢查失效</strong>：視窗以外沒有東西可比，那道唯一會發現「這份錄製別處跑到 59 σ」的守衛就沉默了。這種情況結果面板會明講「No back-check」，而不是留一片空白讓人以為通過。這時<strong>視窗穩定度是唯一的判準</strong>。</p>
 <p><strong>被擱置代表什麼</strong>：這道檢查擋的是最危險的一種錯誤——把一份<strong>當時真的在漏</strong>的錄製混進基準。一旦混進去，那個漏就變成「正常」，之後永遠測不到它。所以預設是排除、要你明確覆寫。真要覆寫也未必成功：一份差很遠的錄製合進來會讓 σ 膨脹，<code>mean &gt; 10σ</code> 那道門檻通常會自己把結果擋掉。</p>
 <p><strong>回套檢查的數字大不代表壞</strong>：視窗以外本來就是製程在變的地方。但如果那份錄製裡真的有一次洩漏，這個數字就是它。</p>
 <h4 id="為什麼一個檔只能選一段">為什麼一個檔只能選一段</h4>

@@ -76,6 +76,18 @@ public sealed record BuildOutlier(string Path, string RatioKey, string RatioDisp
         $"recordings — {Sigmas:0.#} σ away";
 }
 
+/// <summary>
+/// How steady the chosen window actually is, per recording — the worst ratio in it.
+///
+/// <para>It answers the question the back-check cannot when the window is the whole recording:
+/// there is then nothing outside it to compare, and the one guard that would have caught a window
+/// containing a leak goes quiet. σ within the window does not, and neither does drift across it —
+/// a slow rise inflates σ and shows up as drift, where noise inflates σ and does not.</para>
+/// </summary>
+public sealed record BuildSteadiness(string Path, string RatioKey, string RatioDisplayName,
+                                     double RelativeSigma, double RelativeDrift,
+                                     bool WindowCoversWholeRecording);
+
 /// <summary>How far the finished baseline is exceeded *outside* the window it was built from.</summary>
 public sealed record BuildBackCheck(string Path, string RatioKey, string RatioDisplayName,
                                     double MaxSigmas, double AtSeconds);
@@ -112,6 +124,10 @@ public sealed class BaselineBuildResult
 
     public required IReadOnlyList<BuildBackCheck> BackChecks { get; init; }
 
+    /// <summary>Per recording, how steady its chosen window is — and whether that window swallowed
+    /// the whole recording, which is what leaves <see cref="BackChecks"/> with nothing to say.</summary>
+    public required IReadOnlyList<BuildSteadiness> Steadiness { get; init; }
+
     /// <summary>Non-empty when the build was refused outright.</summary>
     public string Error { get; init; } = "";
 }
@@ -145,6 +161,18 @@ public static class BaselineBuilder
     /// <summary>Mirrors LeakMonitorEngine: too few of the SNR-evaluable frames clearing the floor
     /// means the survivors are a biased upward sliver.</summary>
     public const double MinAcceptFraction = 0.5;
+
+    /// <summary>
+    /// A baseline this close to <see cref="MinBaselineMeanToSigma"/> is worth saying out loud.
+    /// Clearing the floor at 10.2 σ and clearing it at 97 σ look identical on screen — both are
+    /// "has a baseline" — but the first has thresholds ten times wider, which is a monitor that
+    /// looks configured and will not fire. Measured: a window that swallowed a whole recording,
+    /// leak included, produced exactly 10.2.
+    /// </summary>
+    public const double MarginalMeanToSigma = 20.0;
+
+    /// <summary>A window this fraction of a recording leaves nothing outside it to check.</summary>
+    public const double WholeRecordingFraction = 0.95;
 
     /// <summary>Re-extracts one parsed recording through the current ratio set.</summary>
     public static RecordingScan Scan(string path, string displayName, DateTime startLocal,
@@ -447,7 +475,39 @@ public static class BaselineBuilder
             Rejected = rejected,
             Outliers = outliers,
             BackChecks = BackCheck(used, run),
+            Steadiness = Steadiness(used, run),
         };
+    }
+
+    /// <summary>
+    /// How steady each recording's chosen window is, judged from inside it. Reported per recording
+    /// as the worst ratio, so the panel stays readable — and reported even when a recording
+    /// produced no baseline at all, because "the window is the whole recording" is worth saying
+    /// either way.
+    /// </summary>
+    private static IReadOnlyList<BuildSteadiness> Steadiness(
+        IReadOnlyList<(RecordingScan Scan, SteadyWindow Window)> used, GoldenRun run)
+    {
+        var rows = new List<BuildSteadiness>();
+        foreach (var (scan, window) in used)
+        {
+            bool whole = scan.DurationSeconds > 0 &&
+                         (window.ToSec - window.FromSec) >= WholeRecordingFraction * scan.DurationSeconds;
+            BuildSteadiness? worst = null;
+            foreach (var b in run.Baselines)
+            {
+                if (!scan.Traces.TryGetValue(b.Key, out var t)) continue;
+                var s = t.StatsOver(scan.ElapsedSec, window.FromSec, window.ToSec);
+                if (s.Count < 4 || s.Mean == 0) continue;
+                double rel = s.StdDev / Math.Abs(s.Mean);
+                double drift = Math.Abs(Drift(t, scan.ElapsedSec, window.FromSec, window.ToSec))
+                             / Math.Abs(s.Mean);
+                if (worst is null || rel > worst.RelativeSigma)
+                    worst = new BuildSteadiness(scan.Path, b.Key, t.DisplayName, rel, drift, whole);
+            }
+            rows.Add(worst ?? new BuildSteadiness(scan.Path, "", "", double.NaN, double.NaN, whole));
+        }
+        return rows;
     }
 
     /// <summary>
@@ -544,6 +604,7 @@ public static class BaselineBuilder
         Rejected = Array.Empty<GoldenRunRatioRejection>(),
         Outliers = outliers ?? Array.Empty<BuildOutlier>(),
         BackChecks = Array.Empty<BuildBackCheck>(),
+        Steadiness = Array.Empty<BuildSteadiness>(),
         Error = error,
     };
 }
