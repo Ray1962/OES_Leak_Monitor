@@ -13,7 +13,11 @@ namespace OES_Leak_Monitor;
 /// </summary>
 public sealed class SettingsService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    /// <summary>
+    /// How <c>settings.json</c> is written. Shared with <see cref="ConfigSnapshot"/> so the copy
+    /// kept beside the data reads exactly like the file it came from.
+    /// </summary>
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

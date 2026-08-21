@@ -15,6 +15,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // The one and only place the app folder name is spelled out — everything else
     // takes the resolved paths from this instance.
     private readonly OesAppPaths _paths = new("OES_Leak_Monitor");
+
+    /// <summary>Day folder the last recording opened in — where the configuration snapshot and
+    /// the system-log copies go. See <see cref="MirrorRunContext"/>.</summary>
+    private string? _lastDayFolder;
     private readonly SettingsService _settingsService;
     private readonly SystemLogger _systemLogger;
     private readonly DualIntensityLogger _intensityLogger;
@@ -836,20 +840,29 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Persist all devices' parameters and the shared logger settings as one JSON
     /// file. Backs the unified Save button at the bottom of the Configuration tab.
     /// </summary>
+    /// <summary>
+    /// Everything the tabs currently hold, as the object that would be written to
+    /// <c>settings.json</c>. One definition, because the snapshot kept beside the data
+    /// (<see cref="ConfigSnapshot"/>) has to be the same settings the Save button would write —
+    /// a second gathering of them would eventually disagree, and the snapshot exists precisely
+    /// to be trusted months later.
+    /// </summary>
+    private AppSettings CurrentSettings() => new()
+    {
+        Devices       = _devices.Select(d => d.ToSettings()).ToList(),
+        Logger        = Logger.ToSettings(),
+        LeakMonitor   = _leakMonitorEngine.Settings, // includes captured Golden Runs
+        AccessControl = AccessControl.SnapshotConfig(), // preserve user list across saves
+        DataRetention = _retention,
+        TrendRetentionMinutes = TrendRetentionMinutes,
+        SimulationCsvPath = _replay.FilePath, // keep the Replay tab's recording selection
+        ReplaySpeed = _replay.Speed,
+        Secs = Secs.ToSettings(),   // the SECS tab has its own Save; this preserves it here
+    };
+
     private void SaveSettings()
     {
-        var settings = new AppSettings
-        {
-            Devices       = _devices.Select(d => d.ToSettings()).ToList(),
-            Logger        = Logger.ToSettings(),
-            LeakMonitor   = _leakMonitorEngine.Settings, // includes captured Golden Runs
-            AccessControl = AccessControl.SnapshotConfig(), // preserve user list across saves
-            DataRetention = _retention,
-            TrendRetentionMinutes = TrendRetentionMinutes,
-            SimulationCsvPath = _replay.FilePath, // keep the Replay tab's recording selection
-            ReplaySpeed = _replay.Speed,
-            Secs = Secs.ToSettings(),   // the SECS tab has its own Save; this preserves it here
-        };
+        var settings = CurrentSettings();
         _settingsService.Save(settings);
         // The armed flag now matches what is on disk, so the Monitor strip's
         // "not saved" warning clears.
@@ -1215,6 +1228,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        // Last refresh of the day's log copy: every earlier one was taken while the file was
+        // still being written, so this is the only complete one the day folder will get.
+        if (_lastDayFolder is not null)
+        {
+            try { SyncSystemLog(_lastDayFolder, DateTime.Now); }
+            catch { /* shutting down; a missing log copy must not hold the window open */ }
+        }
+
         // Stop the housekeeping timer first; an in-flight pass is left to finish on its own
         // (it only touches files the logger has already released).
         _retentionTimer?.Dispose();
@@ -1276,6 +1297,54 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// the run's spectra are then split across files with different wavelength axes, and any
     /// Golden Run captured under the old exposure no longer applies.
     /// </summary>
+    /// <summary>
+    /// Keeps the day folder self-contained: a redacted copy of the configuration and of the day's
+    /// system log, beside the recordings they describe.
+    ///
+    /// <para>The data folder is wherever the operator pointed the logger; everything needed to
+    /// read what is in it — the save threshold that decided which frames were evaluated at all,
+    /// the ratio definitions, the corrections, and the log saying what the tool did — lives under
+    /// <c>%AppData%</c>. Copying a day folder off the machine takes the first and leaves the
+    /// second. That is not a mistake anyone makes once: it is what the folder structure invites,
+    /// so the fix belongs here rather than in a reminder.</para>
+    ///
+    /// <para>Best-effort throughout. Both are conveniences beside the measurement, and a failure
+    /// to write one must never disturb the recording that prompted it.</para>
+    /// </summary>
+    private void MirrorRunContext(string? dayFolder)
+    {
+        if (string.IsNullOrWhiteSpace(dayFolder)) return;
+        _lastDayFolder = dayFolder;
+        var now = DateTime.Now;
+
+        var written = ConfigSnapshot.TryWrite(dayFolder, CurrentSettings(), now, out var configError);
+        if (configError is not null)
+            _systemLogger.LogSystemEvent(LogSeverity.Warning, "ConfigSnapshotFailed",
+                $"Could not write the configuration snapshot into {dayFolder}: {configError}. " +
+                "The recordings are unaffected, but a copy of this folder will not carry the " +
+                "settings needed to interpret them.",
+                value: dayFolder);
+        else if (written is not null)
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "ConfigSnapshotWritten",
+                "Configuration snapshot written beside the recordings (access-control section " +
+                "removed).", value: written);
+
+        SyncSystemLog(dayFolder, now);
+    }
+
+    private void SyncSystemLog(string dayFolder, DateTime day)
+    {
+        int copied = SystemLogMirror.Sync(dayFolder, _paths.LogDirectory, day, out var errors);
+        if (errors.Count > 0)
+            _systemLogger.LogSystemEvent(LogSeverity.Warning, "SystemLogMirrorFailed",
+                $"Could not copy {errors.Count} system-log file(s) into {dayFolder}. A copy of " +
+                "this folder will not carry the record of what the tool did that day.",
+                value: string.Join("; ", errors));
+        else if (copied > 0)
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "SystemLogMirrored",
+                $"{copied} system-log file(s) copied beside the recordings.", value: dayFolder);
+    }
+
     private void OnIntensityFileRolled(object? sender, LoggerFileRolledEventArgs e)
     {
         var axis = e.Reason == FileRollReason.SpectrumAxisChanged;
@@ -1315,6 +1384,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     "will not know the integration time or averaging it was taken at.",
                     value: f);
         }
+
+        var opened = files.FirstOrDefault(f => !string.IsNullOrEmpty(f));
+        if (!string.IsNullOrEmpty(opened)) MirrorRunContext(System.IO.Path.GetDirectoryName(opened));
         // Writers opening again is the evidence that whatever stopped the last write is over.
         if (files.Any(f => !string.IsNullOrEmpty(f)))
             _secs.ReportFault(SecsFault.DataWriteFailure, set: false);
