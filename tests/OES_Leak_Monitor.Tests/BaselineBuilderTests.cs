@@ -326,6 +326,62 @@ public class BaselineBuilderTests
         Assert.NotEmpty(result.BackChecks);
     }
 
+    // --- do the recordings agree with each other ---------------------------
+
+    /// <summary>
+    /// The failure this was written from: two recordings, each window steady to about 1 %, whose
+    /// absolute-intensity levels sat 19 % apart because they were different runs at different
+    /// plasma brightness. Pooled, that gap became the σ — mean/σ fell from ~125 to 10.7 — and
+    /// nothing said why, because the outlier check needs three recordings to name one and there
+    /// were two.
+    /// </summary>
+    [Fact]
+    public void TwoRecordingsThatDisagreeAreReportedEvenThoughNeitherCanBeCalledTheOddOne()
+    {
+        var picks = new[]
+        {
+            (Fake("early.csv", Flat(100, 2000, jitter: 2)), new SteadyWindow(0, 99)),
+            (Fake("late.csv",  Flat(100, 2400, jitter: 2)), new SteadyWindow(0, 99)),
+        };
+
+        var result = BaselineBuilder.Build(picks,
+            new BaselineBuildOptions { RunName = "pair", MinFrames = 60 });
+
+        Assert.Empty(result.Outliers);                 // two cannot vote — unchanged
+        var sp = Assert.Single(result.Spread);         // but the disagreement is still said
+        Assert.InRange(sp.RelativeSpread, 0.17, 0.19); // 400 / 2200
+        Assert.True(sp.SpreadOverSigma > 50,
+            $"a 18 % gap against ~0.1 % scatter should be enormous, got {sp.SpreadOverSigma:0.#}");
+    }
+
+    [Fact]
+    public void RecordingsThatAgreeReportASmallSpread()
+    {
+        var picks = new[]
+        {
+            (Fake("a.csv", Flat(100, 2000, jitter: 20)), new SteadyWindow(0, 99)),
+            (Fake("b.csv", Flat(100, 2002, jitter: 20)), new SteadyWindow(0, 99)),
+        };
+
+        var result = BaselineBuilder.Build(picks,
+            new BaselineBuildOptions { RunName = "agree", MinFrames = 60 });
+
+        var sp = Assert.Single(result.Spread);
+        Assert.True(sp.SpreadOverSigma < 1,
+            $"a gap smaller than the noise should not read as disagreement, got {sp.SpreadOverSigma:0.##}");
+    }
+
+    /// <summary>One recording cannot disagree with anything.</summary>
+    [Fact]
+    public void ASingleRecordingHasNoSpreadToReport()
+    {
+        var result = BaselineBuilder.Build(
+            new[] { (Fake("only.csv", Flat(100, 2000)), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "single", MinFrames = 60 });
+
+        Assert.Empty(result.Spread);
+    }
+
     // --- the claim -----------------------------------------------------------
 
     /// <summary>

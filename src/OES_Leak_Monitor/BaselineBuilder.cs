@@ -67,6 +67,24 @@ public sealed record SegmentSuggestion(double FromSec, double ToSec, int Frames,
 /// see <see cref="BaselineBuilder"/>.</summary>
 public sealed record SteadyWindow(double FromSec, double ToSec);
 
+/// <summary>
+/// How far the recordings disagree with each other about one ratio's level, next to how much they
+/// scatter within themselves.
+///
+/// <para>It is the number that explains a collapsed <c>mean/σ</c>. Each window can be perfectly
+/// steady and the pooled σ still be ten times either of them, because pooling writes the gap
+/// between the recordings into it. Ratio-mode entries divide that gap out — that is what the
+/// reference line is for — and absolute-intensity entries cannot: measured on two runs an hour
+/// apart, 2 % on the Ar-normalised ratios and 19 % on the same line read undivided.</para>
+///
+/// <para>Reported from two recordings upward, unlike <see cref="BuildOutlier"/>, which needs three
+/// to say which one is the odd one. "These two disagree" is worth knowing without knowing who is
+/// wrong.</para>
+/// </summary>
+public sealed record BuildSpread(string RatioKey, string RatioDisplayName,
+                                 double RelativeSpread, double TypicalRelativeSigma,
+                                 double SpreadOverSigma);
+
 /// <summary>A recording whose level disagrees with the others, and the ratio that says so.</summary>
 public sealed record BuildOutlier(string Path, string RatioKey, string RatioDisplayName,
                                   double Mean, double PeerMedian, double Sigmas)
@@ -127,6 +145,10 @@ public sealed class BaselineBuildResult
     /// <summary>Per recording, how steady its chosen window is — and whether that window swallowed
     /// the whole recording, which is what leaves <see cref="BackChecks"/> with nothing to say.</summary>
     public required IReadOnlyList<BuildSteadiness> Steadiness { get; init; }
+
+    /// <summary>Per ratio, how far the recordings disagree with each other — the thing that
+    /// inflates a pooled σ while every window looks steady on its own.</summary>
+    public required IReadOnlyList<BuildSpread> Spread { get; init; }
 
     /// <summary>Non-empty when the build was refused outright.</summary>
     public string Error { get; init; } = "";
@@ -476,7 +498,44 @@ public static class BaselineBuilder
             Outliers = outliers,
             BackChecks = BackCheck(used, run),
             Steadiness = Steadiness(used, run),
+            Spread = Spread(used, run),
         };
+    }
+
+    /// <summary>
+    /// Per ratio, the gap between the recordings' own levels, measured against how much each one
+    /// scatters within itself. Worst first.
+    /// </summary>
+    private static IReadOnlyList<BuildSpread> Spread(
+        IReadOnlyList<(RecordingScan Scan, SteadyWindow Window)> used, GoldenRun run)
+    {
+        if (used.Count < 2) return Array.Empty<BuildSpread>();
+
+        var rows = new List<BuildSpread>();
+        foreach (var b in run.Baselines)
+        {
+            var means = new List<double>();
+            var sigmas = new List<double>();
+            string display = b.Key;
+            foreach (var (scan, window) in used)
+            {
+                if (!scan.Traces.TryGetValue(b.Key, out var t)) continue;
+                display = t.DisplayName;
+                var s = t.StatsOver(scan.ElapsedSec, window.FromSec, window.ToSec);
+                if (s.Count < 2 || s.Mean == 0) continue;
+                means.Add(s.Mean);
+                sigmas.Add(s.StdDev / Math.Abs(s.Mean));
+            }
+            if (means.Count < 2) continue;
+
+            double centre = means.Average();
+            if (!(Math.Abs(centre) > 0)) continue;
+            double spread = (means.Max() - means.Min()) / Math.Abs(centre);
+            double typical = Median(sigmas);
+            rows.Add(new BuildSpread(b.Key, display, spread, typical,
+                typical > 0 ? spread / typical : double.PositiveInfinity));
+        }
+        return rows.OrderByDescending(r => r.SpreadOverSigma).ToList();
     }
 
     /// <summary>
@@ -605,6 +664,7 @@ public static class BaselineBuilder
         Outliers = outliers ?? Array.Empty<BuildOutlier>(),
         BackChecks = Array.Empty<BuildBackCheck>(),
         Steadiness = Array.Empty<BuildSteadiness>(),
+        Spread = Array.Empty<BuildSpread>(),
         Error = error,
     };
 }

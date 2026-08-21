@@ -417,6 +417,22 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
             sb.AppendLine();
         }
 
+        if (r.Spread.Count > 0)
+        {
+            sb.AppendLine("How far the recordings disagree with each other (worst first):");
+            foreach (var sp in r.Spread)
+                sb.AppendLine($"  {sp.RatioDisplayName} — levels differ by {sp.RelativeSpread * 100:0.##} %, " +
+                              $"{sp.SpreadOverSigma:0.#}× the scatter within a single recording " +
+                              $"({sp.TypicalRelativeSigma * 100:0.##} %)");
+            sb.AppendLine();
+            sb.AppendLine("This is what inflates a pooled σ while every window looks steady on its own. " +
+                          "A ratio divides the difference out — that is what its reference line is for — " +
+                          "so a large figure here on an absolute-intensity entry usually means the runs " +
+                          "were simply at different plasma brightness, and that entry wants a baseline " +
+                          "from one recording rather than several.");
+            sb.AppendLine();
+        }
+
         if (r.Steadiness.Count > 0)
         {
             sb.AppendLine("How steady each chosen window is (worst ratio in it):");

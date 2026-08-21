@@ -890,12 +890,33 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>接受的 baseline</td><td>每個比值的 <code>mean ± σ</code>、<code>mean/σ</code>、採用幀數</td></tr>
 <tr><td>沒拿到基準的比值</td><td>原因和現場擷取用的是同一批句子，可對照 §9.5</td></tr>
 <tr><td>被擱置的錄製</td><td>某個檔的水準和其他檔差太多會<strong>預設排除</strong>，該列變橘底。勾 <code>Keep anyway</code> 可以覆寫</td></tr>
+<tr><td><strong>檔間差距</strong></td><td>每條比值在各錄製之間的水準差，以及那是「檔內散度」的幾倍</td></tr>
 <tr><td><strong>視窗穩定度</strong></td><td>每個檔在<strong>自己視窗以內</strong>的 <code>σ/mean</code> 與漂移（取該檔最差的那條比值）</td></tr>
 <tr><td>回套檢查</td><td>每個檔在<strong>自己視窗以外</strong>最遠跑到幾 σ</td></tr>
 </tbody></table></div>
 <p><strong><code>mean/σ</code> 剛好過門檻要當回事</strong>。門檻是 10；<code>mean/σ = 10.2</code> 和 <code>mean/σ = 97</code> 在 Leak Monitor 分頁上長得<strong>一模一樣</strong>（都只是「有基準」），但前者的警報門檻寬了十倍——看起來設定完成、真的漏氣時不會叫。低於 20 時結果面板會標 <code>&lt;&lt; only just clears the floor</code>。通常代表視窗framed進了不該進來的東西。</p>
 <p><strong>視窗穩定度怎麼讀</strong>：一段真正的平台大約是 <code>σ/mean ≈ 1 %</code>。十倍於此，代表視窗吃進了製程正在做的事——<strong>漂移大</strong>說明那是一段爬升（視窗放錯位置），<strong>只有 σ 大、漂移小</strong>說明是雜訊（電漿本身不穩）。</p>
 <p><strong>整檔框選會讓回套檢查失效</strong>：視窗以外沒有東西可比，那道唯一會發現「這份錄製別處跑到 59 σ」的守衛就沉默了。這種情況結果面板會明講「No back-check」，而不是留一片空白讓人以為通過。這時<strong>視窗穩定度是唯一的判準</strong>。</p>
+<h4 id="跨錄製合併比值可以絕對強度要小心">跨錄製合併：比值可以，絕對強度要小心</h4>
+<p><strong>每個視窗都很穩，合併後 <code>mean/σ</code> 還是很差</strong>——這種情況幾乎都是「檔間差距」造成的：不同 run 的電漿亮度本來就不完全一樣，合併等於把那個差距寫進 σ。</p>
+<ul>
+<li><strong>比值項會把它除掉</strong>——這正是參考線的用途。
+</li>
+<li><strong>絕對強度項沒得除</strong>，差多少就原封不動進 σ。
+</li>
+</ul>
+<p>實測（同一天相隔一小時的兩次 run，各自視窗內都只有 0.7–1.3 % 散度）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>比值</th><th>檔間差距</th></tr></thead>
+<tbody>
+<tr><td>N2 337.1 / Ar 750.4</td><td>2.1 %</td></tr>
+<tr><td><strong>N2 337.1（絕對強度）</strong></td><td><strong>19.0 %</strong></td></tr>
+<tr><td>uN2 335.5 / Ar 750.4</td><td>4.8 %</td></tr>
+<tr><td>N2 353.7 / Ar 750.4</td><td>4.0 %</td></tr>
+</tbody></table></div>
+<p>結果就是那條絕對強度項的 <code>mean/σ</code> 從單檔的 ~125 掉到合併後的 <strong>10.7</strong>，剛好擦過門檻並被標成 marginal。</p>
+<blockquote><p><strong>做法</strong>：短製程要跨 run 合併時，<strong>絕對強度項盡量只用單一錄製</strong>建基準，或先確認那幾次 run 的亮度一致（看結果面板的「檔間差距」那一段）。比值項則可以放心合併。</p></blockquote>
+<p><strong>只有兩個錄製時</strong>「被擱置的錄製」那一段不會有東西——兩個檔選不出誰是異類。但「檔間差距」照樣會報，因為「這兩個彼此不合」不需要先知道誰錯。</p>
 <p><strong>被擱置代表什麼</strong>：這道檢查擋的是最危險的一種錯誤——把一份<strong>當時真的在漏</strong>的錄製混進基準。一旦混進去，那個漏就變成「正常」，之後永遠測不到它。所以預設是排除、要你明確覆寫。真要覆寫也未必成功：一份差很遠的錄製合進來會讓 σ 膨脹，<code>mean &gt; 10σ</code> 那道門檻通常會自己把結果擋掉。</p>
 <p><strong>回套檢查的數字大不代表壞</strong>：視窗以外本來就是製程在變的地方。但如果那份錄製裡真的有一次洩漏，這個數字就是它。</p>
 <h4 id="為什麼一個檔只能選一段">為什麼一個檔只能選一段</h4>
