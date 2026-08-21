@@ -189,14 +189,23 @@ public sealed class AcquisitionFingerprint
         {
             if (!Equals(a, b)) diffs.Add($"{name} {b} → {a}");
         }
-        Cmp("integration", IntegrationTimeMs, other.IntegrationTimeMs);
-        Cmp("average", AverageCount, other.AverageCount);
-        Cmp("boxcar", BoxcarWidth, other.BoxcarWidth);
-        Cmp("acquire mode", AcquireMode, other.AcquireMode);
-        Cmp("average mode", AverageMode, other.AverageMode);
-        Cmp("background removal", BackgroundRemove, other.BackgroundRemove);
-        Cmp("stray-light correction", StraylightCorrection, other.StraylightCorrection);
-        Cmp("linearity correction", LinearityCorrection, other.LinearityCorrection);
+        // A fingerprint with no integration time was never told what the settings were — no
+        // exposure is 0 ms. Today that is a Golden Run built offline from a recording with no
+        // acquisition sidecar beside it: the CSV proves the axis and nothing else. Comparing the
+        // zeros reports a change on every field, every frame, about facts nobody has — the same
+        // mistake the axis guard below was already written to avoid, and the surest way to teach
+        // an operator that this warning means nothing.
+        if (IntegrationTimeMs > 0 && other.IntegrationTimeMs > 0)
+        {
+            Cmp("integration", IntegrationTimeMs, other.IntegrationTimeMs);
+            Cmp("average", AverageCount, other.AverageCount);
+            Cmp("boxcar", BoxcarWidth, other.BoxcarWidth);
+            Cmp("acquire mode", AcquireMode, other.AcquireMode);
+            Cmp("average mode", AverageMode, other.AverageMode);
+            Cmp("background removal", BackgroundRemove, other.BackgroundRemove);
+            Cmp("stray-light correction", StraylightCorrection, other.StraylightCorrection);
+            Cmp("linearity correction", LinearityCorrection, other.LinearityCorrection);
+        }
         // Axis fields are 0 on a fingerprint recorded before a frame was seen — don't report
         // "0 → 1891" as a change the operator made.
         if (AxisLength > 0 && other.AxisLength > 0)

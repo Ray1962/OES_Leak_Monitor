@@ -47,3 +47,53 @@ public class BaselineBuilderViewModelTests
         Assert.Empty(vm.Files);          // still nothing there, but it did not throw getting there
     }
 }
+
+/// <summary>
+/// What an acquisition fingerprint may claim to know.
+///
+/// <para>A Golden Run built from a recording with no sidecar beside it carries the axis the CSV
+/// proves and nothing else. Reported as differences, those unknowns became
+/// "integration 0 → 150, average 0 → 6, boxcar 0 → 1, acquire mode → HardwareAverage…" on every
+/// frame — a warning about facts nobody had, which is how a warning stops being read. Measured on
+/// 2026-08-21, from a baseline built out of recordings made before the sidecar existed.</para>
+/// </summary>
+public class AcquisitionFingerprintTests
+{
+    private static AcquisitionFingerprint Live() => new()
+    {
+        IntegrationTimeMs = 150, AverageCount = 6, BoxcarWidth = 1,
+        AcquireMode = "HardwareAverage", AverageMode = "Hardware",
+        BackgroundRemove = true, LinearityCorrection = true,
+        AxisLength = 1904, AxisStartNm = 179.84, AxisEndNm = 850.19,
+    };
+
+    /// <summary>Axis known, settings not: the axis is still worth comparing, the rest is not.</summary>
+    private static AcquisitionFingerprint AxisOnly(int points = 1904) => new()
+    {
+        AxisLength = points, AxisStartNm = 179.84, AxisEndNm = 850.19,
+    };
+
+    [Fact]
+    public void UnrecordedSettingsAreNotReportedAsChanges()
+    {
+        Assert.Equal("", Live().Differences(AxisOnly()));
+    }
+
+    [Fact]
+    public void TheAxisIsStillComparedWhenTheSettingsAreUnknown()
+    {
+        var differences = Live().Differences(AxisOnly(1000));
+
+        Assert.Contains("axis points", differences);
+        Assert.DoesNotContain("integration", differences);
+    }
+
+    [Fact]
+    public void SettingsThatWereRecordedAreStillCompared()
+    {
+        var slower = Live();
+        slower.IntegrationTimeMs = 40;
+
+        Assert.Contains("integration 150 → 40", slower.Differences(Live()));
+    }
+}
