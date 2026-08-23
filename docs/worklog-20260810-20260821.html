@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor 工作紀錄 2026-08-10 ～ 08-21</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#0-摘要">0. 摘要</a>
+<a class="l2" href="#1-依主題">1. 依主題</a>
+<a class="l3" href="#11-錄製回放replay">1.1 錄製回放（Replay）</a>
+<a class="l3" href="#12-golden-run-基線的可信度">1.2 Golden Run 基線的可信度</a>
+<a class="l3" href="#13-baseline-builder從既有錄檔匯集基線">1.3 Baseline Builder（從既有錄檔匯集基線）</a>
+<a class="l3" href="#14-pedestal-判準2026-08-20">1.4 pedestal 判準（2026-08-20）</a>
+<a class="l3" href="#15-secsgem-設備端介面">1.5 SECS/GEM 設備端介面</a>
+<a class="l3" href="#16-test-mode-事故的善後2026-08-17">1.6 test mode 事故的善後（2026-08-17）</a>
+<a class="l3" href="#17-讓資料夾自己說明自己2026-08-21">1.7 讓資料夾自己說明自己（2026-08-21）</a>
+<a class="l3" href="#18-其他">1.8 其他</a>
+<a class="l2" href="#2-測試">2. 測試</a>
+<a class="l3" href="#現場測試">現場測試</a>
+<a class="l2" href="#3-仍待人工驗收">3. 仍待人工驗收</a>
+</nav>
+<main>
+<h1 id="工作紀錄2026-08-10-2026-08-21">工作紀錄：2026-08-10 ～ 2026-08-21</h1>
+<p>這份文件記錄這兩週對 OES Leak Monitor 做了什麼、為什麼做，以及測試涵蓋到哪裡。 它是<strong>事後整理</strong>，不是規格：每條敘述的權威仍然是它指向的原始碼、<code>CLAUDE.md</code>、 <code>CONTEXT.md</code> 與 <code>docs/</code> 下的各篇設計筆記。</p>
+<h2 id="0-摘要">0. 摘要</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>數字</th></tr></thead>
+<tbody>
+<tr><td>commit</td><td>44（<code>62c2452..4fc96ff</code>）</td></tr>
+<tr><td>檔案異動</td><td>91</td></tr>
+<tr><td>行數</td><td>+16,126 / −746</td></tr>
+<tr><td>新增 <code>src/</code> 檔案</td><td>22</td></tr>
+<tr><td>新增文件</td><td>12（另修改操作手冊）</td></tr>
+<tr><td>測試</td><td>從 0 到 <strong>79</strong>（16 個測試檔），2026-08-21 全數通過</td></tr>
+</tbody></table></div>
+<p>這段期間有兩件事不是在鍵盤上發生的，卻主導了大部分改動：</p>
+<ol>
+<li><strong>2026-08-17 廠內 PC 的 test mode 事故</strong> — 一台交機 PC 整場跑合成頻譜，卻回報連線正常。
+</li>
+<li><strong>2026-08-19 的漏氣閥實測</strong> — 儲存門檻設在無洩漏電漿之上，plasma gate 在洩漏本身 把放電變亮之前是關的，等於整段無洩漏區間沒有任何 frame 被評估。
+</li>
+</ol>
+<p>兩件事各自留下一份分析文件，以及一批「讓同一件事下次會自己講出來」的程式修改。 這是本期改動的主線：<strong>大多數不是新功能，是讓沉默的失敗發出聲音。</strong></p>
+<h2 id="1-依主題">1. 依主題</h2>
+<h3 id="11-錄製回放replay">1.1 錄製回放（Replay）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>commit</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><code>a75882f</code></td><td><code>SpectrumReplaySource</code> / <code>ReplayViewModel</code> / <code>ReplayPanel</code></td></tr>
+<tr><td><code>a96fb58</code></td><td>拒絕在真實硬體上回放</td></tr>
+<tr><td><code>707ff21</code></td><td>回放結束時清掉留在監視器裡的狀態</td></tr>
+</tbody></table></div>
+<p>回放走<strong>錄檔自己的波長軸與自己的時間軸</strong>（虛擬時鐘），而不是前一版重採樣到合成軸的做法： EMA 的 <code>α = 1 − exp(−dt/τ)</code>、持續確認秒數、σ/min 斜率、洩漏率 EWMA 變異數全都跟 dt 綁在一起， 軸換掉就不是同一套判斷。這需要 <code>Aqst.OesApp.Wpf 0.1.12</code> 新增的 <code>DeviceViewModel.SpectrumMapper</code> 接縫才能整格換掉 frame，所以不是純 app 內的改動。</p>
+<p><code>a96fb58</code> 起因於一次真實 session：接著光譜儀按下 Play，分頁顯示 <code>PLAYING</code>、進度條停在 0， 而 <code>BeginReplayOutput</code> 已經把兩個記錄器切成 <code>SIM</code> 前綴——結果 450 KB 的<strong>實際量測</strong>被存成 <code>SIMP_*</code>。防護反了方向。現在有三道：按鈕層（<code>RealHardwareAttached</code>）、<code>Play()</code> 再檢查、 以及執行中第一個硬體 frame 觸發 <code>AbortReplayForHardware()</code>。</p>
+<p><code>707ff21</code> 起因於 2026-08-20 產生的 <code>P_Ratio_0820153410.csv</code>：一個生產檔名，第一列帶著錄檔的 σ-score 與 <code>OverallState=Alarm</code>，發生在錄檔結束後 45 秒，稽核日誌裡還有一筆沒有任何 chamber 造成的 <code>LeakMonitorState Idle → Alarm</code>。<code>EndReplayOutput</code> 現在先 <code>ResetRuntimeState(clearAlarms: true)</code> 再關檔、再還原前綴。</p>
+<h3 id="12-golden-run-基線的可信度">1.2 Golden Run 基線的可信度</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>commit</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><code>d311661</code></td><td>什麼都沒量到的 capture 直接丟棄，不儲存</td></tr>
+<tr><td><code>945895b</code></td><td>會毀掉同名 run 既有基線時，先問再存</td></tr>
+<tr><td><code>7b3b1cd</code></td><td>每條參考線各自的 plasma floor；出貨實測選出的 ratio 組合</td></tr>
+<tr><td><code>849cb0b</code></td><td>基線被拒的原因與排除指南（中文）</td></tr>
+<tr><td><code>3b485aa</code></td><td>為「該線本來就該缺席」的狀態命名</td></tr>
+<tr><td><code>eefadd0</code></td><td>fingerprint 沒記錄過的欄位，不要報成「變更」</td></tr>
+</tbody></table></div>
+<p><code>d311661</code>：舊行為是把空 capture 也存起來，於是一次「門檻設在電漿之上、整分鐘閘門全關」的 capture 就同時拿走所有 ratio 的基線、並解開綁在上面的校正。現在 <code>FinalizeCapture</code> 在儲存前就返回。</p>
+<p><code>7b3b1cd</code>：plasma floor 原本是整個 run 一個數字，只在所有 ratio 共用同一條參考線時成立。 混用 Ar 811.5 與 N₂ 662.4 時，匯集出的 20 % 會落在暗線的正常值<strong>之上</strong>，那條 ratio 於是每一格 都判「電漿關閉」而靜靜死掉，亮的那條則等於沒有閘門。現在以 <code>LineRegion.MeasurementKey</code> 為 key 存進 <code>GoldenRun.PlasmaFloors</code>；<code>PlasmaPresentFloor</code> 保留為舊 run 的回退值，不再寫入。</p>
+<p>同一個 commit 也把原廠 ratio 組合換成<strong>實測選出來</strong>的那組（<code>R_N2Ar</code> 33.8 σ、<code>R_NOAr</code> 18.3 σ、 <code>R_N2357Ar</code> 16.2 σ，加上預設停用的 <code>R_N2357Abs</code>），取代原本四條裡有三條對同一次洩漏只動 0.1–0.7 σ 的教科書組合。</p>
+<p><code>849cb0b</code> 寫下引擎本身不編碼的前提：<strong>這個工具要偵測的東西，在腔體健康時本來就不存在</strong>， 所以無洩漏的 N/O 線讀在雜訊底，而定義成除數的基線對它不可能存在。文件把 <code>ReportDroppedRatio</code> 能吐出的每一句話對應到一個動作，以及一個「怎麼確認這動作有效」的方法； 並用同等篇幅寫相反的失敗：<code>RawMean</code> 讀值帶著連續譜台階，一路通過所有閘門，產生一份看起來 健康、實際上量的是背景的基線——這件事 app 完全不會警告。</p>
+<h3 id="13-baseline-builder從既有錄檔匯集基線">1.3 Baseline Builder（從既有錄檔匯集基線）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>commit</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><code>33fae7f</code></td><td><code>BaselineBuilder</code> + <code>RatioFrameSampling</code></td></tr>
+<tr><td><code>4ecd43b</code></td><td>Baseline Builder 分頁</td></tr>
+<tr><td><code>8a912c7</code></td><td>修正分頁開啟前就拋例外</td></tr>
+<tr><td><code>8730969</code></td><td><code>AcquisitionSidecar</code>：錄檔旁記錄當時的擷取條件</td></tr>
+<tr><td><code>a56ae70</code></td><td>報告視窗內穩定度與 marginal baseline</td></tr>
+<tr><td><code>68a2531</code></td><td>報告錄檔<strong>之間</strong>的落差</td></tr>
+</tbody></table></div>
+<p>存在理由是兩種現場製程形狀：一種先 ramp 才穩定（穩定段從圖上看得出來，碼錶看不出來）， 一種整個 run 比擷取視窗還短（沒有單一 run 裝得下足夠 frame）。兩者都必須<strong>事後</strong>選段。</p>
+<p>關鍵設計：每一格 frame 的判斷都經過 <code>RatioFrameSampling.Evaluate</code>，引擎自己的 live capture 也走同一支。第二份「這格算不算」的實作會讓兩份 Golden Run 不可比較而兩邊看起來都正常， 所以 <code>BaselineBuilderTests</code> 把真實錄檔同時餵給兩條路徑，要求吻合到小數第九位。</p>
+<p>最低要求是 <strong>frame 數而非秒數</strong>（σ 的可靠度跟樣本數走，120 秒在 0.56 fps 是 68 格、在 5 fps 是 600 格）。</p>
+<p><code>a56ae70</code> / <code>68a2531</code> 各自來自一次結果幾乎沒用、而且自己只講了一半的實際建置：</p>
+<ul>
+<li>前者：一次匯集三整段錄檔（連洩漏上升段一起），產出一條 10.2 σ 的基線，而它的穩定段值是 97。 現在會報 per-recording 的 <code>σ/mean</code> 與 drift、在 <code>mean/σ &lt; 20</code> 時標記 marginal、 並在所有視窗都覆蓋整段錄檔時明說「沒有做 back-check」（空白的區段會被讀成通過）。
+</li>
+<li>後者：兩段各自穩定到 ~1 % 的視窗，因為是不同 run 的不同電漿亮度，絕對強度差了 19 %； 匯集後那個落差<strong>變成</strong>了 σ，<code>mean/σ</code> 從 ~125 掉到 10.7。ratio 模式會把它除掉（同一組線 2–5 %）， <strong>absolute-intensity 模式不會，所以它要的是單一錄檔的基線</strong>。兩段就報，不像 outlier 檢查 需要三段才指得出是誰——「這兩段彼此不合」本身就值得知道。
+</li>
+</ul>
+<h3 id="14-pedestal-判準2026-08-20">1.4 pedestal 判準（2026-08-20）</h3>
+<p><code>3c83110</code>。原本 <code>ValueHasPedestal</code> 假設「除以參考線就把台階除掉了」，但 <code>(pedestal + line) / reference</code> 只是同一個仿射位移乘上 <code>1/reference</code>，fraction-of-baseline 被壓縮的程度完全一樣。之所以沒被發現，是因為外觀上沒有任何異狀：<code>Math.Max</code> 改走乘法分支， 而它在 <code>mean/σ &gt; SigmaWarn/(WarnFactor−1)</code> 之後勝出——在原廠 1.05/1.12 下就是 60。</p>
+<p>實測一台機器，<code>N₂ 337.1 RawMean / Ar 750.4</code> 在 <code>mean/σ ≈ 119</code> 時，設定 3/6 σ， 實際要 5.9 σ 才警告、14.2 σ 才警報。</p>
+<p>把判準放寬會<strong>重新判斷</strong>這類 ratio 而不動它們既有的基線（監測量沒變， <code>Mode</code>/<code>ReferenceLabel</code>/<code>ExtractionRevision</code> 才是基線比對的依據），但確實會放寬它們的門檻， 也會翻轉它們的洩漏率單位——所以既有的校正會被拒絕直到重新擬合。<code>RatioPedestalTests</code> 釘住兩個分支。</p>
+<h3 id="15-secsgem-設備端介面">1.5 SECS/GEM 設備端介面</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>commit</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><code>1e6ab1b</code></td><td><code>SecsBridge</code> / <code>SecsChamberCoding</code> / <code>SecsProfileTemplate</code> / <code>SecsLogFile</code> / SECS 分頁（+3,465 行）</td></tr>
+<tr><td><code>3d4cf0a</code></td><td>連線操作 SOP（中文，隨出貨）</td></tr>
+<tr><td><code>b21f961</code> <code>f4be5b9</code> <code>6652c37</code> <code>1447b92</code></td><td>把驗收清單能自動化的項目自動化，並逐項標註狀態</td></tr>
+<tr><td><code>d51965d</code></td><td>人工驗收單（A4 表單，無 Markdown 來源）</td></tr>
+</tbody></table></div>
+<p>兩個原則值得記住：<code>SecsBridge</code> <strong>只讀不算</strong>——每個 binding 都在請求端執行緒上被呼叫， 所以最後一份 <code>LeakMonitorSnapshot</code> 以單一 volatile 的不可變物件持有，binding 只讀欄位並轉型； 不在快照裡的數字就不屬於這個類別（VID 021–023 因此變成快照欄位而非現場推導）。 <code>SecsChamberCoding</code> 的蓋章<strong>會驗證</strong>：位數不對、<code>ss ≠ 27</code>、<code>aa ≠ 00</code> 一律拒絕啟動， 而 <code>cc = 00</code> 不是一個 chamber，所以未蓋章的 profile 不可能被誤認為已蓋章。</p>
+<h3 id="16-test-mode-事故的善後2026-08-17">1.6 test mode 事故的善後（2026-08-17）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>commit</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><code>e8b737a</code></td><td>Visual C++ runtime 隨 exe 出貨（<code>CopyVcRuntime</code>）</td></tr>
+<tr><td><code>751a4ac</code></td><td>取 <code>Wpf 0.1.13</code>：test mode fallback 會說出原因</td></tr>
+<tr><td><code>cafd9b8</code> <code>5d220db</code></td><td><code>tools/check-oes-connect.ps1</code>（+ <code>.cmd</code>）現場診斷</td></tr>
+<tr><td><code>ac2e095</code></td><td><code>docs/postmortem-test-mode-20260817.md</code></td></tr>
+</tbody></table></div>
+<p>根因鏈四環：<code>UserApplication.dll</code> → <code>libsodium.dll</code> → <code>VCRUNTIME140.dll</code> 缺席 → <code>LoadLibrary</code> Win32 126 → <code>CheckHardwareDllAvailability</code> 吞成 <code>SetupTestMode()</code>。 結果是「已連線」、合成頻譜寫進真實資料夾、用一般 <code>P_</code> 前綴，稽核日誌裡與健康連線唯一的差別 是 <code>Serial=TEST_MODE_SIMULATOR</code>。</p>
+<p>注意 <code>vcruntime140_cor3.dll</code>（WPF 的私有改名副本）<strong>不能</strong>滿足 <code>VCRUNTIME140.dll</code> 的 import， 而它的存在正是這個資料夾看起來已經帶了 runtime 的原因。</p>
+<h3 id="17-讓資料夾自己說明自己2026-08-21">1.7 讓資料夾自己說明自己（2026-08-21）</h3>
+<p><code>4fc96ff</code>。資料存在操作員指定的地方（現場機的 <code>C:\DualOES</code>），解讀它所需的一切卻在 <code>%AppData%</code>： 儲存門檻與觸發模式（決定哪些 frame 被評估）、ratio 定義、波長修正、當前 Golden Run、系統日誌。 把日資料夾拷走只帶前者。2026-08-19 就是因此損失一天。</p>
+<ul>
+<li><code>ConfigSnapshot</code> 在 session 開啟時寫 <code>_config_{HHmmss}.json</code>，內容相同就跳過。 它是 <strong><code>settings.json</code> 挖洞</strong>，不是欄位清單：整個 <code>accessControl</code> 段拿掉、樹裡任何叫 <code>passwordHash</code> 的屬性拿掉，其餘照抄——手挑清單當初就會漏掉 logger 的觸發設定， 而那正是缺的東西。
+</li>
+<li><code>SystemLogMirror</code> 把當日 <code>yyMMddHH.csv</code> 複製成 <code>_log_*.csv</code>，長大的重抄，最後一份在 <code>Dispose</code> 取得。
+</li>
+<li>兩者都以底線開頭，<code>Recording.TryParse</code> 會拒絕，所以檢視分頁走過去。
+</li>
+</ul>
+<h3 id="18-其他">1.8 其他</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>commit</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><code>180f1b0</code></td><td>站點自訂譜線（<code>u</code> 前綴；被 ratio／correction 引用者拒絕刪除或移動）</td></tr>
+<tr><td><code>954cb3a</code></td><td>Configuration 分頁的譜線挑選器（不持有狀態的輸入輔助）</td></tr>
+<tr><td><code>f99c808</code></td><td>Recordings 多波長同時繪圖（顏色=波長、虛線=session）</td></tr>
+<tr><td><code>29025b9</code></td><td>記錄是誰解除警報（<code>LeakMonitorAcknowledged</code>）</td></tr>
+<tr><td><code>a9051dd</code></td><td>錄影器預設 armed；<code>c6fd3a2</code> 衍生屬性不落盤</td></tr>
+<tr><td><code>652f498</code></td><td>說偵測到洩漏，不宣稱是哪一種氣體</td></tr>
+<tr><td><code>30d5f3d</code> <code>6d41e10</code> <code>1451fea</code> <code>567ceb2</code></td><td><code>CONTEXT.md</code> 詞彙表：建立、中譯、產生 HTML、納入出貨</td></tr>
+<tr><td><code>6861c67</code></td><td>週檢查要能驗證它看不見的設定變更</td></tr>
+<tr><td><code>12d6a0d</code></td><td><code>/publish</code> 完整性檢查對齊資料夾實際內容</td></tr>
+</tbody></table></div>
+<h2 id="2-測試">2. 測試</h2>
+<p>測試專案在 <code>38d047c</code>（2026-08-16）建立，此前為 0。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>測試檔</th><th>測試數</th><th>加入日</th><th>釘住什麼</th></tr></thead>
+<tbody>
+<tr><td><code>BaselineBuilderTests</code></td><td>15</td><td>08-21</td><td>離線匯集與 live capture 的算術一致（九位小數）</td></tr>
+<tr><td><code>SecsChamberCodingTests</code></td><td>10</td><td>08-16</td><td>chamber code 蓋章與拒絕條件</td></tr>
+<tr><td><code>DayFolderContextTests</code></td><td>8</td><td>08-21</td><td><code>ConfigSnapshot</code> 挖洞規則、<code>SystemLogMirror</code> 重抄</td></tr>
+<tr><td><code>SecsEventTests</code></td><td>7</td><td>08-17</td><td>三個 CEID 的線上行為與上報開關</td></tr>
+<tr><td><code>SecsWireTests</code></td><td>5</td><td>08-16</td><td>對真實 <code>GemHost</code> 走 loopback 的線上行為</td></tr>
+<tr><td><code>BaselineBuilderViewModelTests</code></td><td>5</td><td>08-21</td><td>分頁層的挑選與報告</td></tr>
+<tr><td><code>RatioPedestalTests</code></td><td>4</td><td>08-20</td><td>pedestal 判準的兩個分支</td></tr>
+<tr><td><code>AppSettingsDefaultsTests</code></td><td>4</td><td>08-17</td><td>三個原廠預設覆寫，以及「已存決定要尊重」的另一半</td></tr>
+<tr><td><code>SecsProfileTests</code></td><td>3</td><td>08-16</td><td>profile 範本與 <code>.effective</code> 產出</td></tr>
+<tr><td><code>SecsTraceTests</code></td><td>2</td><td>08-17</td><td>S2F23 Trace 依週期回 S6F1</td></tr>
+<tr><td><code>ReplayEndResetTests</code></td><td>2</td><td>08-20</td><td>回放結束清狀態；Monitor 的 Reset 仍保留 latch</td></tr>
+<tr><td><code>RecordedRunTests</code></td><td>3（<code>SkippableFact</code>）</td><td>08-16</td><td>真實 plasma 錄檔重放過引擎與 SECS host</td></tr>
+</tbody></table></div>
+<p><strong>2026-08-21 執行結果：79 通過 / 0 失敗 / 0 略過</strong>（本機有那份未進版控的錄檔， 所以三個 <code>SkippableFact</code> 也跑了；沒有錄檔的機器上它們會報 skipped）。</p>
+<h3 id="現場測試">現場測試</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>日期</th><th>內容</th><th>產出</th></tr></thead>
+<tbody>
+<tr><td>08-17</td><td>廠內 PC 交機，連線落入 test mode</td><td><code>docs/postmortem-test-mode-20260817.md</code>、<code>CopyVcRuntime</code>、<code>Device_TestModeFallback</code>、<code>tools/check-oes-connect.*</code></td></tr>
+<tr><td>08-19</td><td>漏氣閥測試</td><td><code>docs/leak-test-20260819-analysis.md</code>（<code>7292a1e</code>，<code>213cf7b</code> 修訂）、<code>ConfigSnapshot</code> / <code>SystemLogMirror</code></td></tr>
+</tbody></table></div>
+<p><code>leak-test-20260819-analysis.md</code> 的 Appendix C 記下第一版分析弄錯的兩件事——空白列被讀成 「電漿關閉」而非「閘門關閉」，以及<strong>從窗外</strong>拆下的觀景板被讀成腔體破真空。 這是在分析別人的錄檔之前該先讀它的理由。</p>
+<h2 id="3-仍待人工驗收">3. 仍待人工驗收</h2>
+<p><code>docs/secs-integration.md</code> §13.4 還有三項自動化到不了的：</p>
+<ul>
+<li><strong>#1</strong> Replay 分頁播一段有洩漏的錄檔，確認 S5F1 set/clear 與三個 CEID，並按下 Acknowledge。 線上行為都已自動化，剩下的是 <strong>GUI 按鈕到 bridge 的那一段接線</strong>。
+</li>
+<li><strong>#3</strong> 拔掉光譜儀 → ALID <code>1cc27012</code> set；插回 → clear。
+</li>
+<li><strong>#5</strong> 全程比對 <code>secs_YYYYMMDD.log</code> 與 <code>Test_SECS</code> 兩邊的收送紀錄。
+</li>
+</ul>
+<p>狀態欄的 ⬜ 是「沒有人跑過」，不是「應該會過」。跑完請把該列改成 <code>✅ YYYY-MM-DD（執行者）</code>， 並把對應的 <code>secs_YYYYMMDD.log</code> 存成驗收附件。</p>
+</main>
+</div>
+</body>
+</html>
