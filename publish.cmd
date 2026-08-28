@@ -6,9 +6,12 @@ rem  Publish OES Leak Monitor as a standalone single-file self-contained .exe.
 rem  The target PC needs NO .NET install.
 rem
 rem  Just double-click this file (or run it from a command prompt).
-rem  Prerequisite: Aqst.OesApp.Core 0.1.6 / Aqst.OesApp.Wpf 0.1.10 (or newer)
-rem  must already be in ..\LocalPackages - pack them from the
-rem  DualOes_PlasmaMonitor repo first.
+rem  Prerequisite: the versions pinned in OES_Leak_Monitor.csproj must already
+rem  be in ..\LocalPackages - at the time of writing Aqst.OesApp.Core 0.1.9 and
+rem  Aqst.OesApp.Wpf 0.1.15 (pack them from the DualOes_PlasmaMonitor repo),
+rem  Aqst.OesSpectrometer 0.4.6 (the Aqst.OesSpectrometer repo) and
+rem  Aqusen.Secs 0.6.0 (the Test_SECS repo). The csproj is the source of truth
+rem  for these numbers; they move.
 rem ===========================================================================
 
 cd /d "%~dp0"
@@ -42,9 +45,11 @@ if errorlevel 1 (
     echo.
     echo  *** PUBLISH FAILED - see the messages above. ***
     echo.
-    echo  Most common cause: Aqst.OesApp.Core 0.1.6 / Aqst.OesApp.Wpf 0.1.10 are
-    echo  missing from ..\LocalPackages. Pack them from the DualOes_PlasmaMonitor
-    echo  repo, then run this script again.
+    echo  Most common cause: a package version pinned in OES_Leak_Monitor.csproj
+    echo  is missing from ..\LocalPackages - compare its PackageReference lines
+    echo  against that folder. Aqst.OesApp.* are packed from the
+    echo  DualOes_PlasmaMonitor repo, Aqusen.Secs from Test_SECS. Pack the
+    echo  missing one, then run this script again.
     echo.
     pause
     exit /b 1
