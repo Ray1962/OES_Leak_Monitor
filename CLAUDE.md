@@ -201,7 +201,11 @@ Treat that NuGet surface as the framework. When something looks "missing," it is
 
 ## Related skills
 
-Three Skill-tool skills are tailored to this stack — invoke them when relevant rather than reinventing:
+One skill lives **in this repo** (`.claude/skills/`), because it is about this app rather than the stack:
+
+- `run-app` — launching OES_Leak_Monitor from the WSL shell and **driving its window**: select a tab, press a button by its visible text, screenshot, read it back. `CLAUDE.md` says everything with a window on it is verified by running the app, which is only true if you can see it. Carries the four facts that make it work cold — no native `dotnet` in WSL, launch the built `.exe`, the running app locks that `.exe` so a build or `dotnet test` fails with `MSB3027` until you close it, and UI Automation from Windows PowerShell 5.1 rather than coordinate clicking (the control enumeration alone answers most questions, and it survives a second monitor's negative window coordinates). The bundled `run` skill has no row for a WPF app driven from WSL.
+
+Three more are tailored to this stack — invoke them when relevant rather than reinventing:
 
 - `create-oes` — instantiating `OesParameters` / `OesSpectrometer`, wiring DLL paths, the `FlattenOesNativeDlls` build glue.
 - `use-multi-oes` — `OesDiscovery.OpenMultiDevices` / `AttachAsync` patterns (relevant if this app ever returns to multi-device).
