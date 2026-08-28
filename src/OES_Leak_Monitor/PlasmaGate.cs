@@ -4,8 +4,17 @@ namespace OES_Leak_Monitor;
 
 /// <summary>
 /// Plasma-present gate for absolute-intensity ratios, derived from the intensity logger's save
-/// trigger — the same quantity, the same threshold, so "the gate is open" means exactly "the
-/// logger would be recording this frame".
+/// trigger — the same quantity against the same threshold, so the gate and the recorder never
+/// disagree about how bright the frame is.
+///
+/// <para>They share that measurement, not the recorder's state machine. This is a bare
+/// per-frame comparison; the recorder confirms for <c>StartConfirmSeconds</c> before it opens,
+/// holds through <c>StopConfirmSeconds</c> after the metric has fallen, and back-fills
+/// <c>max(StartConfirmSeconds, PreTriggerSeconds)</c> of buffered frames when it does open
+/// (Core 0.1.8). A recording therefore carries gate-closed rows at both ends — the pre-trigger
+/// head is below the threshold by definition — so "the gate is open" is not the same claim as
+/// "this row is in a file", and an offline baseline built off a recording has to re-apply this
+/// gate rather than trust that being in the file means anything.</para>
 ///
 /// <para>Ratio-mode entries gate on their reference line (it has to be present anyway, since it
 /// is divided in). An absolute-intensity entry doesn't divide by anything, so the reference line
