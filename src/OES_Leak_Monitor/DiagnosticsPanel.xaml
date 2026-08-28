@@ -1,0 +1,26 @@
+<UserControl x:Class="OES_Leak_Monitor.DiagnosticsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Deliberately ungated: the person who needs to hand over evidence is the Operator on the
+         phone. Nothing here changes a setting. -->
+    <Border BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="8,6" Background="#FAFAFA">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" MinWidth="180" Padding="10,4"
+                    Content="{Binding ButtonText}"
+                    Command="{Binding CreateCommand}"
+                    ToolTip="Collects the logs, configuration, today's leak record and a native-DLL load test into one .zip, then shows it in Explorer. Attach it to an email; nothing is sent anywhere by this button."/>
+
+            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding LastBundlePath}" Foreground="#666" FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding LastBundlePath}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

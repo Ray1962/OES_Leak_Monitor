@@ -72,6 +72,32 @@ public static class ConfigSnapshot
     {
         var node = JsonSerializer.SerializeToNode(settings, SettingsService.JsonOptions)
                    ?? throw new InvalidOperationException("settings did not serialise");
+        return RedactNode(node);
+    }
+
+    /// <summary>
+    /// The same two rules applied to settings JSON that is only ever text — the
+    /// <c>settings.json.bak-*</c> files beside the live one, which the diagnostic bundle carries
+    /// because "it worked last week" is only checkable against them.
+    ///
+    /// <para>They must not be deserialised into <see cref="AppSettings"/> first: a backup written
+    /// by an older build may no longer round-trip, and a redactor that throws on the file it was
+    /// pointed at fails open — it leaves the file out, or worse, someone reaches for the raw one.
+    /// Working on the node means anything that parses as JSON can be redacted, whatever schema it
+    /// happens to be.</para>
+    /// </summary>
+    /// <returns>The redacted text, or null when <paramref name="json"/> does not parse.</returns>
+    public static string? RedactJsonText(string json)
+    {
+        JsonNode? node;
+        try { node = JsonNode.Parse(json); }
+        catch (JsonException) { return null; }
+        return node is null ? null : RedactNode(node);
+    }
+
+    /// <summary>The one place the two rules are applied, whatever produced the node.</summary>
+    private static string RedactNode(JsonNode node)
+    {
         if (node is JsonObject root)
             foreach (var section in RedactedSections) root.Remove(section);
         Strip(node);

@@ -66,7 +66,7 @@
 
 ### 交付一台新機台之前
 
-- [ ] 用 `publish.cmd` 產生交付資料夾，確認印出「all 16 files present」。
+- [ ] 用 `publish.cmd` 產生交付資料夾，確認印出「all 20 files present」。
 - [ ] 整包複製，不要只拷貝 `.exe`，也不要從壓縮檔裡直接執行。
 - [ ] 到現場先跑 `check-oes-connect.cmd`，再開程式。
 - [ ] 第一次 Connect 後確認 `Serial` 是真實機號，不是 `TEST_MODE_SIMULATOR`。
@@ -75,10 +75,27 @@
 ### 懷疑掉進測試模式時
 
 - [ ] 先看 Monitor 分頁的 `Serial`，一眼就能確認。
+- [ ] 到 **Logs 分頁按「Create diagnostic bundle」**，把產生的 `diag_*.zip` 回傳。
+      這一顆按鈕就涵蓋了下面「程式開不起來時」的整張清單：當日與前六天的日誌、
+      遮蔽過的組態與其備份、當日的洩漏紀錄、以及 `oes-diagnostic.txt`——原生 DLL
+      到底載不載得起來，正是這份報告裡程式平常吞掉的那一行。
+      不需要簽入，Operator 就能按；它只讀不寫，不會送出任何東西到外部。
+- [ ] 清掉這段期間寫出的 CSV——那是合成資料，前綴與真實量測相同。
+
+> [!NOTE]
+> zip 落在 `%APPDATA%\OES_Leak_Monitor\Diagnostics\`，按完會自動用檔案總管選起來，
+> 完整路徑同時寫進系統日誌（`DiagnosticBundleCreated`）——檔案總管的視窗會被關掉，
+> 但日誌不會。先讀 zip 裡的 `README.txt`，**尤其是「NOT in this bundle」那一段**：
+> 過大而未收錄的錄製檔、以及正在寫入中被複製而遭截斷的檔案，都只會在那裡說。
+
+### 程式開不起來時
+
+按鈕在程式裡，程式起不來就按不到。這時仍然是原本的手動路徑：
+
 - [ ] 翻 `%APPDATA%\OES_Leak_Monitor\Logs\` 的當日 CSV，不是 Logs 分頁。
 - [ ] 找 `Device_TestModeFallback` 警告，Description 就是原因。
-- [ ] 跑 `check-oes-connect.cmd`，回傳 `oes-diagnostic.txt`。
-- [ ] 清掉這段期間寫出的 CSV——那是合成資料，前綴與真實量測相同。
+- [ ] 跑 `check-oes-connect.cmd`，回傳 `oes-diagnostic.txt`。這支腳本**不會**因為
+      程式內建了同樣的探測而被移除——它是兩者中唯一在程式掛掉時還能跑的那個。
 
 ### 寫程式時（這幾條不限於這個 bug）
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using Aqst.OesSpectrometer.Models;
@@ -293,6 +294,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.Acknowledged += (_, e) => _secs.OnAcknowledged(e);
         Secs = new SecsViewModel(_secs, settings.Secs, PersistSecsSettings);
         _secs.Configure(settings.Secs);
+
+        // One-click diagnostic bundle, on the Logs tab and deliberately ungated. Constructed last
+        // because GatherDiagnostics() reads nearly everything above it.
+        Diagnostics = new DiagnosticsViewModel(_paths.RoamingRoot, GatherDiagnostics,
+            _systemLogger, _dispatcher);
 
         _systemLogger.LogSystemEvent(LogSeverity.Information, "SettingsLoaded",
             "Loaded settings from disk",
@@ -902,6 +908,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>SECS tab: interface status (any role) and its settings (Engineer+).</summary>
     public SecsViewModel Secs { get; }
 
+    public DiagnosticsViewModel Diagnostics { get; }
+
     /// <summary>Emission-line picker for the logger's two wavelength fields (Configuration tab).</summary>
     public LinePickerViewModel LinePicker { get; }
 
@@ -1269,6 +1277,111 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _intensityLogger.Dispose();
         LogViewer.Dispose();
         _systemLogger.Dispose();
+    }
+
+    /// <summary>
+    /// Everything the diagnostic bundle records about this machine, read in one place off the
+    /// live objects. Runs on the UI thread — it only reads; the copying is what goes to a worker.
+    ///
+    /// <para>Nothing here is computed. Every field is a value some other part of the app is
+    /// already showing or acting on, which is the point: a bundle that derived its own numbers
+    /// could disagree with the screen the operator is describing over the phone.</para>
+    /// </summary>
+    private DiagnosticInputs GatherDiagnostics()
+    {
+        var settings = CurrentSettings();
+        var device = _devices.Count > 0 ? _devices[0] : null;
+        var lm = _leakMonitorEngine.Settings;
+        var activeRun = lm.GoldenRuns.FirstOrDefault(g => g.Name == lm.ActiveGoldenRun);
+        var gate = new PlasmaGate(settings.Logger);
+
+        var env = new DiagnosticEnvironment
+        {
+            MachineName = Environment.MachineName,
+            UserName    = AccessControl.CurrentUsername ?? Environment.UserName,
+            AppVersion  = AppAssemblyVersion(),
+            GitCommit   = AppCommit(),
+            Packages    = LoadedPackageVersions(),
+
+            ConfigDirectory = _paths.ConfigDirectory,
+            LogDirectory    = _paths.LogDirectory,
+            DataDirectory   = _lastDataDirectory,
+            AppFolder       = AppContext.BaseDirectory,
+
+            DeviceConnected      = device?.IsConnected ?? false,
+            IsTestMode           = device?.IsTestMode ?? false,
+            SerialNumber         = device?.SerialNumber ?? "",
+            LastConnectionResult = device?.LastConnectionResult ?? "",
+            ResolvedDllPath      = device?.ResolvedDllPath ?? "",
+            IsAcquiring          = device?.IsAcquiring ?? false,
+
+            TriggerMode           = settings.Logger.TriggerMode.ToString(),
+            SaveStartThreshold    = settings.Logger.SaveStartThresholdIntensity,
+            LoggerEnabled         = settings.Logger.Enabled,
+            LoggerState           = _intensityLogger.State.ToString(),
+            PlasmaGateUsable      = gate.IsUsable,
+            PlasmaGateDescription = gate.Description,
+
+            ActiveGoldenRun     = lm.ActiveGoldenRun ?? "",
+            GoldenRunCapturedAt = activeRun?.CapturedUtc.ToLocalTime(),
+            ActiveCalibration   = lm.ActiveCalibration ?? "",
+
+            SecsEnabled   = settings.Secs.Enabled,
+            ChamberCode   = settings.Secs.ChamberCode,
+            SecsState     = _secs.State.ToString(),
+            SecsStatusText = _secs.StatusText,
+            SecsLastError = _secs.LastError,
+        };
+
+        return new DiagnosticInputs
+        {
+            Environment              = env,
+            Settings                 = settings,
+            DataDirectory            = _lastDataDirectory,
+            ConfigDirectory          = _paths.ConfigDirectory,
+            LogDirectory             = _paths.LogDirectory,
+            SecsProfileTemplatePath  = _secs.ProfileTemplatePath,
+            SecsEffectiveProfilePath = _secs.EffectiveProfilePath,
+            Probe                    = () => OesLoadProbe.Run(AppContext.BaseDirectory),
+        };
+    }
+
+    private static string AppAssemblyVersion() =>
+        typeof(MainViewModel).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+    /// <summary>
+    /// The commit this build came from. SourceLink puts it after the '+' in
+    /// AssemblyInformationalVersion, which is the only way to tell two builds of "1.0.0" apart —
+    /// and telling them apart is most of what a version is for on a delivered folder.
+    /// </summary>
+    private static string AppCommit()
+    {
+        var informational = typeof(MainViewModel).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
+        var plus = informational.IndexOf('+');
+        return plus >= 0 ? informational[(plus + 1)..] : "";
+    }
+
+    /// <summary>
+    /// Package versions read off the assemblies actually loaded, not off the csproj. What was
+    /// pinned at build time and what is running are the same thing right up until the one time
+    /// they are not, and that time is why somebody is reading this bundle.
+    /// </summary>
+    private static Dictionary<string, string> LoadedPackageVersions()
+    {
+        var wanted = new[] { "Aqst.", "Aqusen.", "Secs4Net", "OxyPlot" };
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var name = asm.GetName().Name ?? "";
+            if (!wanted.Any(w => name.StartsWith(w, StringComparison.OrdinalIgnoreCase))) continue;
+            var v = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                        ?.InformationalVersion
+                    ?? asm.GetName().Version?.ToString() ?? "";
+            var plus = v.IndexOf('+');
+            result[name] = plus >= 0 ? v[..plus] : v;
+        }
+        return result;
     }
 
     // --- DualIntensityLogger → SystemLogger bridges ---

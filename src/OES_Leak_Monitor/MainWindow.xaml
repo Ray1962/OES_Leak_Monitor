@@ -312,8 +312,14 @@
                 <local:RatioReviewPanel DataContext="{Binding RatioReview}"/>
             </TabItem>
 
+            <!-- The diagnostic strip sits beside the framework's LogViewerPanel rather than
+                 inside it: the panel comes from Aqst.OesApp.Wpf and knows nothing about this
+                 app's folders, the same reason LinePicker sits beside LoggerPanel. -->
             <TabItem Header="Logs">
-                <wpf:LogViewerPanel DataContext="{Binding LogViewer}"/>
+                <DockPanel>
+                    <local:DiagnosticsPanel DockPanel.Dock="Top" DataContext="{Binding Diagnostics}"/>
+                    <wpf:LogViewerPanel DataContext="{Binding LogViewer}"/>
+                </DockPanel>
             </TabItem>
 
             <!-- SECS/GEM equipment interface. Deliberately NOT in IsEngineerGated: whether the

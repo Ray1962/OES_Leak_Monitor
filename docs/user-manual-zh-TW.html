@@ -1052,6 +1052,32 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </tbody></table></div>
 <blockquote><p>⚠️ <strong><code>Description</code> 欄是在 <code>Aqst.OesApp.Core</code> 0.1.7 才寫進檔案的。</strong> 在那之前，這一欄的內容只存在於執行中的記憶體（Logs 分頁看得到），關掉程式就消失 —— 檔案裡只留下「發生了一個叫 <code>Device_RuntimeError</code> 的事件」，完全沒有錯誤內容。<strong>0.1.7 之前的舊日誌檔沒有這一欄，也救不回來。</strong></p>
 <p>若同一小時內先後跑過新舊版本，新版會另開 <code>yyMMddHH_1.csv</code>，避免同一個檔案裡混著兩種欄位數。</p></blockquote>
+<h4 id="6111-一鍵打包診斷">6.11.1 一鍵打包診斷</h4>
+<p>Logs 分頁上方有一顆 <strong>Create diagnostic bundle</strong>。求助之前先按它，把產生的 zip 附上， 可以省掉來回問「你的設定是什麼、日誌在哪、DLL 有沒有載起來」的好幾輪。</p>
+<p><strong>任何人都能按，不需要簽入。</strong> 它只讀不寫，不會改任何設定，也<strong>不會把任何東西送到外部</strong> —— 只是在本機產生一個檔案，要不要寄出去是你的決定。</p>
+<p>按下去之後在背景收集（採集不會中斷），完成時檔案總管會自動把 zip 選起來，方便直接拖進郵件：</p>
+<pre><code>%APPDATA%\OES_Leak_Monitor\Diagnostics\diag_{電腦名稱}[_cc{機台號}]_{日期時間}.zip</code></pre>
+<p>檔名用<strong>電腦名稱</strong>而不是光譜儀序號，因為掉進測試模式時序號會顯示 <code>TEST_MODE_SIMULATOR</code> —— 最需要辨識的那一包，名字剛好會說謊。序號在 zip 裡的 manifest 中，那裡它是證據。 沒有 <code>_cc</code> 表示這台沒有設定 SECS 機台號。</p>
+<p>包裡有什麼：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>內容</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><code>README.txt</code> / <code>manifest.json</code></td><td>同一份資料的兩種寫法：給人看的與給程式讀的</td></tr>
+<tr><td><code>oes-diagnostic.txt</code></td><td><strong>原生 DLL 到底載不載得起來</strong>，含 Windows 的錯誤碼（程式平常會吞掉這件事）</td></tr>
+<tr><td><code>logs/</code></td><td>最近 7 天的系統日誌與 SECS 通訊日誌</td></tr>
+<tr><td><code>config/</code></td><td>遮蔽過的 <code>settings.json</code>，以及它的 <code>.bak-*</code> 備份（設定何時被改過）</td></tr>
+<tr><td><code>data/</code></td><td>當日的 Ratio CSV、<code>_config_*.json</code>，以及<strong>當日最新一個</strong>全光譜錄製檔</td></tr>
+<tr><td><code>secs/</code></td><td>SECS profile 的樣板與實際生效版本</td></tr>
+</tbody></table></div>
+<blockquote><p>⚠️ <strong>先讀 <code>README.txt</code> 最後的「NOT in this bundle」。</strong> 有兩件事只會在那裡說：</p>
+<ul>
+<li><strong>過大而未收錄的錄製檔</strong>。超過上限的全光譜檔會被整個略過，並附上原始路徑 —— 刻意不做成「截斷後放進來」，因為被截斷的全光譜檔拿去建基線會照樣算出一個答案， 而收到的人沒有任何方法看得出那個答案是錯的。
+</li>
+<li><strong>被截斷的檔案</strong>。當日最新那個檔案通常正在被寫入，程式仍然會複製它（那正是涵蓋 問題當下的資料），但會標記 <code>TRUNCATED</code> 並記下列數。
+</li>
+</ul>
+<p>一份沒有「缺漏」段落的清單，讀起來就像什麼都齊了。</p></blockquote>
+<p><strong>密碼不會離開機台</strong>：所有設定檔（含備份）的存取控制區段與 <code>passwordHash</code> 都會被移除。 <strong>使用者名稱會保留</strong> —— 稽核日誌的價值就在於知道是誰做的。</p>
 <blockquote><p>追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 <code>Description</code> 欄會直接寫出原因。</p></blockquote>
 <hr>
 <h2 id="7-檔案與資料夾">7. 檔案與資料夾</h2>
