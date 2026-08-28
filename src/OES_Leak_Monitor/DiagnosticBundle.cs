@@ -155,7 +155,7 @@ public static class DiagnosticBundle
         var manifest = new DiagnosticManifest
         {
             CreatedLocal = nowLocal,
-            CreatedUtcOffset = TimeZoneInfo.Local.GetUtcOffset(nowLocal).ToString(),
+            CreatedUtcOffset = FormatOffset(TimeZoneInfo.Local.GetUtcOffset(nowLocal)),
             Environment = inputs.Environment,
             Items = items.OrderBy(i => i.Included ? 0 : 1).ThenBy(i => i.Name).ToList(),
         };
@@ -460,6 +460,13 @@ public static class DiagnosticBundle
         try { return new DirectoryInfo(folder).GetFiles(pattern).OrderBy(f => f.Name).ToList(); }
         catch { return Array.Empty<FileInfo>(); }
     }
+
+    /// <summary>
+    /// "+08:00", not TimeSpan's "08:00:00" — which sits beside the timestamp in the header and
+    /// reads as a second clock reading rather than the zone the first one is in.
+    /// </summary>
+    private static string FormatOffset(TimeSpan offset) =>
+        $"{(offset < TimeSpan.Zero ? "-" : "+")}{Math.Abs(offset.Hours):00}:{Math.Abs(offset.Minutes):00}";
 
     private static string Sanitize(string value)
     {

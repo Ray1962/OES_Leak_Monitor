@@ -207,8 +207,11 @@ public sealed class DiagnosticManifest
             }
         }
         sb.AppendLine();
-        sb.AppendLine("Passwords and the access-control user list are removed from every settings");
-        sb.AppendLine("file here. Usernames are kept: the audit log's value is knowing who acted.");
+        sb.AppendLine("Every settings file here has its whole access-control section removed, and");
+        sb.AppendLine("every stored password hash stripped wherever it appeared - so no account,");
+        sb.AppendLine("and no credential, is in the config/ folder at all. Usernames DO remain");
+        sb.AppendLine("in the logs, deliberately: an audit entry that cannot say who cleared an");
+        sb.AppendLine("alarm is not an audit entry.");
         return sb.ToString();
     }
 
