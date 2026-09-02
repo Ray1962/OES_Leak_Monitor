@@ -27,6 +27,7 @@ public class Win {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int cmd);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out RECT r);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h,IntPtr hdc,uint flags);
   public struct RECT { public int Left,Top,Right,Bottom; }
 }
 "@
@@ -95,7 +96,19 @@ $rect = New-Object Win+RECT
 $w = $rect.Right - $rect.Left; $ht = $rect.Bottom - $rect.Top
 $bmp = New-Object System.Drawing.Bitmap $w,$ht
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($rect.Left,$rect.Top,0,0,$bmp.Size)   # negative coords are fine
+
+# PrintWindow, not CopyFromScreen. SetForegroundWindow is advisory -- Windows refuses to
+# let a background process steal focus, so CopyFromScreen happily returns whatever is
+# actually on top of that rectangle. It did exactly that once here and handed back a
+# screenshot of the editor, which is worse than a blank frame: it looks like a result.
+# PW_RENDERFULLCONTENT (2) asks the window to render itself, occluded or not.
+$hdc = $g.GetHdc()
+$ok = [Win]::PrintWindow($h,$hdc,2)
+$g.ReleaseHdc($hdc)
+if (-not $ok) {
+  Write-Host "PrintWindow failed; falling back to a screen grab (may capture whatever is on top)"
+  $g.CopyFromScreen($rect.Left,$rect.Top,0,0,$bmp.Size)   # negative coords are fine
+}
 $bmp.Save($Png,[System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose(); $bmp.Dispose()
 Write-Host ("Screenshot {0}x{1} -> {2}" -f $w,$ht,$Png)
