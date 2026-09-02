@@ -29,6 +29,12 @@ public enum RatioState
     NoBaseline,
     /// <summary>Excluded by the operator — not computed and never alarmed.</summary>
     Disabled,
+    /// <summary>The running process step is not the one this entry measures
+    /// (<see cref="RatioDefinition.ProcessClass"/>). Held out of the composite alarm, but a
+    /// latched alarm from its own process is kept — distinct from <see cref="Disabled"/> (an
+    /// operator decision) and from <see cref="NoPlasma"/> (a fault or an idle tool), because
+    /// on screen those three call for three different reactions.</summary>
+    NotApplicable,
 }
 
 /// <summary>Immutable per-frame view of one ratio, handed to the UI.</summary>
@@ -175,6 +181,26 @@ public sealed class RatioMonitor
         _state = _latchedAlarm
             ? RatioState.Alarm
             : (_hasBaseline ? RatioState.NoPlasma : RatioState.NoBaseline);
+    }
+
+    /// <summary>
+    /// Marks the ratio out of scope for the running process step: restarts the smoothing and
+    /// the confirmation timers so the next step of its own class does not inherit a value
+    /// measured during a different plasma, and <em>keeps the latch</em> — a leak confirmed in
+    /// one process is still a leak while the tool runs the next one, and clearing it here would
+    /// end a confirmed alarm without an Acknowledge and without a log entry.
+    /// </summary>
+    public void MarkNotApplicable()
+    {
+        _hasEma = false;
+        _aboveWarnSince = _aboveAlarmSince = null;
+        _plasmaLostSince = _lowSignalSince = null;
+        _trend.Clear();
+        _slopePerMinute = 0;
+        _rawRatio = _numerator = _denominator = double.NaN;
+        _numSnr = _denSnr = double.NaN;
+        _plasmaPresent = false;
+        _state = _latchedAlarm ? RatioState.Alarm : RatioState.NotApplicable;
     }
 
     /// <summary>Marks the ratio excluded — resets the latch and smoothing so a later

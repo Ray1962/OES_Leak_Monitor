@@ -145,6 +145,26 @@ public sealed class LeakMonitorSnapshot
     public bool PlasmaGateAvailable { get; init; }
 
     /// <summary>
+    /// Process class of the plasma step this frame belongs to: a configured class name,
+    /// <see cref="ProcessClassifier.Unknown"/> for a step no rule matched, or "" when no
+    /// classifier is configured or the step's verdict has not been taken yet.
+    /// </summary>
+    public string ProcessClass { get; init; } = "";
+
+    /// <summary>Counts the plasma steps seen this acquisition, so a row can say which one it
+    /// belongs to. 0 while no classifier is configured.</summary>
+    public int ProcessStepIndex { get; init; }
+
+    /// <summary>
+    /// Each classifier rule's measured value on the frame the step's verdict was taken —
+    /// recorded rather than only the verdict, because a step landing near a threshold is only
+    /// diagnosable from the number. Empty while no classifier is configured or before the
+    /// verdict is taken.
+    /// </summary>
+    public IReadOnlyList<ProcessDiscriminant> ProcessDiscriminants { get; init; } =
+        Array.Empty<ProcessDiscriminant>();
+
+    /// <summary>
     /// Isolated gate dropouts counted this acquisition — single blank frames between good
     /// ones. The gate discards them silently, so this is the number that says whether an
     /// acquisition-mode change actually helped.
@@ -229,6 +249,19 @@ public sealed class LeakMonitorEngine : IDisposable
     private int _dropoutFrames, _dropoutEvents, _dropoutsSinceLog;
     private DateTime _lastDropoutLog;
 
+    // Per-step process classification. Null while the site has not configured one, in which
+    // case every ratio applies to every step and nothing below changes behaviour.
+    private ProcessClassifier? _classifier;
+    // The step in progress, as the boundary gate sees it. A step runs from the frame the
+    // boundary metric first clears BoundaryThreshold to the frame it stops clearing it.
+    private bool _stepOpen;
+    private int _stepFrames;                  // gate-open frames in the step so far
+    // Verdict for the running step, locked once taken. Null = not decided yet (the first
+    // DecideAfterFrames frames), which is treated exactly like Unknown: nothing is judged.
+    private string? _stepClass;
+    private IReadOnlyList<ProcessDiscriminant> _stepDiscriminants = Array.Empty<ProcessDiscriminant>();
+    private int _stepIndex;                   // increments per step, so a CSV row says which
+
     private AcquisitionFingerprint? _acquisition;
     private string _acquisitionWarning = "";  // "" when the active baseline still applies
     private string _acquisitionWarned = "";   // last warning logged, so it is logged once
@@ -279,7 +312,153 @@ public sealed class LeakMonitorEngine : IDisposable
             _defs[corrected.Key] = corrected;
             _monitors.Add(new RatioMonitor(corrected));
         }
+        BuildClassifier();
         ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // also builds the estimator
+    }
+
+    /// <summary>
+    /// Rebuilds the process classifier from settings. Called from the constructor and from
+    /// <see cref="ReloadRatios"/>, so a classifier edit is staged behind an acquisition restart
+    /// exactly like a ratio edit — the two are one configuration (a ratio names the class the
+    /// classifier produces) and applying half of it live would leave them disagreeing.
+    /// </summary>
+    private void BuildClassifier()
+    {
+        _classifier = null;
+        EndStep();
+        var cfg = _settings.ProcessClassifier;
+        if (cfg is null || !cfg.Enabled) return;
+
+        var built = new ProcessClassifier(cfg);
+        if (!built.IsUsable)
+        {
+            // Enabled with no usable rule would name every step the fallback class, which looks
+            // like it worked. Say so and stay off, so class-scoped ratios keep judging every
+            // step rather than all silently standing down.
+            _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorClassifierUnusable",
+                "Process classifier is enabled but has no usable rule — class scoping is off " +
+                "and every ratio applies to every step",
+                value: built.Description);
+            return;
+        }
+        _classifier = built;
+        _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorClassifier",
+            "Process class is decided from the spectrum " +
+            $"after {built.DecideAfterFrames} gate-open frame(s) and locked for the step",
+            value: built.Description);
+    }
+
+    /// <summary>Ends the step in progress, so the next gate-open frame starts a new one.</summary>
+    private void EndStep()
+    {
+        _stepOpen = false;
+        _stepFrames = 0;
+        _stepClass = null;
+        _stepDiscriminants = Array.Empty<ProcessDiscriminant>();
+    }
+
+    /// <summary>
+    /// Tracks the plasma step this frame belongs to and names its process class once.
+    ///
+    /// <para>Step boundaries come from the <em>boundary</em> threshold — the lowest level any
+    /// class runs at — not from the class's own, because the class is not known until several
+    /// frames in: a boundary detector using the brightest class's threshold would never see a
+    /// dim class's step start, so that class could never be classified and would stay dark for
+    /// ever. That is the same failure as a save threshold set above the leak-free plasma
+    /// (docs/leak-test-20260819-analysis.md), arrived at from the other direction.</para>
+    ///
+    /// <para>The verdict is taken once, at <see cref="ProcessClassifier.DecideAfterFrames"/>,
+    /// and then locked: a plasma step does not change process half way through, so allowing the
+    /// answer to move can only let ignition-transient noise flip it. A step whose discriminants
+    /// could not be measured is <see cref="ProcessClassifier.Unknown"/> and nothing is judged
+    /// during it.</para>
+    /// </summary>
+    private void AdvanceStep(float? metric, float[]? wl, float[]? inten, DateTime ts)
+    {
+        if (_classifier is null) return;      // no classes configured; every ratio applies
+
+        double boundary = _classifier.BoundaryThreshold(_plasmaGate?.Threshold ?? 0);
+        bool open = metric is { } m && m > boundary;
+        if (!open)
+        {
+            if (_stepOpen) EndStep();
+            return;
+        }
+
+        if (!_stepOpen)
+        {
+            _stepOpen = true;
+            _stepFrames = 0;
+            _stepClass = null;
+            _stepDiscriminants = Array.Empty<ProcessDiscriminant>();
+            unchecked { _stepIndex++; }
+        }
+        _stepFrames++;
+        if (_stepClass is not null) return;                        // already decided and locked
+        if (_stepFrames < _classifier.DecideAfterFrames) return;   // still inside the transient
+
+        var reading = _classifier.Evaluate(wl, inten);
+        _stepDiscriminants = reading.Discriminants;
+        _stepClass = reading.Measurable ? reading.ClassName : ProcessClassifier.Unknown;
+
+        // Logged with the measured discriminants, not just the verdict: the first time a step
+        // lands near a threshold, the number is the only thing that says whether the threshold
+        // still fits this chamber.
+        string values = _stepDiscriminants.Count == 0
+            ? "not measurable"
+            : string.Join(", ", _stepDiscriminants.Select(d => $"{d.Label}={d.Value:0.####}"));
+        _log?.LogSystemEvent(
+            _stepClass == ProcessClassifier.Unknown ? LogSeverity.Warning : LogSeverity.Information,
+            "LeakMonitorProcessStep",
+            _stepClass == ProcessClassifier.Unknown
+                ? "Process step could not be classified — no ratio is judged during it"
+                : $"Process step classified as {_stepClass}",
+            value: values,
+            related: $"Step={_stepIndex},Class={_stepClass}");
+    }
+
+    /// <summary>
+    /// Whether this entry measures the step now running. True for every entry while no
+    /// classifier is configured, and for an entry with no class (it applies to every step) —
+    /// which is what keeps an existing installation behaving exactly as before.
+    /// <see cref="ProcessClassifier.Unknown"/> and an undecided step match nothing: an entry
+    /// stands down rather than judging a step whose process is not known.
+    /// </summary>
+    private bool AppliesToStep(RatioDefinition def)
+    {
+        if (_classifier is null) return true;
+        if (string.IsNullOrWhiteSpace(def.ProcessClass)) return true;
+        if (_stepClass is null || _stepClass == ProcessClassifier.Unknown) return false;
+        return string.Equals(def.ProcessClass.Trim(), _stepClass,
+                             StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Labels of the classifier's discriminants, in the order
+    /// <see cref="LeakMonitorSnapshot.ProcessDiscriminants"/> reports them. Empty when no
+    /// classifier is configured — which is what keeps the ratio CSV byte-identical to the one
+    /// an unconfigured installation writes today.
+    /// </summary>
+    public IReadOnlyList<string> ProcessDiscriminantLabels
+    {
+        get
+        {
+            lock (_gate)
+                return _classifier is null
+                    ? Array.Empty<string>()
+                    : (_settings.ProcessClassifier?.Rules ?? new List<ProcessClassRule>())
+                        .Where(r => !string.IsNullOrWhiteSpace(r.ClassName))
+                        .Select(r => r.Label)
+                        .ToArray();
+        }
+    }
+
+    /// <summary>Class of the plasma step now running: a configured class name,
+    /// <see cref="ProcessClassifier.Unknown"/>, or "" when no classifier is configured or no
+    /// step is in progress.</summary>
+    public string CurrentProcessClass
+    {
+        get { lock (_gate) return _stepClass ?? ""; }
     }
 
     /// <summary>
@@ -300,6 +479,10 @@ public sealed class LeakMonitorEngine : IDisposable
             _plasmaGate = settings is null ? null : new PlasmaGate(settings);
             after = _plasmaGate?.Description;
             _gateWarned = false;
+            // The boundary threshold is derived from this gate, so a step detected under the
+            // old one has no meaning under the new one — end it and let the next frame start
+            // a step the new threshold agrees with.
+            EndStep();
             // The last reading was taken through the old gate; a new one has not judged a
             // frame yet, so report "unavailable" rather than carrying the stale answer over.
             _lastGateOpen = null;
@@ -419,7 +602,19 @@ public sealed class LeakMonitorEngine : IDisposable
             // let the reference's own noise (or a systematically negative extraction on a curved
             // continuum) decide whether the frame was evaluated at all. Measured once per frame
             // and shared by every absolute ratio; null = the gate could not be evaluated.
-            bool? triggerPlasma = _plasmaGate?.IsPlasmaPresent(wl, inten);
+            // One brightness reading per frame, compared against up to two thresholds: the
+            // boundary threshold that says a plasma step is running at all, and — once that step
+            // has been classified — the threshold that class runs at. Measuring it twice would
+            // be a second definition of "how bright is this frame", which is the thing PlasmaGate
+            // exists to prevent.
+            float? metric = _plasmaGate?.TriggerMetric(wl, inten);
+            AdvanceStep(metric, wl, inten, sample.Timestamp);
+
+            bool? triggerPlasma = null;
+            if (_plasmaGate is { IsUsable: true } && metric is { } m)
+                triggerPlasma = m > (_classifier is null
+                    ? _plasmaGate.Threshold
+                    : _classifier.PlasmaThresholdFor(_stepClass, _plasmaGate.Threshold));
             _lastGateOpen = triggerPlasma;
             if (triggerPlasma is { } g) TrackGateDropouts(g, sample.Timestamp);
 
@@ -435,6 +630,17 @@ public sealed class LeakMonitorEngine : IDisposable
                 {
                     mon.MarkDisabled();
                     if (_capturing) GetDiag(mon.Key).Disabled = true;
+                    continue;
+                }
+
+                // Out of its class this entry measures a different plasma, so it neither judges
+                // nor feeds a baseline. It is not disabled and the tool is not idle, so it says
+                // so with a state of its own — and its latch survives, because a confirmed leak
+                // does not end when the tool moves to the next process step.
+                if (!AppliesToStep(def))
+                {
+                    mon.MarkNotApplicable();
+                    if (_capturing) GetDiag(mon.Key).OutOfClass++;
                     continue;
                 }
 
@@ -706,6 +912,10 @@ public sealed class LeakMonitorEngine : IDisposable
                            .ToList()
                 : new List<string>();
             foreach (var mon in _monitors) mon.ResetRuntime(clearAlarms);
+            // A new run restarts step tracking too: the step in progress belonged to the old
+            // one, and carrying its verdict over would judge the first frames of the new run
+            // against a class nobody measured.
+            EndStep();
             oldOverall = _overall;
             _overall = ComputeOverall();
             newOverall = _overall;
@@ -894,6 +1104,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 _defs[corrected.Key] = corrected;
                 _monitors.Add(new RatioMonitor(corrected));
             }
+            BuildClassifier();
             ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // rebuilds the estimator
 
             foreach (var key in latched)
@@ -1435,6 +1646,13 @@ public sealed class LeakMonitorEngine : IDisposable
         {
             reason = "the ratio was disabled for the whole capture";
         }
+        else if (d is { OutOfClass: > 0 })
+        {
+            reason = $"every frame in the capture window ({d.OutOfClass}) ran a process step " +
+                     $"other than {def.ProcessClass}, which is the class this ratio measures — " +
+                     "capture across a step of that process, or build the baseline offline from " +
+                     "recordings that contain one";
+        }
         else
         {
             reason = "no spectrum frames were processed during the capture window (plasma off?)";
@@ -1500,6 +1718,9 @@ public sealed class LeakMonitorEngine : IDisposable
             PlasmaPresent = _lastGateOpen ?? false,
             PlasmaGateAvailable = _lastGateOpen.HasValue,
             DropoutCount = _dropoutEvents,
+            ProcessClass = _stepClass ?? "",
+            ProcessStepIndex = _classifier is null ? 0 : _stepIndex,
+            ProcessDiscriminants = _stepDiscriminants,
         };
     }
 
@@ -1519,8 +1740,13 @@ public sealed class LeakMonitorEngine : IDisposable
         foreach (var r in ratios)
         {
             // A low-SNR ratio still carries a (now-plotted) PercentOfBaseline, but its value is
-            // near-noise garbage — keep it out of the leak-rate fit as before.
-            bool usable = r.HasBaseline && r.State != RatioState.LowSignal &&
+            // near-noise garbage — keep it out of the leak-rate fit as before. Out of its
+            // process class an entry is excluded outright: its smoothing was dropped when the
+            // class changed, so what it holds is a reading of a different plasma. It would fall
+            // out on the NaN test below anyway; saying so is not the same as relying on it.
+            bool usable = r.HasBaseline &&
+                          r.State != RatioState.LowSignal &&
+                          r.State != RatioState.NotApplicable &&
                           !double.IsNaN(r.SmoothedRatio) && r.BaselineMean > 0;
             double x, sigX;
             if (!usable)
@@ -1602,5 +1828,8 @@ public sealed class LeakMonitorEngine : IDisposable
         public int Accepted;
         /// <summary>The ratio was excluded by the operator for the whole capture.</summary>
         public bool Disabled;
+        /// <summary>Frames that ran a process class this ratio does not measure. Counted so a
+        /// capture spanning the wrong step can say so, instead of reporting "no frames".</summary>
+        public int OutOfClass;
     }
 }

@@ -62,6 +62,10 @@ public sealed class RatioCsvLogger : IDisposable
     private string[] _ratioLabels = Array.Empty<string>();
     // Aligned with _ratioKeys: whether that ratio's percent column is a σ-score (see the header).
     private bool[] _pedestal = Array.Empty<bool>();
+    // Classifier discriminant labels, fixed when the file is opened. Empty when no process
+    // classifier is configured, in which case no process columns are written at all and the
+    // file is identical to the one this logger has always produced.
+    private string[] _discriminantLabels = Array.Empty<string>();
 
     private StreamWriter? _writer;
     private string _currentPath = "";
@@ -148,6 +152,17 @@ public sealed class RatioCsvLogger : IDisposable
                 bool hasRate = snap.LeakRate is { HasEstimate: true };
                 row.Append(',').Append(Num(hasRate ? snap.LeakRate!.LeakRate : (double?)null));
                 row.Append(',').Append(Num(hasRate ? snap.LeakRate!.Sigma : (double?)null));
+                if (_discriminantLabels.Length > 0)
+                {
+                    row.Append(',').Append(Safe(snap.ProcessClass));
+                    row.Append(',').Append(snap.ProcessStepIndex.ToString(Inv));
+                    // Blank until the step's verdict has been taken — the value did not exist
+                    // for those frames, and writing the previous step's would be a lie.
+                    for (int i = 0; i < _discriminantLabels.Length; i++)
+                        row.Append(',').Append(Num(i < snap.ProcessDiscriminants.Count
+                            ? snap.ProcessDiscriminants[i].Value
+                            : (double?)null));
+                }
                 writer.WriteLine(row.ToString());
             }
             catch (Exception ex)
@@ -194,6 +209,7 @@ public sealed class RatioCsvLogger : IDisposable
             _ratioKeys = monitored.Select(r => r.Key).ToArray();
             _ratioLabels = monitored.Select(r => r.DisplayName ?? "").ToArray();
             _pedestal = monitored.Select(r => r.ValueHasPedestal).ToArray();
+            _discriminantLabels = _engine.ProcessDiscriminantLabels.ToArray();
             _writer = new StreamWriter(_currentPath, append: false, Utf8Bom) { AutoFlush = true };
             _sessionDate = sessionStart.Date;
             _writeErrorLogged = false;
@@ -221,6 +237,17 @@ public sealed class RatioCsvLogger : IDisposable
                       .Append(_pedestal[i] ? "_sigmaScore" : "_pctBaseline");
             }
             header.Append(",OverallState,LeakRate,LeakRateSigma");
+            // Process columns are appended last and only when a classifier is configured, so a
+            // reader keying on column names is unaffected and an unconfigured site's file is
+            // unchanged. The discriminant values are written beside the verdict on purpose: a
+            // step that lands near a threshold is only diagnosable from the number, and the
+            // verdict alone cannot say whether the threshold still fits this chamber.
+            if (_discriminantLabels.Length > 0)
+            {
+                header.Append(",ProcessClass,ProcessStep");
+                foreach (var label in _discriminantLabels)
+                    header.Append(",disc:").Append(Safe(label));
+            }
             _writer.WriteLine(header.ToString());
 
             _systemLogger?.LogSystemEvent(LogSeverity.Information, "RatioCsvOpened",
@@ -281,6 +308,10 @@ public sealed class RatioCsvLogger : IDisposable
             if (r.Key == key) return r;
         return null;
     }
+
+    /// <summary>Strips the characters that would break a bare-CSV column.</summary>
+    private static string Safe(string? v) =>
+        (v ?? "").Replace(',', ';').Replace('"', '\'').Replace('\n', ' ').Replace('\r', ' ').Trim();
 
     private static string Num(double? v) =>
         v is null || double.IsNaN(v.Value) ? "" : v.Value.ToString("G6", Inv);

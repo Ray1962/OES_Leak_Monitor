@@ -44,6 +44,10 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         RatioState.LowSignal  => "Low Signal",
         RatioState.NoBaseline => "No Baseline",
         RatioState.Disabled   => "Disabled",
+        // Says which of the three quiet states this is. "Disabled" is a decision someone made,
+        // "No Plasma" is the tool idle or a fault, and this one is neither — the tool is running
+        // a process step this entry does not measure.
+        RatioState.NotApplicable => "Not this process",
         _                     => _state.ToString(),
     };
 
@@ -55,6 +59,7 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         RatioState.NoPlasma => Brushes.Gray,
         RatioState.LowSignal => Brushes.SlateBlue,
         RatioState.Disabled => Brushes.Silver,
+        RatioState.NotApplicable => Brushes.DarkSlateGray,
         _                  => Brushes.SlateGray,
     };
 

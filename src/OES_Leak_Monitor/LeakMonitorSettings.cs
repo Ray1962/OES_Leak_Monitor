@@ -33,6 +33,23 @@ public sealed class RatioDefinition
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Process class this entry measures, matched against the class
+    /// <see cref="ProcessClassifier"/> names for the running plasma step. Empty — the default,
+    /// and what every pre-existing configuration deserialises to — means the entry applies to
+    /// every step, which is the behaviour before class scoping existed.
+    ///
+    /// <para>A chamber that interleaves several processes needs this: on the measured tool the
+    /// same argon reference exists in one process and is absent from the other two, so one ratio
+    /// set judged against one baseline is comparing three different plasmas. Out of its class an
+    /// entry reads <see cref="RatioState.NotApplicable"/> — not <see cref="RatioState.NoPlasma"/>
+    /// and not <see cref="RatioState.Disabled"/>, because "this step is not what I measure" is
+    /// neither a fault nor an operator decision, and only a state of its own says so on screen.
+    /// A latched alarm survives, so a leak confirmed in one process still has to be
+    /// acknowledged after the tool has moved on to the next.</para>
+    /// </summary>
+    public string ProcessClass { get; set; } = "";
+
     /// <summary>Whether this entry tracks the signal/reference ratio or the signal line's
     /// absolute intensity (reference then only gates plasma-present). See <see cref="MonitorMode"/>.</summary>
     public MonitorMode MonitorMode { get; set; } = MonitorMode.Ratio;
@@ -89,14 +106,19 @@ public sealed class RatioDefinition
 
     /// <summary>
     /// True when <paramref name="other"/> monitors the same quantity — same mode, same monitored
-    /// line, and (in ratio mode, where it is divided in) the same reference line. Thresholds and
-    /// smoothing are deliberately *not* compared: retuning a threshold does not change what is
-    /// being measured, so an alarm raised against the old one still refers to the same thing.
+    /// line, (in ratio mode, where it is divided in) the same reference line, and the same
+    /// process class. Thresholds and smoothing are deliberately *not* compared: retuning a
+    /// threshold does not change what is being measured, so an alarm raised against the old one
+    /// still refers to the same thing. <see cref="ProcessClass"/> is compared, because the same
+    /// two lines read during a different plasma are a different quantity — the levels the
+    /// measured chamber's three processes produce differ by up to a factor of ten on the same
+    /// pair — so a latch or a baseline from the old class does not carry over.
     /// </summary>
     public bool MeasuresSameAs(RatioDefinition? other) =>
         other is not null &&
         Key == other.Key &&
         MonitorMode == other.MonitorMode &&
+        string.Equals(ProcessClass ?? "", other.ProcessClass ?? "", StringComparison.OrdinalIgnoreCase) &&
         Numerator.MeasuresSameAs(other.Numerator) &&
         (MonitorMode == MonitorMode.AbsoluteIntensity ||
          Denominator.MeasuresSameAs(other.Denominator));
@@ -104,6 +126,7 @@ public sealed class RatioDefinition
     public RatioDefinition Clone() => new()
     {
         Key = Key, DisplayName = DisplayName, Enabled = Enabled,
+        ProcessClass = ProcessClass,
         MonitorMode = MonitorMode,
         Numerator = Numerator.Clone(), Denominator = Denominator.Clone(),
         WarnFactor = WarnFactor, AlarmFactor = AlarmFactor,
@@ -476,6 +499,14 @@ public sealed class LeakMonitorSettings
     /// offset overlay). Applied to every ratio line that matches, at monitor-build time. Empty by
     /// default. See <see cref="WavelengthCorrection"/> / <see cref="WavelengthCalibration"/>.</summary>
     public List<WavelengthCorrection> WavelengthCorrections { get; set; } = new();
+
+    /// <summary>
+    /// Names the process class of each plasma step from the spectrum, so class-scoped ratios
+    /// (<see cref="RatioDefinition.ProcessClass"/>) only judge the steps they measure. Disabled
+    /// by default: with no classifier there is one class, every ratio applies to it, and the
+    /// engine behaves exactly as it did before. See <see cref="ProcessClassifier"/>.
+    /// </summary>
+    public ProcessClassifierSettings ProcessClassifier { get; set; } = new();
 
     public GoldenRun? FindGoldenRun(string? name) =>
         name is null ? null : GoldenRuns.FirstOrDefault(g => g.Name == name);

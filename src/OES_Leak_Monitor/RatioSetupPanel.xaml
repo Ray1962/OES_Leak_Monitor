@@ -155,6 +155,15 @@
                             <CheckBox Content="Enabled — included in leak monitoring"
                                       IsChecked="{Binding Enabled}" Margin="0,8,0,0"/>
 
+                            <!-- Process class. Shown even though the classifier is configured in
+                                 settings.json, because saving this panel writes the whole ratio
+                                 and a field with nowhere to show it is a field that gets lost. -->
+                            <TextBlock Text="Process class (blank = every process step)"
+                                       Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                            <TextBox Text="{Binding ProcessClass, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="4,3" HorizontalAlignment="Left" MinWidth="160"
+                                     ToolTip="Name of the process class this ratio measures, as spelled in the process classifier. Blank means the ratio applies to every step, which is the default."/>
+
                             <!-- Monitoring method -->
                             <TextBlock Text="Monitoring method" Style="{StaticResource FieldLabel}"
                                        Margin="0,12,0,0"/>

@@ -82,11 +82,26 @@ public sealed class PlasmaGate
     public bool? IsPlasmaPresent(float[]? wavelengths, float[]? intensities)
     {
         if (!IsUsable) return null;
-        var metric = TriggerMetric(wavelengths, intensities);
+        var metric = Metric(wavelengths, intensities);
         return metric is { } v ? v > Threshold : null;
     }
 
-    private float? TriggerMetric(float[]? wl, float[]? inten)
+    /// <summary>
+    /// The brightness this frame reads on the trigger metric, or null when it could not be
+    /// measured — the same number <see cref="IsPlasmaPresent"/> compares, exposed so a caller
+    /// can compare it to a different threshold.
+    ///
+    /// <para>Only one caller needs that: a tool interleaving processes an order of magnitude
+    /// apart in brightness cannot be gated by one level (see
+    /// <see cref="ProcessClassDefinition.PlasmaThreshold"/>). It gets the metric rather than a
+    /// second gate object per class, so there is still exactly one definition of "how bright is
+    /// this frame" — which is the whole reason this class mirrors the logger's trigger instead
+    /// of measuring brightness its own way.</para>
+    /// </summary>
+    public float? TriggerMetric(float[]? wavelengths, float[]? intensities) =>
+        IsUsable ? Metric(wavelengths, intensities) : null;
+
+    private float? Metric(float[]? wl, float[]? inten)
     {
         if (wl is null || inten is null) return null;
         int n = Math.Min(wl.Length, inten.Length);

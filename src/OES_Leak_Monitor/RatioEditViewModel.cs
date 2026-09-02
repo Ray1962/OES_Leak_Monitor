@@ -93,6 +93,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _minSnr         = def.MinSnr;
         _monitorMode    = def.MonitorMode;
         _enabled        = def.Enabled;
+        _processClass   = def.ProcessClass ?? "";
 
         _autoName       = AutoName();
         _displayName    = string.IsNullOrWhiteSpace(def.DisplayName) ? _autoName : def.DisplayName;
@@ -247,12 +248,30 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         : $"{_signalLine.Species} {_signalLine.WavelengthNm:0.#} / " +
           $"{_referenceLine.Species} {_referenceLine.WavelengthNm:0.#}";
 
+    private string _processClass = "";
+    /// <summary>
+    /// Process class this ratio measures (<see cref="RatioDefinition.ProcessClass"/>). Empty
+    /// means every step, which is what an unconfigured site has.
+    ///
+    /// <para>Editable here so that saving the Ratio Setup tab cannot silently drop it. The
+    /// value is set by hand in <c>settings.json</c> today; without this it would round-trip to
+    /// empty on the first Save, un-scoping every ratio at once with nothing on screen to say
+    /// so — the panel would look untouched and the leak monitor would start judging all three
+    /// processes against one baseline again.</para>
+    /// </summary>
+    public string ProcessClass
+    {
+        get => _processClass;
+        set => Set(ref _processClass, (value ?? "").Trim());
+    }
+
     /// <summary>Builds a persistable definition from the current edits.</summary>
     public RatioDefinition ToDefinition() => new()
     {
         Key = Key,
         DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? AutoName() : DisplayName,
         Enabled = Enabled,
+        ProcessClass = ProcessClass,
         MonitorMode = MonitorMode,
         Numerator = RegionFor(SignalLine.Line, SignalMode, _origNumerator),
         Denominator = RegionFor(ReferenceLine.Line, ReferenceMode, _origDenominator),
