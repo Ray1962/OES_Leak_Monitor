@@ -25,6 +25,25 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly DualIntensityLogger _intensityLogger;
     private readonly LeakMonitorEngine _leakMonitorEngine;
     private readonly RatioCsvLogger _ratioCsvLogger;
+    // The batch layer: steps -> batches -> one row at each batch's sampling point. Independent
+    // of RatioMonitor by design (it uses neither the EMA nor the live sigma) — see BatchTracker.
+    private readonly BatchTracker _batchTracker;
+    private readonly BatchCsvLogger _batchCsvLogger;
+
+    private void OnSampleForBatch(object? sender, LeakMonitorSnapshot snapshot) =>
+        _batchTracker.Add(snapshot);
+
+    /// <summary>
+    /// Ends the batch in progress and closes the day file. Called wherever the ratio CSV's
+    /// session ends — a batch that spans a Stop, a Reset or the start of a replay is not one
+    /// batch, and carrying it across would put steps from two different runs of the tool into a
+    /// single row. Flush first: it is what emits the pending batch for the logger to write.
+    /// </summary>
+    private void StopBatchRecording()
+    {
+        _batchTracker.Flush();
+        _batchCsvLogger.Stop();
+    }
     private readonly SecsBridge _secs;
     private readonly List<DeviceViewModel> _devices;
 
@@ -271,6 +290,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _ratioCsvLogger = new RatioCsvLogger(_leakMonitorEngine, _paths.DataDirectory, _systemLogger);
         _ratioCsvLogger.Configure(loggerSettings);
 
+        _batchTracker = new BatchTracker(settings.LeakMonitor.Batch);
+        _batchCsvLogger = new BatchCsvLogger(_leakMonitorEngine, _paths.DataDirectory,
+                                             _batchTracker, _systemLogger);
+        _batchCsvLogger.Configure(loggerSettings);
+        _leakMonitorEngine.SampleProcessed += OnSampleForBatch;
+
         // Replay tab: play a recorded full-spectrum CSV through the live pipeline to validate
         // the leak-monitor algorithms without hardware. It owns the transport; this class owns
         // what the replay does to the recorders and the alarm gate.
@@ -401,6 +426,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             // CSV is threshold-driven, the Ratio CSV runs for the whole acquisition.
             _intensityLogger.Stop();
             _ratioCsvLogger.Stop();
+            StopBatchRecording();
             _systemLogger.LogSystemEvent(LogSeverity.Information, "IntensityLoggerSessionEnded",
                 "Intensity/Ratio save session closed because OES acquisition stopped");
         }
@@ -597,6 +623,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // the Ratio CSV, which is not threshold-driven, reopens on the very next frame.
         _intensityLogger.Stop();
         _ratioCsvLogger.Stop();
+        StopBatchRecording();
 
         // (2) Restart the live Monitor-tab intensity trend (new start time).
         WavelengthTrend.Reset();
@@ -659,6 +686,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _intensityLogger.Stop();
         _ratioCsvLogger.Stop();
+        StopBatchRecording();
         _replayOutputActive = true;
         ConfigureRecorderOutput();
         UpdateTestModeContext();
@@ -723,6 +751,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     "do not carry into live monitoring");
         _intensityLogger.Stop();
         _ratioCsvLogger.Stop();
+        StopBatchRecording();
         _replayOutputActive = false;
         ConfigureRecorderOutput();
         // Close again: the acquisition thread can deliver a frame between the two calls above,
@@ -731,6 +760,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // edge whatever the timing.
         _intensityLogger.Stop();
         _ratioCsvLogger.Stop();
+        StopBatchRecording();
         UpdateTestModeContext();
 
         StatusMessage = finished
@@ -756,6 +786,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             ls.FilePrefix = ReplayPrefixMarker + ls.FilePrefix;
         _intensityLogger.Configure(ls);
         _ratioCsvLogger.Configure(ls);
+        _batchCsvLogger.Configure(ls);
     }
 
     private void OnReplayPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1259,6 +1290,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.ConfigurationChanged -= OnLeakConfigChanged;
         Replay.PropertyChanged -= OnReplayPropertyChanged;
         Replay.Dispose();
+        _leakMonitorEngine.SampleProcessed -= OnSampleForBatch;
+        StopBatchRecording();
+        _batchCsvLogger.Dispose();
         _ratioCsvLogger.Dispose();
         WavelengthTrend.Dispose();
         _intensityLogger.Stop();

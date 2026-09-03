@@ -151,8 +151,11 @@ public sealed class LeakMonitorSnapshot
     /// </summary>
     public string ProcessClass { get; init; } = "";
 
-    /// <summary>Counts the plasma steps seen this acquisition, so a row can say which one it
-    /// belongs to. 0 while no classifier is configured.</summary>
+    /// <summary>
+    /// Counts the plasma steps seen this acquisition, so a row can say which one it belongs to.
+    /// Populated whether or not a classifier is configured — a step is a fact about the tool,
+    /// and the batch layer needs its boundaries either way. 0 before the first step.
+    /// </summary>
     public int ProcessStepIndex { get; init; }
 
     /// <summary>
@@ -261,6 +264,9 @@ public sealed class LeakMonitorEngine : IDisposable
     private string? _stepClass;
     private IReadOnlyList<ProcessDiscriminant> _stepDiscriminants = Array.Empty<ProcessDiscriminant>();
     private int _stepIndex;                   // increments per step, so a CSV row says which
+    // When the boundary gate first closed during the step in progress. A brief closure is a
+    // spectrometer dropout, not the end of the step — see AdvanceStep.
+    private DateTime? _stepClosedSince;
 
     private AcquisitionFingerprint? _acquisition;
     private string _acquisitionWarning = "";  // "" when the active baseline still applies
@@ -354,6 +360,7 @@ public sealed class LeakMonitorEngine : IDisposable
         _stepOpen = false;
         _stepFrames = 0;
         _stepClass = null;
+        _stepClosedSince = null;
         _stepDiscriminants = Array.Empty<ProcessDiscriminant>();
     }
 
@@ -375,15 +382,33 @@ public sealed class LeakMonitorEngine : IDisposable
     /// </summary>
     private void AdvanceStep(float? metric, float[]? wl, float[]? inten, DateTime ts)
     {
-        if (_classifier is null) return;      // no classes configured; every ratio applies
+        // Steps are tracked whether or not a classifier is configured. A plasma step is a fact
+        // about the tool, not about the classification, and the batch layer needs its boundaries
+        // either way — deriving them a second time from the snapshot stream would be a second
+        // definition of "a step", which is how the plasma gate and the recorder would have come
+        // to disagree if PlasmaGate had measured brightness its own way. Without a classifier
+        // the step is simply never given a class.
+        if (_plasmaGate is null) return;
 
-        double boundary = _classifier.BoundaryThreshold(_plasmaGate?.Threshold ?? 0);
+        double boundary = _classifier?.BoundaryThreshold(_plasmaGate.Threshold)
+                          ?? _plasmaGate.Threshold;
         bool open = metric is { } m && m > boundary;
         if (!open)
         {
-            if (_stepOpen) EndStep();
+            if (!_stepOpen) return;
+            // A blank frame is not the end of a step. The spectrometer returns isolated blank
+            // frames — 20 in 13 minutes in one measured run, which is why TrackGateDropouts
+            // exists — and ending the step on the first one would restart the classification
+            // mid-step, re-running the verdict on whatever frames happened to follow and
+            // splitting one process step into several in everything downstream. Same threshold
+            // the dropout counter uses: a closure longer than MaxDropoutSeconds is the plasma
+            // genuinely going off.
+            _stepClosedSince ??= ts;
+            if ((ts - _stepClosedSince.Value).TotalSeconds <= MaxDropoutSeconds) return;
+            EndStep();
             return;
         }
+        _stepClosedSince = null;
 
         if (!_stepOpen)
         {
@@ -394,8 +419,9 @@ public sealed class LeakMonitorEngine : IDisposable
             unchecked { _stepIndex++; }
         }
         _stepFrames++;
-        if (_stepClass is not null) return;                        // already decided and locked
-        if (_stepFrames < _classifier.DecideAfterFrames) return;   // still inside the transient
+        if (_classifier is null) return;                            // steps, but no classes
+        if (_stepClass is not null) return;                         // already decided and locked
+        if (_stepFrames < _classifier.DecideAfterFrames) return;    // still inside the transient
 
         var reading = _classifier.Evaluate(wl, inten);
         _stepDiscriminants = reading.Discriminants;
@@ -1719,7 +1745,7 @@ public sealed class LeakMonitorEngine : IDisposable
             PlasmaGateAvailable = _lastGateOpen.HasValue,
             DropoutCount = _dropoutEvents,
             ProcessClass = _stepClass ?? "",
-            ProcessStepIndex = _classifier is null ? 0 : _stepIndex,
+            ProcessStepIndex = _stepIndex,
             ProcessDiscriminants = _stepDiscriminants,
         };
     }

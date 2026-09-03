@@ -180,8 +180,10 @@ public class ProcessClassTests
         for (; t <= 3.0; t += 0.5) h.Engine.ProcessSample(StepC(t));
 
         Assert.Equal("", h.Last.ProcessClass);
-        Assert.Equal(0, h.Last.ProcessStepIndex);
         Assert.Empty(h.Last.ProcessDiscriminants);
+        // The step itself is still tracked — a plasma step is a fact about the tool, and the
+        // batch layer needs its boundaries whether or not anything named the process.
+        Assert.Equal(1, h.Last.ProcessStepIndex);
         Assert.Equal(RatioState.Normal, h.Ratio("R_any").State);
     }
 
@@ -303,6 +305,37 @@ public class ProcessClassTests
         Assert.Equal(RatioState.NotApplicable, h.Ratio("R_C").State);
         // An entry with no class still applies — it made no claim about which process it needs.
         Assert.NotEqual(RatioState.NotApplicable, h.Ratio("R_any").State);
+    }
+
+    /// <summary>
+    /// An isolated blank frame does not end the step.
+    ///
+    /// <para>The spectrometer returns them — 20 in 13 minutes in one measured run, which is what
+    /// <c>SpectrumFrameDropout</c> counts. Ending the step on the first one would restart the
+    /// classification mid-step, take the verdict again on whatever frames happened to follow, and
+    /// split one process step into several for everything downstream. A closure longer than the
+    /// dropout threshold is the plasma genuinely going off and does end it.</para>
+    /// </summary>
+    [Fact]
+    public void AnIsolatedBlankFrame_DoesNotEndTheStep()
+    {
+        using var h = new Harness(Classifier(thresholdA: 200), Ratio("R_C", processClass: "C"));
+
+        double t = 0;
+        for (; t <= 3.0; t += 0.5) h.Engine.ProcessSample(StepC(t));
+        int step = h.Last.ProcessStepIndex;
+        Assert.Equal("C", h.Last.ProcessClass);
+
+        // One blank frame in the middle, then the plasma is back.
+        h.Engine.ProcessSample(Off(t)); t += 0.5;
+        for (; t <= 6.0; t += 0.5) h.Engine.ProcessSample(StepC(t));
+        Assert.Equal(step, h.Last.ProcessStepIndex);      // same step, not a new one
+        Assert.Equal("C", h.Last.ProcessClass);
+
+        // A sustained closure is the plasma going off, and does end it.
+        for (; t <= 9.0; t += 0.5) h.Engine.ProcessSample(Off(t));
+        for (; t <= 12.0; t += 0.5) h.Engine.ProcessSample(StepC(t));
+        Assert.True(h.Last.ProcessStepIndex > step, "a sustained closure should have ended the step");
     }
 
     // ---------------------------------------------------------------- the audit rule

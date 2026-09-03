@@ -508,6 +508,13 @@ public sealed class LeakMonitorSettings
     /// </summary>
     public ProcessClassifierSettings ProcessClassifier { get; set; } = new();
 
+    /// <summary>
+    /// How plasma steps are grouped into batches and where in a step the indicator is sampled.
+    /// The cross-batch comparison this feeds is the primary detection mechanism on a chamber
+    /// whose viewport fouls within every batch — see <see cref="BatchTracker"/>.
+    /// </summary>
+    public BatchSettings Batch { get; set; } = new();
+
     public GoldenRun? FindGoldenRun(string? name) =>
         name is null ? null : GoldenRuns.FirstOrDefault(g => g.Name == name);
 
