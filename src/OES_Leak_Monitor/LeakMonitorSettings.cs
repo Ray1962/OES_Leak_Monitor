@@ -4,6 +4,41 @@ using System.Linq;
 
 namespace OES_Leak_Monitor;
 
+/// <summary>
+/// What a monitored entry is <em>for</em> — orthogonal to <see cref="MonitorMode"/>, which says
+/// what it measures.
+/// </summary>
+public enum RatioRole
+{
+    /// <summary>Judged against its baseline and able to raise the composite alarm. The default,
+    /// and what every entry written before this existed deserialises to.</summary>
+    Alarm,
+
+    /// <summary>
+    /// Recorded and trended, never alarmed.
+    ///
+    /// <para>For an indicator whose cross-batch reproducibility cannot carry a threshold. On the
+    /// measured tool two of the three processes reach mean/σ of only 7.3 and 6.5 against the
+    /// engine's own baseline-acceptance floor of 10, and a full-spectrum sweep found nothing
+    /// better — so an alarm on them would be one operators learn to ignore, which costs more
+    /// than the alarm is worth. The value still reaches the ratio CSV and the batch record,
+    /// where a cross-batch trend can be read off it by eye.</para>
+    /// </summary>
+    TrendOnly,
+
+    /// <summary>
+    /// A control quantity, never alarmed, shown beside an alarm so it can be read against it.
+    ///
+    /// <para>The measured tool's leak indicator divides by a line the process gas produces, so a
+    /// change in that gas's flow moves the indicator without any leak. A guard that moves with
+    /// the flow and not with the leak separates the two — but it is <em>reported</em>, never
+    /// used to suppress: its own scatter is 5 %, and a guard given a veto will eventually veto a
+    /// real leak. An engineer reading both numbers decides in three seconds; a program deciding
+    /// for them is wrong at some point and silent about it.</para>
+    /// </summary>
+    Guard,
+}
+
 /// <summary>What quantity a monitored entry tracks.</summary>
 public enum MonitorMode
 {
@@ -49,6 +84,14 @@ public sealed class RatioDefinition
     /// acknowledged after the tool has moved on to the next.</para>
     /// </summary>
     public string ProcessClass { get; set; } = "";
+
+    /// <summary>What this entry is for: judged and able to alarm, trended only, or a control
+    /// quantity reported beside an alarm. See <see cref="RatioRole"/>.</summary>
+    public RatioRole Role { get; set; } = RatioRole.Alarm;
+
+    /// <summary>Whether this entry may raise the composite alarm and latch.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Alarms => Role == RatioRole.Alarm;
 
     /// <summary>Whether this entry tracks the signal/reference ratio or the signal line's
     /// absolute intensity (reference then only gates plasma-present). See <see cref="MonitorMode"/>.</summary>
@@ -119,6 +162,7 @@ public sealed class RatioDefinition
         Key == other.Key &&
         MonitorMode == other.MonitorMode &&
         string.Equals(ProcessClass ?? "", other.ProcessClass ?? "", StringComparison.OrdinalIgnoreCase) &&
+        Role == other.Role &&
         Numerator.MeasuresSameAs(other.Numerator) &&
         (MonitorMode == MonitorMode.AbsoluteIntensity ||
          Denominator.MeasuresSameAs(other.Denominator));
@@ -127,6 +171,7 @@ public sealed class RatioDefinition
     {
         Key = Key, DisplayName = DisplayName, Enabled = Enabled,
         ProcessClass = ProcessClass,
+        Role = Role,
         MonitorMode = MonitorMode,
         Numerator = Numerator.Clone(), Denominator = Denominator.Clone(),
         WarnFactor = WarnFactor, AlarmFactor = AlarmFactor,

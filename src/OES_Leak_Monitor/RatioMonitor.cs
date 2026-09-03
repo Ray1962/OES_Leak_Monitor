@@ -29,6 +29,14 @@ public enum RatioState
     NoBaseline,
     /// <summary>Excluded by the operator — not computed and never alarmed.</summary>
     Disabled,
+    /// <summary>
+    /// Plasma on and the value is being recorded, but this entry is not judged — it is
+    /// <see cref="RatioRole.TrendOnly"/> or <see cref="RatioRole.Guard"/>. Distinct from
+    /// <see cref="Normal"/>, which means "judged, and fine": showing Normal here would be a
+    /// reassurance nobody measured. Distinct from <see cref="NoBaseline"/> too, because for
+    /// these entries not having one is the expected condition, not a fault to fix.
+    /// </summary>
+    Observing,
     /// <summary>The running process step is not the one this entry measures
     /// (<see cref="RatioDefinition.ProcessClass"/>). Held out of the composite alarm, but a
     /// latched alarm from its own process is kept — distinct from <see cref="Disabled"/> (an
@@ -58,6 +66,8 @@ public readonly record struct RatioSnapshot(
     double NumeratorSnr,
     double DenominatorSnr,
     MonitorMode Mode,
+    /// <summary>What this entry is for — whether the state above is a judgement at all.</summary>
+    RatioRole Role,
     /// <summary>The reading carries a continuum pedestal, so <see cref="PercentOfBaseline"/> is
     /// a σ-score rather than a percentage and the slope reads in σ/min — see
     /// <see cref="RatioDefinition.ValueHasPedestal"/>.</summary>
@@ -178,9 +188,11 @@ public sealed class RatioMonitor
         _slopePerMinute = 0;
         _plasmaPresent = false;
         if (clearLatch) _latchedAlarm = false;
+        // "No Baseline" names a fault to fix. For an entry that is never judged, not having one
+        // is the expected condition, so idle reads as plasma-off instead.
         _state = _latchedAlarm
             ? RatioState.Alarm
-            : (_hasBaseline ? RatioState.NoPlasma : RatioState.NoBaseline);
+            : (_hasBaseline || !_def.Alarms ? RatioState.NoPlasma : RatioState.NoBaseline);
     }
 
     /// <summary>
@@ -319,6 +331,18 @@ public sealed class RatioMonitor
         _lastTs = ts;
         UpdateTrend(ts, _ema);
 
+        // A non-alarming entry stops here: the value, the EMA and the trend are all computed
+        // above and reach the CSV, the batch record and the panel, but nothing below this line
+        // — thresholds, the confirmation timer, the latch — applies to it. Placed after the
+        // smoothing rather than before it so a role change does not also change what is
+        // recorded, only what is judged.
+        if (!_def.Alarms)
+        {
+            _aboveWarnSince = _aboveAlarmSince = null;
+            _state = RatioState.Observing;
+            return;
+        }
+
         // Signal-quality gate: even with plasma on, a line sitting in the noise makes the
         // ratio meaningless (σ_R/R blows up as either line → noise). An *unknown* SNR (NaN,
         // no baseline window) is not treated as low — only a measured SNR below the floor.
@@ -449,5 +473,6 @@ public sealed class RatioMonitor
         _numSnr,
         _denSnr,
         _def.MonitorMode,
+        _def.Role,
         _def.ValueHasPedestal);
 }

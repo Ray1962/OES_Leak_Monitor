@@ -180,6 +180,17 @@ public sealed class LeakAlarmEventArgs : EventArgs
     public LeakAlarmLevel OldLevel { get; init; }
     public LeakAlarmLevel NewLevel { get; init; }
     public DateTime Timestamp { get; init; }
+
+    /// <summary>
+    /// The <see cref="RatioRole.Guard"/> entries as they read on the frame that caused this
+    /// transition, so whoever reads the alarm can read the control quantity beside it.
+    ///
+    /// <para>Carried rather than looked up afterwards because the answer changes frame by frame
+    /// and the question — "is this a leak, or did the process gas move?" — is asked about the
+    /// moment the alarm fired. Reported, never used to suppress: a guard's own scatter is a few
+    /// per cent, and one given a veto will eventually veto a real leak.</para>
+    /// </summary>
+    public IReadOnlyList<RatioSnapshot> Guards { get; init; } = Array.Empty<RatioSnapshot>();
 }
 
 /// <summary>An operator ending a confirmed leak alarm — who, what was latched, and the
@@ -772,6 +783,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 OldLevel = oldOverall,
                 NewLevel = newOverall,
                 Timestamp = snap.Timestamp,
+                Guards = snap.Ratios.Where(r => r.Role == RatioRole.Guard).ToList(),
             });
         }
 
@@ -1765,6 +1777,11 @@ public sealed class LeakMonitorEngine : IDisposable
             // class changed, so what it holds is a reading of a different plasma. It would fall
             // out on the NaN test below anyway; saying so is not the same as relying on it.
             bool usable = r.HasBaseline &&
+                          // A trend-only entry is not reproducible enough to carry a threshold,
+                          // and a guard measures process drift rather than the leak. Neither
+                          // belongs in an inverse-variance fusion that treats every reading as
+                          // an independent estimate of the same quantity.
+                          r.Role == RatioRole.Alarm &&
                           r.State != RatioState.LowSignal &&
                           r.State != RatioState.NotApplicable &&
                           !double.IsNaN(r.SmoothedRatio) && r.BaselineMean > 0;

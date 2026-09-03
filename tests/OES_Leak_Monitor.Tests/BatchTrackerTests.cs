@@ -37,7 +37,7 @@ public class BatchTrackerTests
                 SlopePerMinute: 0, PlasmaPresent: plasma,
                 NumeratorIntensity: 1, DenominatorIntensity: 1,
                 RatioNoiseSigma: 0, NumeratorSnr: 10, DenominatorSnr: 10,
-                Mode: MonitorMode.Ratio, HasPedestal: false)).ToList(),
+                Mode: MonitorMode.Ratio, Role: RatioRole.Alarm, HasPedestal: false)).ToList(),
         };
 
     private static BatchSettings Settings(double gap = 240, string anchor = "",

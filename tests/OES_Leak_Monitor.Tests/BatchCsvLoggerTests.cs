@@ -56,7 +56,7 @@ public class BatchCsvLoggerTests : IDisposable
             Ratios = ratios.Select(r => new RatioSnapshot(
                 r.Key, r.Key, RatioState.Normal, r.Value, r.Value,
                 true, 1, 0.1, 100, 2, 3, 0, plasma, 1, 1, 0, 10, 10,
-                MonitorMode.Ratio, false)).ToList(),
+                MonitorMode.Ratio, RatioRole.Alarm, false)).ToList(),
         };
 
     private sealed class Harness : IDisposable

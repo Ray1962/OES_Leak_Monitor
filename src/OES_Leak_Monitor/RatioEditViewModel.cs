@@ -94,6 +94,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _monitorMode    = def.MonitorMode;
         _enabled        = def.Enabled;
         _processClass   = def.ProcessClass ?? "";
+        _role           = def.Role;
 
         _autoName       = AutoName();
         _displayName    = string.IsNullOrWhiteSpace(def.DisplayName) ? _autoName : def.DisplayName;
@@ -105,6 +106,34 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<LineExtractMode> ModeOptions { get; } =
         new[] { LineExtractMode.PeakHeight, LineExtractMode.Integral, LineExtractMode.RawMean };
+
+    public IReadOnlyList<RatioRole> RoleOptions { get; } =
+        new[] { RatioRole.Alarm, RatioRole.TrendOnly, RatioRole.Guard };
+
+    private RatioRole _role = RatioRole.Alarm;
+    /// <summary>
+    /// What this entry is for. Editable here for the same reason
+    /// <see cref="ProcessClass"/> is: the tab rebuilds every field it saves, so a role set by
+    /// hand in settings.json and not carried through here would silently turn a trend-only entry
+    /// back into an alarming one — and the first thing anyone would know about it is an alarm
+    /// nobody could act on.
+    /// </summary>
+    public RatioRole Role
+    {
+        get => _role;
+        set { if (Set(ref _role, value)) OnPropertyChanged(nameof(RoleHint)); }
+    }
+
+    /// <summary>One line saying what the chosen role means, since the consequence is invisible
+    /// until something either does or does not alarm.</summary>
+    public string RoleHint => _role switch
+    {
+        RatioRole.TrendOnly => "Recorded and trended, never alarmed — for an indicator whose " +
+                               "batch-to-batch reproducibility cannot carry a threshold.",
+        RatioRole.Guard     => "A control quantity, never alarmed, printed beside every leak " +
+                               "alarm so it can be read against it.",
+        _                   => "Judged against its baseline; can raise the leak alarm.",
+    };
 
     public IReadOnlyList<MonitorMode> MonitorModeOptions { get; } =
         new[] { MonitorMode.Ratio, MonitorMode.AbsoluteIntensity };
@@ -272,6 +301,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? AutoName() : DisplayName,
         Enabled = Enabled,
         ProcessClass = ProcessClass,
+        Role = Role,
         MonitorMode = MonitorMode,
         Numerator = RegionFor(SignalLine.Line, SignalMode, _origNumerator),
         Denominator = RegionFor(ReferenceLine.Line, ReferenceMode, _origDenominator),

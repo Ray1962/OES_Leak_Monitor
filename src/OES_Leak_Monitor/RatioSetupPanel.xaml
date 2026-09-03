@@ -164,6 +164,15 @@
                                      Padding="4,3" HorizontalAlignment="Left" MinWidth="160"
                                      ToolTip="Name of the process class this ratio measures, as spelled in the process classifier. Blank means the ratio applies to every step, which is the default."/>
 
+                            <!-- Role -->
+                            <TextBlock Text="Role" Style="{StaticResource FieldLabel}"
+                                       Margin="0,12,0,0"/>
+                            <ComboBox ItemsSource="{Binding RoleOptions}"
+                                      SelectedItem="{Binding Role}"
+                                      HorizontalAlignment="Left" MinWidth="220"/>
+                            <TextBlock Text="{Binding RoleHint}" TextWrapping="Wrap"
+                                       Foreground="#666" Margin="0,4,0,0"/>
+
                             <!-- Monitoring method -->
                             <TextBlock Text="Monitoring method" Style="{StaticResource FieldLabel}"
                                        Margin="0,12,0,0"/>

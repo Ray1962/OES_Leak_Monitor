@@ -65,5 +65,5 @@ internal static class SnapshotBuilder
             PlasmaPresent: true,
             NumeratorIntensity: 900, DenominatorIntensity: 18000,
             RatioNoiseSigma: 0.0008, NumeratorSnr: 40, DenominatorSnr: 120,
-            Mode: MonitorMode.Ratio, HasPedestal: false);
+            Mode: MonitorMode.Ratio, Role: RatioRole.Alarm, HasPedestal: false);
 }

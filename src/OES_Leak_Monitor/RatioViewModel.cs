@@ -48,6 +48,8 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         // "No Plasma" is the tool idle or a fault, and this one is neither — the tool is running
         // a process step this entry does not measure.
         RatioState.NotApplicable => "Not this process",
+        // Recorded, not judged. "Normal" would be a reassurance nobody measured.
+        RatioState.Observing  => "Observing",
         _                     => _state.ToString(),
     };
 
@@ -60,6 +62,7 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         RatioState.LowSignal => Brushes.SlateBlue,
         RatioState.Disabled => Brushes.Silver,
         RatioState.NotApplicable => Brushes.DarkSlateGray,
+        RatioState.Observing => Brushes.SteelBlue,
         _                  => Brushes.SlateGray,
     };
 

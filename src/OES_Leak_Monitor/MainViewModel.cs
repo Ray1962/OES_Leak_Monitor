@@ -1549,11 +1549,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             LeakAlarmLevel.Warning => LogSeverity.Warning,
             _                      => LogSeverity.Information,
         };
+        // The guard readings go in the entry itself. The question asked of every leak alarm on
+        // this tool is "is it a leak, or did the process gas move?", and it is asked about the
+        // moment the alarm fired — recoverable afterwards only if it was written down then.
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string guards = FormatGuards(e.Guards);
         _systemLogger.LogSystemEvent(severity, "LeakMonitorState",
-            $"Leak monitor {e.OldLevel} → {e.NewLevel}",
+            $"Leak monitor {e.OldLevel} → {e.NewLevel}" +
+            (guards.Length == 0 ? "" : $" — guard: {guards}"),
             related: $"From={e.OldLevel},To={e.NewLevel}",
-            value: e.Timestamp.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+            value: e.Timestamp.ToString("O", inv));
         _secs.OnLeakLevelChanged(e.NewLevel);
+    }
+
+    /// <summary>
+    /// Guard readings as one line: the value, and how far it sits from its own baseline. The
+    /// deviation is what makes it readable — a bare number means nothing to whoever opens the
+    /// log a week later, and its baseline is in a file they will not have.
+    /// </summary>
+    private static string FormatGuards(IReadOnlyList<RatioSnapshot> guards)
+    {
+        if (guards is null || guards.Count == 0) return "";
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var parts = new List<string>(guards.Count);
+        foreach (var g in guards)
+        {
+            if (double.IsNaN(g.SmoothedRatio)) continue;
+            string value = g.SmoothedRatio.ToString("G4", inv);
+            string offset = g.HasBaseline && Math.Abs(g.BaselineMean) > 0
+                ? $" ({(g.SmoothedRatio / g.BaselineMean - 1) * 100:+0.0;-0.0;0.0} % of baseline)"
+                : " (no baseline)";
+            parts.Add($"{g.DisplayName} = {value}{offset}");
+        }
+        return string.Join("; ", parts);
     }
 
     private void OnGoldenRunCaptured(object? sender, GoldenRun run)
