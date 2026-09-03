@@ -207,7 +207,7 @@ logger 自己的門檻,也就是升級前的行為。
 P0  分類器 + ProcessClass + per-process gate + 站點比值組        <- 已完成,見 §6
 P1' 注入 harness:鏈路驗證 + transfer 量測(離線)                <- 已完成,見 §9
 P2  批次層:10-30 s 窗口中位數、批次 CSV + 索引                    <- 已完成,見 §10
-P2b Baseline Builder 分 class
+P2b Baseline Builder 分 class                                    <- 已完成,見 §11
 P3  結構:A/B 的 TrendOnly + 守衛量 + 批次趨勢頁
 P1  受控漏氣測試 -> 靈敏度
     ═══ GO / NO-GO ═══
@@ -439,3 +439,44 @@ liveσ、把自己的警報門檻一起帶上去)。這個切分方式與 `Ratio
 是機台的事實,不是分類的產物**,批次層兩種情況都需要它的邊界。否則批次層得從 snapshot 流自己再
 推一次 step —— 那就是「第二個定義」,正是 `PlasmaGate` 刻意鏡射 logger trigger 所要避免的東西。
 沒有分類器時,step 照樣被追蹤,只是不會被賦予 class。
+
+## 11. P2b — Baseline Builder 分 class(2026-09-03)
+
+一次 build,一個 Golden Run,同時裝下三段製程的 baseline。`GoldenRun.Baselines` 本來就是以 key
+配對的,所以裝得下;要改的是**哪些錄檔可以餵哪個 ratio**。
+
+### 11.1 適用規則只有一份
+
+`ProcessClassifier.AppliesTo(def, activeClass, classifierConfigured)` 現在是**引擎逐幀**與
+**builder 逐錄檔**共用的唯一定義。必須共用:離線建的 baseline 存進同一個欄位、被同一組門檻判定,
+若兩條路徑對「這個 ratio 可以從哪些資料學」意見不同,它們對「這條 baseline 是什麼意思」就會不同 ——
+這正是 `RatioFrameSampling` 當初被共用的理由。
+
+### 11.2 Scan 兩趟,理由和引擎一樣
+
+`BaselineBuilder.Scan` 現在接一個 `ProcessClassifier?`,並且分兩趟:
+
+1. 用 **boundary 門檻**(所有 class 裡最低的)找出 gate 開啟的幀,在第 `DecideAfterFrames` 幀取判定。
+2. 用**該 class 自己的門檻**重新評估每一幀。
+
+順序不能反:class 要幾幀之後才知道,而用最亮那 class 的門檻去找幀,在最暗那 class 的錄檔裡一幀都找不到,
+於是它永遠無法被分類。與引擎 `AdvanceStep` 的理由完全相同。
+
+`RecordingScan` 因此多了 `ProcessClass` 和 `ClassScoped`。後者是**記錄下來而不是從前者推**的:
+分類器跑了但整段錄檔沒有一幀開 gate 時,class 也是空的,把那當成「沒有設定分類器」會讓每個
+class-scoped 的 ratio 去吃一份沒人能命名的錄檔。
+
+### 11.3 四個地方都要按 class 分流,不只 pooling
+
+| 位置 | 若不分流會怎樣 |
+|---|---|
+| baseline pooling | 平均值落在兩段製程之間 —— 一個**沒有任何製程讀得到**的數字,而 σ 寬到足以藏住任何漏氣 |
+| 離群檢查 | 少數的那段製程永遠是離群值(它本來就不同),build 會把最需要的錄檔剔掉 |
+| 離散度報告 | 面板最上面會出現一個**再怎麼調都改善不了**的數字 |
+| back-check / 穩定度 | 不測這段電漿的 ratio 也有 trace,而且通常就是「最差的那一條」,每份錄檔都會因為錯的理由看起來不穩 |
+
+某個 ratio 的 class 不在選取的錄檔裡:**不建 baseline,並指名它需要哪一段製程**、以及選到的實際是哪幾段。
+從別段製程 pool 出來會產生一個數字,而數字是沒有人會去質疑的東西。
+
+錄檔列的狀態現在會顯示判定出的 class(`C · 43 frames, 84 s`),因為「哪一段製程」決定了哪些 ratio
+能從它學 —— 否則某個 class 靜靜地沒建出 baseline,操作員手上沒有任何可看的線索。

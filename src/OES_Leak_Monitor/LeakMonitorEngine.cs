@@ -450,14 +450,8 @@ public sealed class LeakMonitorEngine : IDisposable
     /// <see cref="ProcessClassifier.Unknown"/> and an undecided step match nothing: an entry
     /// stands down rather than judging a step whose process is not known.
     /// </summary>
-    private bool AppliesToStep(RatioDefinition def)
-    {
-        if (_classifier is null) return true;
-        if (string.IsNullOrWhiteSpace(def.ProcessClass)) return true;
-        if (_stepClass is null || _stepClass == ProcessClassifier.Unknown) return false;
-        return string.Equals(def.ProcessClass.Trim(), _stepClass,
-                             StringComparison.OrdinalIgnoreCase);
-    }
+    private bool AppliesToStep(RatioDefinition def) =>
+        ProcessClassifier.AppliesTo(def, _stepClass, _classifier is not null);
 
     /// <summary>
     /// Labels of the classifier's discriminants, in the order

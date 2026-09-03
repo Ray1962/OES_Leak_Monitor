@@ -56,6 +56,22 @@ public sealed class RecordingScan
     /// a guessed one would make the mismatch check pass when it should not.</summary>
     public required AcquisitionFingerprint Acquisition { get; init; }
 
+    /// <summary>
+    /// Process class this recording was judged to be, by the same classifier and the same rule
+    /// the engine uses — <see cref="ProcessClassifier.Unknown"/> when no rule matched, "" when no
+    /// classifier was supplied. A ratio only draws its baseline from recordings of its own class
+    /// (<see cref="ProcessClassifier.AppliesTo"/>), because the same two lines read during a
+    /// different plasma are a different quantity: on the measured tool the levels differ by up to
+    /// a factor of ten between processes.
+    /// </summary>
+    public string ProcessClass { get; init; } = "";
+
+    /// <summary>Whether a classifier was supplied for this scan. Recorded rather than inferred
+    /// from <see cref="ProcessClass"/> being empty: a classifier that ran and found no gate-open
+    /// frame leaves the class empty too, and treating that as "no classes configured" would let
+    /// every class-scoped ratio draw from a recording nobody could name.</summary>
+    public bool ClassScoped { get; init; }
+
     public int FrameCount => ElapsedSec.Length;
     public double DurationSeconds => FrameCount == 0 ? 0 : ElapsedSec[^1] - ElapsedSec[0];
 }
@@ -199,14 +215,15 @@ public static class BaselineBuilder
     /// <summary>Re-extracts one parsed recording through the current ratio set.</summary>
     public static RecordingScan Scan(string path, string displayName, DateTime startLocal,
         FullRecording rec, IReadOnlyList<RatioDefinition> correctedDefs, PlasmaGate? gate,
-        AcquisitionFingerprint? sidecar, IProgress<double>? progress, CancellationToken ct)
+        AcquisitionFingerprint? sidecar, IProgress<double>? progress, CancellationToken ct,
+        ProcessClassifier? classifier = null)
     {
         if (rec is null) throw new ArgumentNullException(nameof(rec));
         var frames = new float[rec.FrameCount][];
         var el = new double[rec.FrameCount];
         for (int i = 0; i < rec.FrameCount; i++) { frames[i] = rec.Intensities[i]; el[i] = rec.ElapsedSec[i]; }
         return Scan(path, displayName, startLocal, rec.Wavelengths, frames, el,
-                    correctedDefs, gate, sidecar, progress, ct);
+                    correctedDefs, gate, sidecar, progress, ct, classifier);
     }
 
     /// <summary>
@@ -216,7 +233,8 @@ public static class BaselineBuilder
     public static RecordingScan Scan(string path, string displayName, DateTime startLocal,
         float[] wavelengths, IReadOnlyList<float[]> frames, IReadOnlyList<double> elapsedSec,
         IReadOnlyList<RatioDefinition> correctedDefs, PlasmaGate? gate,
-        AcquisitionFingerprint? sidecar, IProgress<double>? progress, CancellationToken ct)
+        AcquisitionFingerprint? sidecar, IProgress<double>? progress, CancellationToken ct,
+        ProcessClassifier? classifier = null)
     {
         if (frames is null) throw new ArgumentNullException(nameof(frames));
         if (correctedDefs is null) throw new ArgumentNullException(nameof(correctedDefs));
@@ -237,13 +255,41 @@ public static class BaselineBuilder
             Reference = new double[n],
         });
 
+        // Which process this recording is, and therefore which brightness counts as plasma-on
+        // for it. Two passes, for the same reason the engine takes two: the class is not known
+        // until several gate-open frames in, so the frames have to be found with the boundary
+        // threshold — the lowest any class runs at — before the class's own can be applied. A
+        // threshold tuned for the brightest process would find no frames at all in the dimmest
+        // one's recording, so it could never be classified.
+        string processClass = "";
+        double openThreshold = gate?.Threshold ?? 0;
+        if (classifier is not null && gate is { IsUsable: true })
+        {
+            double boundary = classifier.BoundaryThreshold(gate.Threshold);
+            int seen = 0;
+            for (int i = 0; i < n; i++)
+            {
+                var m = gate.TriggerMetric(wavelengths, frames[i]);
+                if (m is not { } v || v <= boundary) continue;
+                if (++seen < classifier.DecideAfterFrames) continue;
+                var reading = classifier.Evaluate(wavelengths, frames[i]);
+                processClass = reading.Measurable ? reading.ClassName : ProcessClassifier.Unknown;
+                break;
+            }
+            if (seen > 0 && processClass.Length == 0)
+                processClass = ProcessClassifier.Unknown;   // too short to reach the verdict frame
+            openThreshold = classifier.PlasmaThresholdFor(processClass, gate.Threshold);
+        }
+
         var elapsed = new double[n];
         for (int i = 0; i < n; i++)
         {
             ct.ThrowIfCancellationRequested();
             elapsed[i] = elapsedSec[i];
             var inten = frames[i];
-            bool? open = gate?.IsPlasmaPresent(wavelengths, inten);
+            bool? open = classifier is null || gate is null
+                ? gate?.IsPlasmaPresent(wavelengths, inten)
+                : gate.TriggerMetric(wavelengths, inten) is { } mv ? mv > openThreshold : (bool?)null;
             foreach (var def in correctedDefs)
             {
                 // Floor 0: the plasma floors come out of this build, exactly as they come out of
@@ -274,6 +320,8 @@ public static class BaselineBuilder
             Traces = traces,
             Definitions = correctedDefs,
             Acquisition = acquisition,
+            ProcessClass = processClass,
+            ClassScoped = classifier is not null,
         };
     }
 
@@ -395,7 +443,21 @@ public static class BaselineBuilder
             var pooled = new RunningStats();
             int lowSnr = 0;
             RatioTrace? any = null;
-            foreach (var (scan, window) in used)
+            // Only the recordings that ran this ratio's process. A ratio with no class draws
+            // from all of them, exactly as it judges every step at runtime.
+            var applicable = ApplicableTo(used, key);
+            if (applicable.Count == 0)
+            {
+                var scoped = FindDefinition(used, key);
+                var ran = string.Join(", ", used.Select(p => string.IsNullOrEmpty(p.Scan.ProcessClass)
+                    ? "unclassified" : p.Scan.ProcessClass).Distinct());
+                rejected.Add(Reject(key, scoped?.DisplayName ?? key,
+                    $"none of the selected recordings ran process {scoped?.ProcessClass}, which " +
+                    $"is the class this ratio measures (they are: {ran}) — add a recording of " +
+                    "that process"));
+                continue;
+            }
+            foreach (var (scan, window) in applicable)
             {
                 if (!scan.Traces.TryGetValue(key, out var t)) continue;
                 any = t;
@@ -459,7 +521,7 @@ public static class BaselineBuilder
             {
                 if (!denomPools.TryGetValue(def.Denominator.MeasurementKey, out var pool))
                     denomPools[def.Denominator.MeasurementKey] = pool = new RunningStats();
-                foreach (var (scan, window) in used)
+                foreach (var (scan, window) in applicable)
                 {
                     if (!scan.Traces.TryGetValue(key, out var t)) continue;
                     var el = scan.ElapsedSec;
@@ -517,7 +579,7 @@ public static class BaselineBuilder
             var means = new List<double>();
             var sigmas = new List<double>();
             string display = b.Key;
-            foreach (var (scan, window) in used)
+            foreach (var (scan, window) in ApplicableTo(used, b.Key))
             {
                 if (!scan.Traces.TryGetValue(b.Key, out var t)) continue;
                 display = t.DisplayName;
@@ -556,6 +618,10 @@ public static class BaselineBuilder
             foreach (var b in run.Baselines)
             {
                 if (!scan.Traces.TryGetValue(b.Key, out var t)) continue;
+                // The worst ratio *of this recording's own process*. A ratio that does not
+                // measure this plasma still has a trace, and it would usually be the worst one —
+                // reporting it would make every recording look unsteady for the wrong reason.
+                if (!Applies(scan, b.Key)) continue;
                 var s = t.StatsOver(scan.ElapsedSec, window.FromSec, window.ToSec);
                 if (s.Count < 4 || s.Mean == 0) continue;
                 double rel = s.StdDev / Math.Abs(s.Mean);
@@ -586,6 +652,10 @@ public static class BaselineBuilder
             foreach (var b in run.Baselines)
             {
                 if (b.Sigma <= 0 || !scan.Traces.TryGetValue(b.Key, out var t)) continue;
+                // Only against a recording of this ratio's own process: a baseline exceeded by
+                // a different plasma says nothing, and reporting it would bury the excursions
+                // this check exists to find.
+                if (!Applies(scan, b.Key)) continue;
                 var el = scan.ElapsedSec;
                 for (int i = 0; i < t.Value.Length; i++)
                 {
@@ -606,18 +676,40 @@ public static class BaselineBuilder
     /// guards against is silent and permanent: pool one run that was actually leaking and the leak
     /// becomes the baseline, after which nothing can ever detect it.
     /// </summary>
+    /// <summary>
+    /// Whether this recording may feed <paramref name="key"/>'s baseline: the offline half of
+    /// the rule the engine applies per frame, through the same
+    /// <see cref="ProcessClassifier.AppliesTo"/>. Pooling a process-C window into a process-A
+    /// ratio would put a reading of a different plasma into the baseline that ratio is judged
+    /// against — on the measured tool the same pair of lines reads levels ten times apart
+    /// between processes.
+    /// </summary>
+    private static bool Applies(RecordingScan scan, string key)
+    {
+        var def = scan.Definitions.FirstOrDefault(d => d.Key == key);
+        return def is not null && ProcessClassifier.AppliesTo(def, scan.ProcessClass, scan.ClassScoped);
+    }
+
+    private static List<(RecordingScan Scan, SteadyWindow Window)> ApplicableTo(
+        IReadOnlyList<(RecordingScan Scan, SteadyWindow Window)> picks, string key) =>
+        picks.Where(p => Applies(p.Scan, key)).ToList();
+
     private static IReadOnlyList<BuildOutlier> FindOutliers(
         IReadOnlyList<(RecordingScan Scan, SteadyWindow Window)> picks,
         IReadOnlyList<string> keys, BaselineBuildOptions options)
     {
-        // With two recordings there is no majority to be the odd one out of.
+        // With two recordings there is no majority to be the odd one out of. Counted per class
+        // below, since three recordings spread over three processes are three minorities.
         if (picks.Count < 3) return Array.Empty<BuildOutlier>();
 
         var outliers = new List<BuildOutlier>();
         foreach (var key in keys)
         {
             var per = new List<(string Path, string Display, double Mean, double Sigma)>();
-            foreach (var (scan, window) in picks)
+            // Within the ratio's own class. Comparing a level measured in one process against
+            // levels measured in another would set aside every recording of the minority process
+            // — they differ by design, not by fault.
+            foreach (var (scan, window) in ApplicableTo(picks, key))
             {
                 if (!scan.Traces.TryGetValue(key, out var t)) continue;
                 var s = t.StatsOver(scan.ElapsedSec, window.FromSec, window.ToSec);

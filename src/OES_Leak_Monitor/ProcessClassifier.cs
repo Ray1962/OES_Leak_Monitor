@@ -153,6 +153,30 @@ public sealed class ProcessClassifier
     /// <see cref="RatioDefinition.ProcessClass"/>, so class-scoped ratios stand down.</summary>
     public const string Unknown = "Unknown";
 
+    /// <summary>
+    /// Whether <paramref name="def"/> measures a step of <paramref name="activeClass"/>.
+    ///
+    /// <para>The one definition of the rule, shared by the live engine and the offline baseline
+    /// builder. It has to be one: a baseline built offline is stored in the same field and judged
+    /// by the same thresholds as one captured live, so if the two paths disagreed about which
+    /// recordings a ratio may draw from, they would disagree about what its baseline means — the
+    /// reason <c>RatioFrameSampling</c> is shared for the per-frame decision.</para>
+    ///
+    /// <para>True for everything when no classifier is configured, and for an entry with no class
+    /// (it made no claim about which process it needs). <see cref="Unknown"/> and a step whose
+    /// verdict has not been taken match nothing: an entry stands down rather than judging a step
+    /// whose process is not known.</para>
+    /// </summary>
+    public static bool AppliesTo(RatioDefinition def, string? activeClass, bool classifierConfigured)
+    {
+        if (def is null) return false;
+        if (!classifierConfigured) return true;
+        if (string.IsNullOrWhiteSpace(def.ProcessClass)) return true;
+        if (string.IsNullOrEmpty(activeClass) || activeClass == Unknown) return false;
+        return string.Equals(def.ProcessClass.Trim(), activeClass.Trim(),
+                             StringComparison.OrdinalIgnoreCase);
+    }
+
     private readonly ProcessClassRule[] _rules;
     private readonly string _fallback;
     private readonly Dictionary<string, double> _thresholds;

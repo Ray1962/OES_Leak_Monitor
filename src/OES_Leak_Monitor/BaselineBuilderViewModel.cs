@@ -248,6 +248,16 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
         var lookup = WavelengthCalibration.Build(settings.WavelengthCorrections);
         var defs = settings.Ratios.Select(d => WavelengthCalibration.Correct(d, lookup)).ToList();
         var gate = new PlasmaGate(_logger.ToSettings());
+        // The same classifier the engine runs, built from the same settings, so a recording is
+        // judged to be the process the tool would have called it. Null when the site has not
+        // configured one, in which case every ratio draws from every recording as before.
+        var cfg = settings.ProcessClassifier;
+        ProcessClassifier? classifier = null;
+        if (cfg is { Enabled: true })
+        {
+            var built = new ProcessClassifier(cfg);
+            if (built.IsUsable) classifier = built;
+        }
 
         try
         {
@@ -268,7 +278,8 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
                         // the CSV itself proves.
                         var acq = AcquisitionSidecar.TryRead(file.Recording);
                         return BaselineBuilder.Scan(file.Recording.FilePath, file.FileName,
-                            file.Recording.SessionStart, parsed, defs, gate, acq, null, ct);
+                            file.Recording.SessionStart, parsed, defs, gate, acq, null, ct,
+                            classifier);
                     }, ct);
 
                     file.Scan = scan;
@@ -276,7 +287,12 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
                     // should look like one nobody chose.
                     file.FromSec = scan.ElapsedSec.Length > 0 ? scan.ElapsedSec[0] : 0;
                     file.ToSec = scan.ElapsedSec.Length > 0 ? scan.ElapsedSec[^1] : 0;
-                    file.Status = $"{scan.FrameCount} frames, {scan.DurationSeconds:0.#} s";
+                    // The class goes in the row's status, because which process a recording is
+                    // decides which ratios can draw from it — a build that silently produced no
+                    // baseline for one class would otherwise give the operator nothing to look at.
+                    file.Status = string.IsNullOrEmpty(scan.ProcessClass)
+                        ? $"{scan.FrameCount} frames, {scan.DurationSeconds:0.#} s"
+                        : $"{scan.ProcessClass} · {scan.FrameCount} frames, {scan.DurationSeconds:0.#} s";
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
