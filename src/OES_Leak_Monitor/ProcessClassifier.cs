@@ -147,6 +147,39 @@ public readonly record struct ProcessDiscriminant(string Label, double Value, st
 /// the same rule <c>PlasmaGate</c> follows for an unusable gate: "we cannot tell" is not a
 /// measurement, and guessing produces an alarm nobody can attribute.</para>
 /// </summary>
+/// <summary>
+/// Why <see cref="LeakMonitorSnapshot.ProcessClass"/> reads the way it does.
+///
+/// <para>That string is empty in three quite different situations — no classifier configured, no
+/// plasma step running, and a step whose verdict has not been taken yet — and a host reading only
+/// the name cannot tell them apart. It is the same distinction <c>PlasmaGate</c> makes between
+/// "plasma off" and "we cannot tell": they call for different reactions, so they are different
+/// values rather than one blank.</para>
+///
+/// <para><b>Wire contract.</b> SECS VID 028 sends this enum as its integer value. Append only —
+/// inserting a member silently changes what a host reads. See <c>docs/secs-integration.md</c>
+/// §5.1.</para>
+/// </summary>
+public enum ProcessClassState
+{
+    /// <summary>No classifier is configured. The class is empty and always will be; steps are
+    /// still counted, because a step is a fact about the tool either way.</summary>
+    NotConfigured,
+    /// <summary>No plasma step is in progress — the tool is idle between steps.</summary>
+    NoStep,
+    /// <summary>A step is running but its verdict has not been taken yet: the first frames of a
+    /// step scatter too much to classify, so the decision waits for
+    /// <see cref="ProcessClassifier.DecideAfterFrames"/>.</summary>
+    Deciding,
+    /// <summary>The step is classified and <see cref="LeakMonitorSnapshot.ProcessClass"/> names
+    /// it.</summary>
+    Classified,
+    /// <summary>The verdict was taken and no rule matched
+    /// (<see cref="ProcessClassifier.Unknown"/>). Nothing is judged during such a step, so a host
+    /// seeing this knows the leak state it is reading covers no process.</summary>
+    Unclassified,
+}
+
 public sealed class ProcessClassifier
 {
     /// <summary>Class of a step no rule matched and no fallback named. Never matches a

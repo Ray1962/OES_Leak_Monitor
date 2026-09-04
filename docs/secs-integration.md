@@ -164,7 +164,10 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
     { "svid": 1002700023, "name": "Frame dropout count",         "units": "",         "format": "U4", "bind": "oes.dropoutCount" },
     { "svid": 1002700024, "name": "Integration time",            "units": "ms",       "format": "F4", "bind": "oes.integrationTime" },
     { "svid": 1002700025, "name": "Average count",               "units": "",         "format": "U4", "bind": "oes.averageCount" },
-    { "svid": 1002700026, "name": "Frame rate",                  "units": "Hz",       "format": "F4", "bind": "oes.frameRate" }
+    { "svid": 1002700026, "name": "Frame rate",                  "units": "Hz",       "format": "F4", "bind": "oes.frameRate" },
+    { "svid": 1002700027, "name": "Process class",              "units": "",         "format": "A",  "bind": "oes.processClass" },
+    { "svid": 1002700028, "name": "Process class state",        "units": "",         "format": "U4", "bind": "oes.processClassState" },
+    { "svid": 1002700029, "name": "Process step index",         "units": "",         "format": "U4", "bind": "oes.processStepIndex" }
   ],
 
   // category 依 SEMI E5：4 = 參數控制錯誤、5 = 不可回復錯誤、
@@ -187,7 +190,7 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 
 ---
 
-## 5. 狀態變數（VID 001–026）
+## 5. 狀態變數（VID 001–029）
 
 單位、型別、語意以規格 §1.4 `ss=27`(a) 為準。下表補上**本 App 的資料來源**。
 
@@ -219,6 +222,9 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 | 024 | `oes.integrationTime` | F4 | `DeviceSettings` 的積分時間（ms） |
 | 025 | `oes.averageCount` | U4 | `DeviceSettings` 的平均次數 |
 | 026 | `oes.frameRate` | F4 | `MainViewModel` 量測的實際幀率 |
+| 027 | `oes.processClass` | A | `Snapshot.ProcessClass` |
+| 028 | `oes.processClassState` | U4 | `Snapshot.ProcessClassState`，直接轉 `int` |
+| 029 | `oes.processStepIndex` | U4 | `Snapshot.ProcessStepIndex` |
 
 ### 5.1 列舉值對照——程式列舉順序即規格數值
 
@@ -228,14 +234,30 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 |---|---|---|
 | `LeakAlarmLevel` | Idle, Normal, Warning, Alarm | (c)-1 的 0/1/2/3 ✔ |
 | `CalibrationStatus` | NotCalibrated, Active, BaselineMismatch | (c)-2 的 0/1/2 ✔ |
-| `RatioState` | Normal, Warning, Alarm, NoPlasma, LowSignal, NoBaseline, Disabled | (c)-3 的 0～6 ✔ |
+| `RatioState` | Normal, Warning, Alarm, NoPlasma, LowSignal, NoBaseline, Disabled, Observing, NotApplicable | (c)-3 的 0～6 ✔;7–8 為本專案追加,附加在尾端 |
+| `ProcessClassState` | NotConfigured, NoStep, Deciding, Classified, Unclassified | (a) VID 028 的 0～4 ✔ |
 
 > ⚠️ 這是**隱性契約**。日後在這三個列舉中間插入成員，會靜默改變送給 Host 的數值。
 > 三處宣告都應加註解指回本節；`RatioState` 雖然本期只用來統計數量，將來做槽位 VID 就會直接上報。
 
-### 5.2 尚未實作但已保留
+### 5.2 profile 檔不會被覆寫——新增 VID 的副作用
 
-VID 027–099 保留。比值槽位 VID = `100 + (N−1)×30 + 位移`（N = 1…10，對應 `RatioSetupViewModel.MaxRatios`），
+`SecsProfileTemplate.EnsureExists` **永遠不覆寫既有的 profile**（它可能帶著站點自己改過的 SVID
+編號、自己語言的警報文字）。這是對的,但有一個代價:**升級後新增的 VID 不會出現在已經跑過一次的
+機台上**,而且沒有任何地方會說。函式庫只檢查反方向——profile 指名了程式沒有的 bind 會在啟動時
+以名字報錯;程式提供了 profile 沒問的 bind 則完全沉默。
+
+所以 `SecsBridge.BindsNotInProfile` 在啟動時做這一側的比對,把差異寫進 traffic log 與系統記錄
+（`SecsProfileMissingBinds`,Information——站點自己刪掉的 SV 是刪掉了,不是錯誤）。
+`SecsProfileTests.The_shipped_template_asks_for_every_binding_the_app_supplies` 則把**隨附範本**
+釘住:範本一定要問到程式能提供的每一個 bind,否則新加的 VID 連新機台都讀不到。
+
+現場處理方式二選一:把缺的幾列貼進 `profiles\*.json`,或把該檔刪掉讓程式重新產生一份
+（站點編輯會一併失去,所以先看 log 裡列出的名字再決定）。
+
+### 5.3 尚未實作但已保留
+
+VID 030–099 保留(027–029 已用於製程分類,見上表)。比值槽位 VID = `100 + (N−1)×30 + 位移`（N = 1…10，對應 `RatioSetupViewModel.MaxRatios`），
 定義見規格 §1.4(b)。做這一段時要一併處理槽位↔ratio 的對應穩定性：ratio 的 key 是隨機 GUID stub，
 槽位號則是設定畫面的第 N 列，設定重載後可能改變——這正是規格保留 CEID 507 的原因。
 

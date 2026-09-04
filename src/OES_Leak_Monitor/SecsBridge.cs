@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Aqusen.Secs;
@@ -176,6 +177,21 @@ public sealed class SecsBridge : IDisposable
             File.WriteAllText(EffectiveProfilePath, stamped);
             Emit($"[CFG] chamber {_settings.ChamberCode:00} " +
                  $"({SecsChamberCoding.ChamberName(_settings.ChamberCode)}) -> {EffectiveProfilePath}");
+
+            // A status variable this build serves but the profile never asks for reaches no host
+            // at all, and after an upgrade that is the normal case: the site's profile was
+            // written by an older build and is deliberately never overwritten. Said once, here,
+            // rather than left to be discovered when a host asks for a VID and gets nothing.
+            var unlisted = BindsNotInProfile(stamped);
+            if (unlisted.Count > 0)
+            {
+                Emit($"[CFG] {unlisted.Count} status variable(s) this build can serve are not in " +
+                     $"the profile: {string.Join(", ", unlisted)}");
+                _log?.LogSystemEvent(LogSeverity.Information, "SecsProfileMissingBinds",
+                    "The SECS profile does not list every status variable this build can serve. " +
+                    "Add the rows (or delete the profile to regenerate it) if the host needs them.",
+                    value: string.Join(", ", unlisted), related: ProfileTemplatePath);
+            }
 
             var profile = JsonDeviceProfile.Load(EffectiveProfilePath);
 
@@ -466,7 +482,55 @@ public sealed class SecsBridge : IDisposable
         b.Bind("oes.averageCount", () => _acquisition().AverageCount);
         b.Bind("oes.frameRate", () => _frameRate);
 
+        // 027-029: which process the plasma step now running is. A chamber that interleaves
+        // recipes reports a leak state that means nothing without it — each ratio is scoped to
+        // the process it measures, so "Normal" during a step no ratio covers is not the same
+        // claim as "Normal" during one they do. 028 is what makes 027 readable: the name is
+        // blank for three different reasons and only the state says which.
+        b.Bind("oes.processClass", () => _snapshot?.ProcessClass ?? "");
+        b.Bind("oes.processClassState",
+               () => (uint)(_snapshot?.ProcessClassState ?? ProcessClassState.NotConfigured));
+        b.Bind("oes.processStepIndex", () => (uint)Math.Max(0, _snapshot?.ProcessStepIndex ?? 0));
+
         return b;
+    }
+
+    /// <summary>
+    /// Every bind name <see cref="BuildBindings"/> registers.
+    ///
+    /// <para>It exists for one direction the library cannot check. A profile naming a binding
+    /// this build does not supply fails at start-up, by name; a build supplying one the profile
+    /// does not list is silent — and that is exactly what an upgrade produces, because
+    /// <see cref="SecsProfileTemplate.EnsureExists"/> never overwrites a site's profile. The new
+    /// status variable then reaches no machine that has ever started the interface, with nothing
+    /// anywhere to say so. <c>SecsProfileTests</c> checks each name here is really registered, so
+    /// the list cannot claim a binding that does not exist.</para>
+    /// </summary>
+    public static readonly string[] SuppliedBindNames =
+    {
+        "oes.leakRate", "oes.leakRateSigma", "oes.leakRateConfidence", "oes.leakRateValid",
+        "oes.outOfCalibratedRange", "oes.calibrationStatus", "oes.compositeLevel",
+        "oes.enabledRatios", "oes.warningRatios", "oes.alarmRatios", "oes.lowSignalRatios",
+        "oes.baselineAvailable", "oes.goldenRunName", "oes.calibrationName",
+        "oes.acquisitionMismatch", "oes.testMode", "oes.captureActive", "oes.captureProgress",
+        "oes.calCaptureActive", "oes.calCaptureProgress", "oes.plasmaPresent",
+        "oes.plasmaGateAvailable", "oes.dropoutCount", "oes.integrationTime", "oes.averageCount",
+        "oes.frameRate", "oes.processClass", "oes.processClassState", "oes.processStepIndex",
+    };
+
+    /// <summary>
+    /// Bind names this build serves that <paramref name="profileJson"/> does not ask for. Not an
+    /// error — a site that deleted a status variable deleted it — but after an upgrade it is the
+    /// difference between a new VID working and doing nothing at all, so it is said out loud
+    /// once at start-up instead of being discovered by a host asking.
+    /// </summary>
+    public static IReadOnlyList<string> BindsNotInProfile(string profileJson)
+    {
+        if (string.IsNullOrEmpty(profileJson)) return Array.Empty<string>();
+        var asked = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in Regex.Matches(profileJson, "\"bind\"\\s*:\\s*\"([^\"]*)\""))
+            asked.Add(m.Groups[1].Value);
+        return SuppliedBindNames.Where(n => !asked.Contains(n)).ToArray();
     }
 
     private LeakRateEstimate? Estimate() => _snapshot?.LeakRate;

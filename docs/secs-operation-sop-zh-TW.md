@@ -207,6 +207,21 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 
 > 檔案不小心刪掉沒關係：下次啟動會自動寫回一份預設範本（Traffic 會出現 `[CFG] wrote the default profile to …`）。
 
+> ### ⚠️ 升級之後：新版新增的 SVID 不會自己出現在你的 profile 裡
+>
+> 既有的 profile **永遠不會被覆寫**（它可能帶著你改過的編號與文字），所以新版新增的狀態變數
+> 不會自動加進去，Host 查那幾個 VID 會什麼都讀不到。
+>
+> 每次啟動時 App 會自己比對並在 Traffic 裡說出來：
+>
+> ```
+> [CFG] 3 status variable(s) this build can serve are not in the profile: oes.processClass, ...
+> ```
+>
+> 系統記錄裡對應的是 `SecsProfileMissingBinds`。**升級後請看一次這行**。要補的話兩種做法：
+> 照 [`secs-integration.md`](secs-integration.md) §4 把缺的幾列貼進 profile，
+> 或把 profile 檔刪掉讓它重新產生（**你改過的內容會一起不見**，所以先看清楚 log 列出的名字）。
+
 ---
 
 ## 8. 故障排除
@@ -273,7 +288,7 @@ TCP 通了，但通訊建立（S1F13/S1F14）沒完成。多半是 **Device ID �
 1. App 設 `Address = 127.0.0.1`、`Port = 5000`、`Device ID = 0`、腔體 = 實際要用的代號，`Save & apply`。
 2. 啟動 `Test_SECS` 的 Host 端，連到 `127.0.0.1:5000`。
 3. 確認兩邊都到 **`COMMUNICATING`**。
-4. Host 送 **S1F3**（查狀態）→ 應回 **S1F4，26 個 SV**，SVID 為 `1{cc}2700001`…`1{cc}2700026`。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
+4. Host 送 **S1F3**（查狀態）→ 應回 **S1F4，29 個 SV**，SVID 為 `1{cc}2700001`…`1{cc}2700029`。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
 5. Host 送 **S1F17** → 回 `ONLACK`（已在 online 時為 2）。
 6. Host 送 **S5F5**（查警報清單）→ 應回 **5 條**，ALID 為 **ASCII**（`<A[8] "1{cc}27002">`），category 依序 6/4/5/5/8。
 7. Host 做一次 **S2F23 Trace** → 確認 S6F1 依週期回傳。
@@ -340,7 +355,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | 508 | 開始擷取 |
 | 509 | 停止擷取 |
 
-### 10.4 狀態變數重點（完整 26 項見 [`secs-integration.md`](secs-integration.md) §5）
+### 10.4 狀態變數重點（完整 29 項見 [`secs-integration.md`](secs-integration.md) §5）
 
 | VID | 意義 | 備註 |
 |---|---|---|
@@ -353,6 +368,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | **016** | **測試／Replay 模式** | **1 = 這批數據不是量測值，不可用於製程判定** |
 | 021–023 | 電漿是否存在、閘門是否可用、累計掉幀數 | 023 為**本次執行**累計，請以差值判讀 |
 | 024–026 | 積分時間、平均次數、實際幀率 | |
+| **027–029** | **製程類別、類別狀態、步驟序號** | **028 才是能讀的那一個**：027 在「沒設分類器」「沒有電漿步驟」「還沒判定」三種情況下都是空字串。028 = 0/1/2/3/4 分別對應這三種、已分類、判定為無法分類 |
 
 ---
 

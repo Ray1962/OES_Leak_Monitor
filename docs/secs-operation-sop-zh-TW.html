@@ -139,7 +139,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#101-編碼規則">10.1 編碼規則</a>
 <a class="l3" href="#102-警報s5f1">10.2 警報（S5F1）</a>
 <a class="l3" href="#103-事件s6f11">10.3 事件（S6F11）</a>
-<a class="l3" href="#104-狀態變數重點完整-26-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 26 項見 [secs-integration.md](secs-integration.md) §5）</a>
+<a class="l3" href="#104-狀態變數重點完整-29-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 29 項見 [secs-integration.md](secs-integration.md) §5）</a>
 <a class="l2" href="#11-檢核表可列印">11. 檢核表（可列印）</a>
 <a class="l3" href="#111-上線前engineer">11.1 上線前（Engineer）</a>
 <a class="l3" href="#112-每班operator">11.2 每班（Operator）</a>
@@ -346,6 +346,11 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 <p>範本檔裡的編號一律以 <strong><code>cc=00</code></strong> 書寫，App 啟動時才把第 2–3 位換成你設定的腔體號。<strong>手改時不要把 <code>00</code> 換成真正的腔體號</strong>，那會被當成錯誤而拒絕啟動。</p>
 <p>改完按 <strong><code>Restart interface</code></strong>。如果 JSON 打錯（位數不對、<code>ss</code> 不是 27、<code>aa</code> 不是 00），介面會直接變 <code>FAILED</code> 並在旁邊說明原因——這是刻意的，寧可起不來，也不要送出屬於別種感測器的編號。</p>
 <blockquote><p>檔案不小心刪掉沒關係：下次啟動會自動寫回一份預設範本（Traffic 會出現 <code>[CFG] wrote the default profile to …</code>）。</p></blockquote>
+<blockquote><h3 id="升級之後新版新增的-svid-不會自己出現在你的-profile-裡">⚠️ 升級之後：新版新增的 SVID 不會自己出現在你的 profile 裡</h3>
+<p>既有的 profile <strong>永遠不會被覆寫</strong>（它可能帶著你改過的編號與文字），所以新版新增的狀態變數 不會自動加進去，Host 查那幾個 VID 會什麼都讀不到。</p>
+<p>每次啟動時 App 會自己比對並在 Traffic 裡說出來：</p>
+<pre><code>[CFG] 3 status variable(s) this build can serve are not in the profile: oes.processClass, ...</code></pre>
+<p>系統記錄裡對應的是 <code>SecsProfileMissingBinds</code>。<strong>升級後請看一次這行</strong>。要補的話兩種做法： 照 <a href="secs-integration.md"><code>secs-integration.md</code></a> §4 把缺的幾列貼進 profile， 或把 profile 檔刪掉讓它重新產生（<strong>你改過的內容會一起不見</strong>，所以先看清楚 log 列出的名字）。</p></blockquote>
 <hr>
 <h2 id="8-故障排除">8. 故障排除</h2>
 <h3 id="81-狀態是紅色-failed">8.1 狀態是紅色 <code>FAILED</code></h3>
@@ -408,7 +413,7 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 </li>
 <li>確認兩邊都到 <strong><code>COMMUNICATING</code></strong>。
 </li>
-<li>Host 送 <strong>S1F3</strong>（查狀態）→ 應回 <strong>S1F4，26 個 SV</strong>，SVID 為 <code>1{cc}2700001</code>…<code>1{cc}2700026</code>。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
+<li>Host 送 <strong>S1F3</strong>（查狀態）→ 應回 <strong>S1F4，29 個 SV</strong>，SVID 為 <code>1{cc}2700001</code>…<code>1{cc}2700029</code>。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
 </li>
 <li>Host 送 <strong>S1F17</strong> → 回 <code>ONLACK</code>（已在 online 時為 2）。
 </li>
@@ -480,7 +485,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <tr><td>508</td><td>開始擷取</td></tr>
 <tr><td>509</td><td>停止擷取</td></tr>
 </tbody></table></div>
-<h3 id="104-狀態變數重點完整-26-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 26 項見 <a href="secs-integration.md"><code>secs-integration.md</code></a> §5）</h3>
+<h3 id="104-狀態變數重點完整-29-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 29 項見 <a href="secs-integration.md"><code>secs-integration.md</code></a> §5）</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>VID</th><th>意義</th><th>備註</th></tr></thead>
 <tbody>
@@ -493,6 +498,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <tr><td><strong>016</strong></td><td><strong>測試／Replay 模式</strong></td><td><strong>1 = 這批數據不是量測值，不可用於製程判定</strong></td></tr>
 <tr><td>021–023</td><td>電漿是否存在、閘門是否可用、累計掉幀數</td><td>023 為<strong>本次執行</strong>累計，請以差值判讀</td></tr>
 <tr><td>024–026</td><td>積分時間、平均次數、實際幀率</td><td></td></tr>
+<tr><td><strong>027–029</strong></td><td><strong>製程類別、類別狀態、步驟序號</strong></td><td><strong>028 才是能讀的那一個</strong>：027 在「沒設分類器」「沒有電漿步驟」「還沒判定」三種情況下都是空字串。028 = 0/1/2/3/4 分別對應這三種、已分類、判定為無法分類</td></tr>
 </tbody></table></div>
 <hr>
 <h2 id="11-檢核表可列印">11. 檢核表（可列印）</h2>
