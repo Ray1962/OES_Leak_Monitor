@@ -152,6 +152,13 @@ public sealed class LeakMonitorSnapshot
     public string ProcessClass { get; init; } = "";
 
     /// <summary>
+    /// Which of the three reasons <see cref="ProcessClass"/> is empty, when it is — see
+    /// <see cref="ProcessClassState"/>. Reported to the host as VID 028, because a name that is
+    /// blank for "no classifier", "no plasma" and "not decided yet" alike is not an answer.
+    /// </summary>
+    public ProcessClassState ProcessClassState { get; init; } = ProcessClassState.NotConfigured;
+
+    /// <summary>
     /// Counts the plasma steps seen this acquisition, so a row can say which one it belongs to.
     /// Populated whether or not a classifier is configured — a step is a fact about the tool,
     /// and the batch layer needs its boundaries either way. 0 before the first step.
@@ -463,6 +470,19 @@ public sealed class LeakMonitorEngine : IDisposable
     /// </summary>
     private bool AppliesToStep(RatioDefinition def) =>
         ProcessClassifier.AppliesTo(def, _stepClass, _classifier is not null);
+
+    /// <summary>
+    /// Which of <see cref="ProcessClassState"/>'s cases the step machine is in. Computed here
+    /// rather than inferred downstream: the three states that all leave
+    /// <see cref="LeakMonitorSnapshot.ProcessClass"/> empty are only distinguishable from the
+    /// engine's own fields, and <c>SecsBridge</c> reads the snapshot, it does not compute.
+    /// </summary>
+    private ProcessClassState CurrentProcessClassState =>
+        _classifier is null ? ProcessClassState.NotConfigured
+        : !_stepOpen ? ProcessClassState.NoStep
+        : _stepClass is null ? ProcessClassState.Deciding
+        : _stepClass == ProcessClassifier.Unknown ? ProcessClassState.Unclassified
+        : ProcessClassState.Classified;
 
     /// <summary>
     /// Labels of the classifier's discriminants, in the order
@@ -1751,6 +1771,7 @@ public sealed class LeakMonitorEngine : IDisposable
             PlasmaGateAvailable = _lastGateOpen.HasValue,
             DropoutCount = _dropoutEvents,
             ProcessClass = _stepClass ?? "",
+            ProcessClassState = CurrentProcessClassState,
             ProcessStepIndex = _stepIndex,
             ProcessDiscriminants = _stepDiscriminants,
         };

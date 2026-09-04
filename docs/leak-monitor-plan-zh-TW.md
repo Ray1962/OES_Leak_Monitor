@@ -212,7 +212,7 @@ P3  結構:A/B 的 TrendOnly + 守衛量 + 批次趨勢頁                  <- �
 P1  受控漏氣測試 -> 靈敏度
     ═══ GO / NO-GO ═══
 P3' C 的警報門檻
-P4  SECS 製程分類 SVID
+P4  SECS 製程分類 SVID                                            <- 已完成,見 §14
 P5  量化洩漏率校正(只有 P1 的斜率撐得住才做)
 ```
 
@@ -578,3 +578,59 @@ OxyPlot 預設會畫出一段日期範圍和 0–100 的刻度,那些數字不�
 - 實機開頁確認:空狀態、以及餵入 14 批合成索引(最後三批抬 9 %)後,C 製程那一路離開 ±3 σ 帶、
   列上讀 **+6.7 σ**,guard 與 trend-only 兩路留在帶內 —— 也就是這頁的主張本身。
   合成索引在截圖後即刪除。
+
+## 14. P4 —— 把製程類別報給 Host(2026-09-04)
+
+SVID **027 製程類別 / 028 類別狀態 / 029 步驟序號**,加在保留區 027–099 的開頭。
+
+**先做 P4 而不是等 P1 的原因和 gate 移動的理由一樣:它與指標無關。** 「現在跑的是哪一段製程」
+是關於這台機的事實,不取決於 N₂337/CO329 對漏氣會不會動;萬一 P1 是 NO-GO、整組指標要換,
+這三個 VID 一行都不用改。
+
+### 14.1 028 才是能讀的那一個
+
+`LeakMonitorSnapshot.ProcessClass` 在**三種完全不同的情況**下都是空字串:沒設分類器、
+沒有電漿步驟、步驟開始了但判定還沒下(前幾幀散度太大,要等 `DecideAfterFrames`)。
+只讀名字的 Host 分不出這三種,而它們要的反應不一樣。
+
+所以加一個 `ProcessClassState`(`NotConfigured / NoStep / Deciding / Classified / Unclassified`),
+在引擎裡算,不在 bridge 裡推 —— `SecsBridge` 的規矩是「它只讀,不算」,不在 snapshot 裡的數字
+就不屬於那個類別。這和 `PlasmaGate` 不把「判不出來」報成「電漿關了」是同一條原則。
+
+`Unclassified`(規則都不吻合)特別值得單獨一格:那種步驟底下**沒有任何 ratio 在判**,
+所以 Host 同時讀到的 VID 007「Normal」並不涵蓋任何製程 —— 這件事它只有被告知才會知道。
+
+`Unknown` 沿用 `ProcessClassifier.Unknown` 這個既有常數,027 就送 `"Unknown"`,不另造字串。
+
+029 步驟序號讓 Host 不必以高頻輪詢就能切分自己的資料:序號跳號就是換了一段。
+不論有沒有設分類器都會計數 —— step 是關於機台的事實,不是關於分類的。
+
+### 14.2 順手補掉一個會靜默失效的洞
+
+`SecsProfileTemplate.EnsureExists` **永遠不覆寫既有 profile**(裡面可能有站點自己改的編號與文字)。
+對,但代價是:**這次新增的三個 SVID 不會出現在任何已經跑過一次 SECS 的機台上**,而且沒有一處會說。
+函式庫只檢查反方向(profile 指名了程式沒有的 bind → 啟動時具名報錯);程式提供了 profile 沒問的
+bind 則完全沉默 —— 正好是升級一定會發生的那一側。
+
+補上兩件事:
+
+- `SecsBridge.BindsNotInProfile` 啟動時比對,把差異寫進 traffic log 與系統記錄
+  (`SecsProfileMissingBinds`,Information —— 站點自己刪掉的 SV 是刪掉了,不是錯誤)。
+- `SecsProfileTests.The_shipped_template_asks_for_every_binding_the_app_supplies` 釘住**隨附範本**:
+  範本必須問到程式能提供的每一個 bind,否則新加的 VID 連新機台都讀不到。
+
+原本測試裡那份手抄的 bind 名單改成引用 `SecsBridge.SuppliedBindNames`。理由變了:
+以前它的價值是「獨立重述一次」,現在真正該釘的是 profile ⊆ 程式與程式 ⊆ 範本這兩個方向,
+第三份手抄名單只會多一個要同步的地方。
+
+### 14.3 驗證
+
+- `ProcessClassTests` 追加 2 項:五種狀態各自出現在該出現的時候(含步驟序號跳號),
+  以及無法分類的步驟同時讓該 ratio 讀 `NotApplicable`。
+- `SecsProfileTests` / `SecsChamberCodingTests` / `SecsWireTests` 的數量從 26 改為 29;
+  wire 測試是實際對一個 host 跑 S1F3,所以「29 個 SV 都答得出來」是連線上量到的,不是宣告的。
+- 全套 140 passed / 4 skipped。
+- 規格與現場文件同步更新:`Satellite_SECS_Specification_v2.md`(027–029 三列、保留區改 030–099)、
+  `secs-integration.md`(§5 表、§5.1 列舉契約、新增 §5.2 說明 profile 不覆寫的副作用)、
+  `secs-operation-sop-zh-TW.md` §7.2 加上「升級後要看那一行 log」的框、§10.4 表、S1F3 驗收步驟,
+  以及重新產生的 HTML。

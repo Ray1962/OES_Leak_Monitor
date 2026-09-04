@@ -393,7 +393,10 @@ Satellite 以下列規則定義每個 SVID（Status Variable ID），總長 **10
 | 024 | Integration time | ms | F4 | 現行積分時間 |
 | 025 | Average count | 次 | U4 | 現行平均次數 |
 | 026 | Frame rate | Hz | F4 | 實際取樣率 |
-| 027 ~ 099 | Reserved | | | 保留 |
+| 027 | Process class | — | A[16] | 現行電漿步驟的製程類別名稱；未分類時為空字串，理由見 028 |
+| 028 | Process class state | — | U4 | 0 = 未設定分類器、1 = 無電漿步驟、2 = 步驟進行中尚未判定、3 = 已分類（名稱在 027）、4 = 判定為無法分類 |
+| 029 | Process step index | 次 | U4 | 本次採集累計的電漿步驟數；不論是否設定分類器都會計數 |
+| 030 ~ 099 | Reserved | | | 保留 |
 
 ##### (b) 比值槽位（VID 101–400）
 

@@ -468,4 +468,73 @@ public class ProcessClassTests
         Assert.Contains("process step", reason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("C", reason);
     }
+
+    // ---------------------------------------------------------------- reported to the host
+
+    /// <summary>
+    /// The process class as a host reads it (SECS VID 027/028). The name alone is not an answer:
+    /// it is empty for three different reasons, and a host told "" cannot tell an unconfigured
+    /// tool from an idle one from a step still being decided. Each of those calls for a
+    /// different reaction, so each is its own state — the same argument PlasmaGate makes for not
+    /// reporting "cannot tell" as "plasma off".
+    /// </summary>
+    [Fact]
+    public void The_snapshot_says_why_the_process_class_is_empty()
+    {
+        // Nothing configured: the class is empty and always will be. Steps are still counted.
+        using (var h = new Harness(null, Ratio("R_any", "")))
+        {
+            h.Engine.ProcessSample(StepC(0));
+            Assert.Equal(ProcessClassState.NotConfigured, h.Last.ProcessClassState);
+            Assert.Equal("", h.Last.ProcessClass);
+            Assert.Equal(1, h.Last.ProcessStepIndex);
+        }
+
+        using var g = new Harness(Classifier(), Ratio("R_C", "C"));
+
+        // Idle before any plasma: no step, rather than "no classifier" and rather than a class.
+        g.Engine.ProcessSample(Off(0));
+        Assert.Equal(ProcessClassState.NoStep, g.Last.ProcessClassState);
+
+        // A step has begun but the verdict waits for DecideAfterFrames: still empty, and the
+        // reason a host must not read it as "this tool cannot classify".
+        g.Engine.ProcessSample(StepC(2));
+        Assert.Equal(ProcessClassState.Deciding, g.Last.ProcessClassState);
+        Assert.Equal("", g.Last.ProcessClass);
+
+        // Decided, and the name means something.
+        g.Engine.ProcessSample(StepC(4));
+        g.Engine.ProcessSample(StepC(6));
+        Assert.Equal(ProcessClassState.Classified, g.Last.ProcessClassState);
+        Assert.Equal("C", g.Last.ProcessClass);
+
+        // The step index is what lets a host segment its own data without polling fast enough
+        // to catch every class change.
+        int first = g.Last.ProcessStepIndex;
+        for (double t = 8; t <= 20; t += 2) g.Engine.ProcessSample(Off(t));
+        Assert.Equal(ProcessClassState.NoStep, g.Last.ProcessClassState);
+        for (double t = 22; t <= 28; t += 2) g.Engine.ProcessSample(StepC(t));
+        Assert.Equal(first + 1, g.Last.ProcessStepIndex);
+    }
+
+    /// <summary>
+    /// A step no rule matched is its own state, not a blank. Nothing is judged during such a
+    /// step, so a host reading a composite level of Normal alongside it is reading a level that
+    /// covers no process at all — which it can only know if this is reported.
+    /// </summary>
+    [Fact]
+    public void An_unclassifiable_step_is_reported_as_such()
+    {
+        var cfg = Classifier();
+        cfg.FallbackClass = "";                 // no fallback: an unmatched step stays Unknown
+        using var h = new Harness(cfg, Ratio("R_C", "C"));
+
+        // Argon absent (so not C) and hydrogen high (so not A), with no fallback left.
+        for (double t = 0; t <= 6; t += 2) h.Engine.ProcessSample(StepB(t));
+
+        Assert.Equal(ProcessClassState.Unclassified, h.Last.ProcessClassState);
+        Assert.Equal(ProcessClassifier.Unknown, h.Last.ProcessClass);
+        Assert.Equal(RatioState.NotApplicable, h.Ratio("R_C").State);
+    }
 }
+

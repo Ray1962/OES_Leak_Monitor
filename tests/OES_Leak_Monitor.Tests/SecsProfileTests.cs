@@ -27,7 +27,7 @@ public class SecsProfileTests : IDisposable
         var profile = LoadStamped(2);
 
         Assert.Equal("OES Leak Monitor (ss=27)", profile.Name);
-        Assert.Equal(26, profile.RequiredBindings.Count());
+        Assert.Equal(29, profile.RequiredBindings.Count());
         Assert.Equal(5, profile.Alarms.Count());
         Assert.Empty(profile.RemoteCommands);   // this tool reports; it is not driven
     }
@@ -36,26 +36,49 @@ public class SecsProfileTests : IDisposable
     public void Every_binding_the_profile_names_is_one_the_app_supplies()
     {
         // The library fails construction when a profile names a binding nobody registered, so
-        // this is the same check moved to build time. Kept as an explicit list rather than
-        // reflection over SecsBridge: the point is that a rename has to be made in two places
-        // deliberately, not that the two happen to agree.
-        string[] supplied =
-        {
-            "oes.leakRate", "oes.leakRateSigma", "oes.leakRateConfidence", "oes.leakRateValid",
-            "oes.outOfCalibratedRange", "oes.calibrationStatus", "oes.compositeLevel",
-            "oes.enabledRatios", "oes.warningRatios", "oes.alarmRatios", "oes.lowSignalRatios",
-            "oes.baselineAvailable", "oes.goldenRunName", "oes.calibrationName",
-            "oes.acquisitionMismatch", "oes.testMode", "oes.captureActive", "oes.captureProgress",
-            "oes.calCaptureActive", "oes.calCaptureProgress", "oes.plasmaPresent",
-            "oes.plasmaGateAvailable", "oes.dropoutCount", "oes.integrationTime",
-            "oes.averageCount", "oes.frameRate",
-        };
-
+        // this is the same check moved to build time.
         var missing = LoadStamped(2).RequiredBindings
-            .Except(supplied, StringComparer.OrdinalIgnoreCase)
+            .Except(SecsBridge.SuppliedBindNames, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         Assert.True(missing.Count == 0, "profile binds names the app does not supply: " + string.Join(", ", missing));
+    }
+
+    /// <summary>
+    /// The other direction, which nothing used to check and which an upgrade produces every
+    /// time: a status variable the app can serve that the shipped profile never asks for reaches
+    /// no host at all, and says nothing about it. A site's own profile is deliberately never
+    /// overwritten, so the template is the only copy this can be enforced on — the running
+    /// interface reports the gap for the rest (<c>SecsBridge.BindsNotInProfile</c>).
+    /// </summary>
+    [Fact]
+    public void The_shipped_template_asks_for_every_binding_the_app_supplies()
+    {
+        var unlisted = SecsBridge.BindsNotInProfile(
+            SecsChamberCoding.ApplyChamber(SecsProfileTemplate.Json, 2));
+
+        Assert.True(unlisted.Count == 0,
+            "the app serves status variables the shipped profile does not list, so no host can " +
+            "read them: " + string.Join(", ", unlisted));
+    }
+
+    /// <summary>
+    /// The upgrade case itself: a profile written by an older build, kept (as it must be), and
+    /// therefore missing the status variables added since. Nothing breaks — which is the
+    /// problem, so the gap has to be named rather than inferred from a host reading nothing.
+    /// </summary>
+    [Fact]
+    public void A_profile_from_an_older_build_names_what_it_is_missing()
+    {
+        var older = SecsProfileTemplate.Json;
+        foreach (var bind in new[] { "oes.processClass", "oes.processClassState", "oes.processStepIndex" })
+            older = string.Join("\n", older.Split('\n').Where(l => !l.Contains(bind)));
+
+        var unlisted = SecsBridge.BindsNotInProfile(older);
+
+        Assert.Equal(
+            new[] { "oes.processClass", "oes.processClassState", "oes.processStepIndex" },
+            unlisted.OrderBy(x => x, StringComparer.Ordinal).ToArray());
     }
 
     [Fact]

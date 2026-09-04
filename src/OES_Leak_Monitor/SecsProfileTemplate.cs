@@ -85,7 +85,13 @@ public static class SecsProfileTemplate
     { "svid": 1002700023, "name": "Frame dropout count",          "units": "",         "format": "U4", "bind": "oes.dropoutCount" },
     { "svid": 1002700024, "name": "Integration time",             "units": "ms",       "format": "F4", "bind": "oes.integrationTime" },
     { "svid": 1002700025, "name": "Average count",                "units": "",         "format": "U4", "bind": "oes.averageCount" },
-    { "svid": 1002700026, "name": "Frame rate",                   "units": "Hz",       "format": "F4", "bind": "oes.frameRate" }
+    { "svid": 1002700026, "name": "Frame rate",                   "units": "Hz",       "format": "F4", "bind": "oes.frameRate" },
+
+    // 027-029: which process the running plasma step is. 028 is what makes 027 readable --
+    // the name is blank for "no classifier", "no step" and "not decided yet" alike.
+    { "svid": 1002700027, "name": "Process class",               "units": "",         "format": "A",  "bind": "oes.processClass" },
+    { "svid": 1002700028, "name": "Process class state",         "units": "",         "format": "U4", "bind": "oes.processClassState" },
+    { "svid": 1002700029, "name": "Process step index",          "units": "",         "format": "U4", "bind": "oes.processStepIndex" }
   ],
 
   // category follows SEMI E5: 4 = parameter control error, 5 = irrecoverable error,
