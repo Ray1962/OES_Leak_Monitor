@@ -308,6 +308,13 @@
                 <local:RecordingsPanel DataContext="{Binding Recordings}"/>
             </TabItem>
 
+            <!-- Ungated on purpose: reading whether the tool is drifting is an Operator
+                 concern, and this page changes nothing. Same split as the recorder strip
+                 and the SECS tab. -->
+            <TabItem Header="Batch Trend">
+                <local:BatchTrendPanel DataContext="{Binding BatchTrend}"/>
+            </TabItem>
+
             <TabItem Header="Ratio Review">
                 <local:RatioReviewPanel DataContext="{Binding RatioReview}"/>
             </TabItem>

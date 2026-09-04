@@ -33,6 +33,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void OnSampleForBatch(object? sender, LeakMonitorSnapshot snapshot) =>
         _batchTracker.Add(snapshot);
 
+    private void OnBatchCompletedForTrend(object? sender, BatchSummary batch) =>
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+            new Action(() => BatchTrend.Refresh()));
+
     /// <summary>
     /// Ends the batch in progress and closes the day file. Called wherever the ratio CSV's
     /// session ends — a batch that spans a Stop, a Reset or the start of a replay is not one
@@ -160,6 +164,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Recordings.RestoreTrendWavelengths(settings.RecordingsWavelengths);
         Recordings.TrendWavelengthsChanged += (_, _) => PersistRecordingsWavelengths();
         RatioReview = new RatioReviewViewModel(Logger, _intensityLogger, _paths.DataDirectory);
+        BatchTrend = new BatchTrendViewModel(Logger, _paths.DataDirectory);
 
         _devices = new List<DeviceViewModel>(DeviceProfiles.Length);
         for (int i = 0; i < DeviceProfiles.Length; i++)
@@ -295,6 +300,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                                              _batchTracker, _systemLogger);
         _batchCsvLogger.Configure(loggerSettings);
         _leakMonitorEngine.SampleProcessed += OnSampleForBatch;
+        // A completed batch is a new point on the trend. Marshalled, because the tracker is
+        // driven from the acquisition thread and the page it updates is bound to the UI one.
+        _batchTracker.BatchCompleted += OnBatchCompletedForTrend;
 
         // Replay tab: play a recorded full-spectrum CSV through the live pipeline to validate
         // the leak-monitor algorithms without hardware. It owns the transport; this class owns
@@ -591,8 +599,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _lastDataDirectory = dataDir;
             Recordings.Refresh();
             RatioReview.Refresh();
+            BatchTrend.Refresh();
             _systemLogger.LogSystemEvent(LogSeverity.Information, "DataDirectoryChanged",
-                "Logger output folder changed — Recordings / Ratio Review rescanned",
+                "Logger output folder changed — Recordings / Ratio Review / Batch Trend rescanned",
                 value: dataDir);
         }
         WavelengthTrend.Configure(ls.TriggerWavelength, TrendThresholdFor(ls),
@@ -926,6 +935,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public LogViewerViewModel   LogViewer   { get; }
     public RecordingsViewModel  Recordings  { get; }
     public RatioReviewViewModel RatioReview { get; }
+
+    /// <summary>The cross-batch trend — the plan's primary detection mechanism, read from the
+    /// batch record. See <see cref="BatchTrendViewModel"/>.</summary>
+    public BatchTrendViewModel BatchTrend { get; }
     public LeakMonitorViewModel LeakMonitor { get; }
     public RatioSetupViewModel  RatioSetup  { get; }
     public WavelengthCorrectionViewModel WavelengthCorrection { get; }
@@ -1291,6 +1304,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Replay.PropertyChanged -= OnReplayPropertyChanged;
         Replay.Dispose();
         _leakMonitorEngine.SampleProcessed -= OnSampleForBatch;
+        _batchTracker.BatchCompleted -= OnBatchCompletedForTrend;
         StopBatchRecording();
         _batchCsvLogger.Dispose();
         _ratioCsvLogger.Dispose();
