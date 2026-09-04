@@ -135,7 +135,8 @@ td code{white-space:nowrap;}
 <a class="l3" href="#68-replay重播驗證">6.8 Replay（重播驗證）</a>
 <a class="l3" href="#69-recordings光譜回放">6.9 Recordings（光譜回放）</a>
 <a class="l3" href="#610-ratio-review比值回放">6.10 Ratio Review（比值回放）</a>
-<a class="l3" href="#611-logs系統日誌">6.11 Logs（系統日誌）</a>
+<a class="l3" href="#611-batch-trend批次趨勢">6.11 Batch Trend（批次趨勢）</a>
+<a class="l3" href="#612-logs系統日誌">6.12 Logs（系統日誌）</a>
 <a class="l2" href="#7-檔案與資料夾">7. 檔案與資料夾</a>
 <a class="l3" href="#71-位置">7.1 位置</a>
 <a class="l3" href="#72-檔名規則">7.2 檔名規則</a>
@@ -315,20 +316,23 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <p>若在 Configuration 分頁時角色掉到 Engineer 以下，畫面會自動跳回 Monitor 分頁。</p>
 <hr>
 <h2 id="4-畫面總覽">4. 畫面總覽</h2>
-<p>視窗上方是工具列（標題、狀態訊息、使用者／角色），下方是十個分頁：</p>
+<p>視窗上方是工具列（標題、狀態訊息、使用者／角色），下方是十三個分頁（順序即畫面上的順序）：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>分頁</th><th>用途</th><th>權限</th></tr></thead>
 <tbody>
 <tr><td>1</td><td><strong>Monitor</strong></td><td>即時全光譜圖 + 選定波長強度趨勢；裝置連線／擷取控制；Recorder 狀態列</td><td>Operator+ 操作（狀態列全開放檢視）</td></tr>
 <tr><td>2</td><td><strong>Leak Monitor</strong></td><td>洩漏偵測主畫面：狀態燈號、各比值、趨勢圖、Golden Run</td><td>檢視全開放</td></tr>
-<tr><td>3</td><td><strong>Ratio Setup</strong></td><td>設定要監控哪些譜線比值、門檻</td><td>Engineer+ 存檔</td></tr>
-<tr><td>4</td><td><strong>Wavelength Calibration</strong></td><td>波長漂移補償（校正整個 catalog 的譜線位置）</td><td>Engineer+ 存檔</td></tr>
+<tr><td>3</td><td><strong>Ratio Setup</strong></td><td>設定要監控哪些譜線比值、用途、適用製程、門檻</td><td>Engineer+ 存檔</td></tr>
+<tr><td>4</td><td><strong>Wavelength Calibration</strong></td><td>譜線目錄與波長漂移補償</td><td>Engineer+ 存檔</td></tr>
 <tr><td>5</td><td><strong>Leak Calibration</strong></td><td>用已知漏率的標準漏孔，把比值上升換算成 mbar·L/s</td><td>Engineer+ 存檔</td></tr>
-<tr><td>6</td><td><strong>Replay</strong></td><td>把已錄製的光譜重播進整條偵測流程，無硬體驗證演算法</td><td>Engineer+</td></tr>
-<tr><td>7</td><td><strong>Configuration</strong></td><td>光譜儀硬體參數 + 資料記錄器設定</td><td>Engineer+</td></tr>
-<tr><td>8</td><td><strong>Recordings</strong></td><td>回放已存的光譜 CSV（線圖／熱圖／單幀光譜）</td><td>全開放</td></tr>
-<tr><td>9</td><td><strong>Ratio Review</strong></td><td>回放已存的比值 CSV（% 基準／原始比值／洩漏率）</td><td>全開放</td></tr>
-<tr><td>10</td><td><strong>Logs</strong></td><td>系統稽核日誌</td><td>全開放</td></tr>
+<tr><td>6</td><td><strong>Baseline Builder</strong></td><td>從已存的錄檔離線建 Golden Run（適合會 ramp 或很短的製程）</td><td>Engineer+ 存檔</td></tr>
+<tr><td>7</td><td><strong>Replay</strong></td><td>把已錄製的光譜重播進整條偵測流程，無硬體驗證演算法</td><td>Engineer+</td></tr>
+<tr><td>8</td><td><strong>Configuration</strong></td><td>光譜儀硬體參數 + 資料記錄器設定</td><td>Engineer+</td></tr>
+<tr><td>9</td><td><strong>Recordings</strong></td><td>回放已存的光譜 CSV（線圖／熱圖／單幀光譜）</td><td>全開放</td></tr>
+<tr><td>10</td><td><strong>Batch Trend</strong></td><td>跨批次趨勢：一批一個點，判斷這一批和前面幾十批有無不同</td><td>全開放</td></tr>
+<tr><td>11</td><td><strong>Ratio Review</strong></td><td>回放已存的比值 CSV（% 基準／原始比值／洩漏率）</td><td>全開放</td></tr>
+<tr><td>12</td><td><strong>Logs</strong></td><td>系統稽核日誌、一鍵診斷打包</td><td>全開放</td></tr>
+<tr><td>13</td><td><strong>SECS</strong></td><td>與 MES／Host 的連線狀態（設定需 Engineer+，看狀態不需要）</td><td>檢視全開放</td></tr>
 </tbody></table></div>
 <blockquote><p><strong>Configuration</strong> 與 <strong>Replay</strong> 分頁在切入時會檢查角色；權限不足會跳出登入視窗，取消就退回原本的分頁。</p></blockquote>
 <hr>
@@ -631,10 +635,10 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td><strong>百分比</strong></td><td>相對基準線的 %（100% = 基準線）</td></tr>
 <tr><td><strong>baseline (mean ± σ)</strong></td><td>這條比值的基準線平均值與標準差</td></tr>
 <tr><td><strong>斜率 / SNR</strong></td><td>上升速率，以及目前訊噪比</td></tr>
-<tr><td><strong>狀態</strong></td><td><code>Normal</code> / <code>WARNING</code> / <code>ALARM</code> / <code>No Plasma</code> / <code>Low Signal</code></td></tr>
+<tr><td><strong>狀態</strong></td><td><code>Normal</code> / <code>WARNING</code> / <code>ALARM</code> / <code>No Plasma</code> / <code>Low Signal</code> / <code>Observing</code> / <code>N/A</code></td></tr>
 </tbody></table></div>
 <p>滑鼠停在該列上會顯示詳細數值（含目前的 warn / alarm 門檻）。</p>
-<p><strong>五種狀態</strong></p>
+<p><strong>七種狀態</strong></p>
 <div class="tablewrap"><table>
 <thead><tr><th>狀態</th><th>顏色</th><th>意義</th></tr></thead>
 <tbody>
@@ -643,8 +647,12 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td><code>ALARM</code></td><td>紅</td><td>持續超過警報門檻（鎖存）</td></tr>
 <tr><td><code>No Plasma</code></td><td>—</td><td>參考譜線太弱，判定電漿沒開</td></tr>
 <tr><td><code>Low Signal</code></td><td>藍紫</td><td>電漿有開，但訊號或參考譜線太靠近雜訊底 —— <strong>這條比值被排除在警報判定之外</strong></td></tr>
+<tr><td><code>Observing</code></td><td>灰</td><td><strong>有在記錄，但不判定</strong> —— 這條比值的用途被設成 Trend only 或 Guard（見 §6.4）</td></tr>
+<tr><td><code>N/A</code></td><td>灰</td><td><strong>現在跑的不是這條比值負責的製程</strong>（見 §6.4 的 Process class）</td></tr>
 </tbody></table></div>
 <blockquote><p>💡 <code>Low Signal</code> 是刻意設計的保護。兩條都接近雜訊的譜線相除，結果再怎麼平滑都沒有意義，硬要判讀只會製造假警報。</p></blockquote>
+<blockquote><p>💡 後三種灰色狀態要分開看，它們對應三種完全不同的處置： <code>Observing</code> 是<strong>有人決定不讓它判</strong>（值照樣記錄、照樣進批次趨勢）； <code>N/A</code> 是<strong>現在這一段製程不歸它管</strong>（換到它的製程就會自己恢復）； <code>No Plasma</code> 才是<strong>閒置或異常</strong>。看到 <code>N/A</code> 不必處理；看到 <code>No Plasma</code> 而製程正在跑，要查。</p></blockquote>
+<blockquote><p>📝 <code>N/A</code> 期間該比值的平滑會被清掉（免得把別種電漿的讀值帶進下一段）， 但<strong>已經鎖存的警報會保留</strong> —— 已確認的洩漏不會因為機台換去跑別的製程就消失。</p></blockquote>
 <p><strong>門檻怎麼算</strong>：警告門檻取 <code>max(WarnFactor × 基準均值, 基準均值 + SigmaWarn × σ)</code> —— 兩者取大。而且這裡的 σ 會取「Golden Run 的 σ」與「即時 EWMA 的 σ」<strong>較大者</strong>，所以當現場比基準時期更吵時，門檻會自動放寬，不會被自己的抖動觸發。</p>
 <h4 id="635-golden-run-擷取流程">6.3.5 Golden Run 擷取流程</h4>
 <ol>
@@ -749,6 +757,18 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td><strong>Confirm (s)</strong></td><td>15.0</td><td>必須持續超過門檻幾秒才升級狀態</td></tr>
 <tr><td><strong>Min SNR</strong></td><td>5.0</td><td>兩條譜線都要超過這個訊噪比，比值才被採信。低於此值 → <code>Low Signal</code> 並排除在警報外。<strong>填 0 = 關閉這道保護</strong></td></tr>
 </tbody></table></div>
+<p><strong>Purpose（用途）／ Process class（適用製程）</strong></p>
+<p>這兩欄決定的是「<strong>判不判</strong>」與「<strong>什麼時候判</strong>」,和上面的 Monitoring method(決定「<strong>量什麼</strong>」)是兩件事。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Purpose</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td><code>Alarm</code></td><td><strong>預設。</strong> 正常參與警報判定</td></tr>
+<tr><td><code>Trend only</code></td><td>值照樣算、照樣寫進 CSV 與批次記錄,但<strong>不判定、不鎖存、不列入複合警報</strong>。畫面顯示 <code>Observing</code></td></tr>
+<tr><td><code>Guard</code></td><td>同上,但用途是<strong>擺在警報旁邊一起看</strong> —— 用來分辨「製程氣體變了」和「真的漏氣」</td></tr>
+</tbody></table></div>
+<blockquote><p><strong>為什麼要有 <code>Trend only</code>。</strong> 有些指標跨批次的重現性撐不起一條門檻(例如某台機上兩種製程的 mean/σ 只有 7.3 與 6.5,而程式接受基準線的下限就是 10)。在那種指標上設警報,操作員很快會學會 忽略它 —— 那比沒有警報更糟。值仍然有用,只是要到 <strong>Batch Trend</strong>(§6.11)那一頁去讀。</p></blockquote>
+<blockquote><p><strong><code>Guard</code> 是報告,不是否決。</strong> 警報發生時,守衛量<strong>當下那一幀</strong>的讀值會一起寫進系統日誌 (<code>LeakMonitorState</code> 那一筆的尾巴),因為「這是漏氣還是氣體動了」問的就是那一刻, 事後查不回來。但守衛量<strong>不會</strong>壓下任何警報 —— 它自己的散度有幾個百分點,給它否決權, 遲早會壓掉一次真的漏氣。</p></blockquote>
+<p><strong>Process class</strong> 留空 = 這條比值適用於每一段電漿(不設分類器的機台維持原樣)。 填了製程名稱,就只在該製程的電漿步驟裡判定,其他時候顯示 <code>N/A</code>。 一台會交替跑多種配方的機台需要它:拿同一份基準線去判三種不同的電漿,等於在比三件不同的事。</p>
 <p>底部 <strong>Save</strong>（Engineer+）／ <strong>Revert</strong>（丟棄未存檔的修改）。</p>
 <hr>
 <h3 id="65-wavelength-calibration波長校正">6.5 Wavelength Calibration（波長校正）</h3>
@@ -1019,7 +1039,32 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <blockquote><p>📝 <strong>Leak rate</strong> 模式只有在該 CSV 含有 <code>LeakRate</code> / <code>LeakRateSigma</code> 欄位時才有東西可畫。校正功能上線前錄的舊檔沒有這兩欄，仍然可以正常開啟與檢視前兩種模式。</p></blockquote>
 <p>其餘按鈕（Refresh / Open Base / Open Folder / Open File / Zoom All / Save PNG / Copy Image / Search）用法同 Recordings。</p>
 <hr>
-<h3 id="611-logs系統日誌">6.11 Logs（系統日誌）</h3>
+<h3 id="611-batch-trend批次趨勢">6.11 Batch Trend（批次趨勢）</h3>
+<p><strong>一批一個點。</strong> 這一頁不看單一幀,也不看單一次電漿;它把每一批取出<strong>同一個位置</strong>的一個數字, 排成一條跨批次的線。不需要登入就能看。</p>
+<blockquote><p><strong>為什麼要這樣看。</strong> 觀察窗會在一批之內逐漸結垢,清機之後又恢復 —— 同一段製程的亮度在一批裡 會掉到最初的 0.70。所以<strong>同一批裡不同時間的兩幀不能互相比較</strong>,但<strong>兩批裡同一個位置的兩幀可以</strong>。 Leak Monitor 那一頁回答的是「現在有沒有在漏」(拿基準線比),這一頁回答的是 「這一批和前面幾十批比起來有沒有不一樣」。</p></blockquote>
+<p>取樣點是每一批中<strong>該製程的第一段完整電漿</strong>、閘門開啟後 <strong>10～30 秒</strong>的中位數: 第一段而不是最好的一段或全部平均(愈後面的段落結垢愈重);10～30 秒是因為前 10 秒是點火暫態 (散度 8.7 %,10～30 秒只有 1.6 %),而最後幾幀是記錄器的收尾段,參考譜線已經在崩,比值會發散。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>控制項</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>Refresh</strong></td><td>重讀批次索引。工具在跑的時候會持續累加,按這個看最新的一批</td></tr>
+<tr><td><strong>Normalize（÷ own median）</strong></td><td>預設開啟。每一條除以自己的中位數,不同製程量級差一個數量級才畫得進同一張圖;Y 軸會寫 <code>× own median</code></td></tr>
+<tr><td><strong>Show ±3 σ band</strong></td><td>預設開啟。畫出判定用的 ±3 σ 範圍</td></tr>
+<tr><td><strong>Open Record / Open Folder</strong></td><td>打開批次索引檔 <code>_batches.csv</code> 或它所在的資料夾</td></tr>
+<tr><td>左側清單</td><td>每一條比值一列,列出批數、中位數、σ,以及<strong>最新這批離自己的中心幾個 σ</strong></td></tr>
+</tbody></table></div>
+<h4 id="怎麼讀">怎麼讀</h4>
+<p><strong>看那個 σ 數字。</strong> 它是最新一批相對「這條比值自己過去的中心」的偏離量,不是相對 Golden Run。</p>
+<blockquote><h3 id="判定規則">判定規則</h3>
+<p><strong>連續三批</strong>都超過 <strong>±3 σ</strong> → 通知工程師。</p>
+<p>一批超出可能只是那一批的條件;連續三批不會是巧合。 <strong>這一頁目前不會自己發警報</strong>,規則印在頁面上由人判斷。</p></blockquote>
+<p><strong>帶子是穩健統計算的(1.4826 × MAD),不是標準差</strong> —— 這是刻意的。漏氣不會下一批就消失, 連續幾批偏高正是要抓的形狀,而標準差會被這幾批自己撐開:同一組資料(9 批正常、3 批高 30 %), 穩健算法之下那三批在 40 σ 外,標準差之下只有 1.7 σ,等於看不見。</p>
+<blockquote><p>📝 <strong>一條比值累積不到 4 批就不會畫。</strong> 兩批畫出來的帶子不是帶子。剛換配方或剛加新比值時 看不到線是正常的,等幾批就會出現。</p></blockquote>
+<blockquote><p>📝 <strong>還沒有任何一批完成時</strong>,這一頁是空白的,狀態列會寫出批次記錄將出現的路徑。 空白是對的 —— 沒有資料卻畫出座標軸,那些刻度不來自任何一批。</p></blockquote>
+<h4 id="資料從哪來">資料從哪來</h4>
+<p><code>{資料夾}\_batches.csv</code>(長格式,一批一列一比值),由程式在每批結束時自動追加。 每個日期資料夾裡另有一份 <code>{prefix}_Batch_*.csv</code>(寬格式,一批一列), 所以把單一天的資料夾拷貝出去,那一天的批次摘要也跟著走。</p>
+<p>某條比值所屬的製程在那一批沒有跑到,該格留白 —— 不會拿別的製程的數字填。</p>
+<hr>
+<h3 id="612-logs系統日誌">6.12 Logs（系統日誌）</h3>
 <p>顯示系統稽核日誌，記錄：</p>
 <ul>
 <li>裝置連線／中斷、擷取啟停
@@ -1052,7 +1097,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </tbody></table></div>
 <blockquote><p>⚠️ <strong><code>Description</code> 欄是在 <code>Aqst.OesApp.Core</code> 0.1.7 才寫進檔案的。</strong> 在那之前，這一欄的內容只存在於執行中的記憶體（Logs 分頁看得到），關掉程式就消失 —— 檔案裡只留下「發生了一個叫 <code>Device_RuntimeError</code> 的事件」，完全沒有錯誤內容。<strong>0.1.7 之前的舊日誌檔沒有這一欄，也救不回來。</strong></p>
 <p>若同一小時內先後跑過新舊版本，新版會另開 <code>yyMMddHH_1.csv</code>，避免同一個檔案裡混著兩種欄位數。</p></blockquote>
-<h4 id="6111-一鍵打包診斷">6.11.1 一鍵打包診斷</h4>
+<h4 id="6121-一鍵打包診斷">6.12.1 一鍵打包診斷</h4>
 <p>Logs 分頁上方有一顆 <strong>Create diagnostic bundle</strong>。求助之前先按它，把產生的 zip 附上， 可以省掉來回問「你的設定是什麼、日誌在哪、DLL 有沒有載起來」的好幾輪。</p>
 <p><strong>任何人都能按，不需要簽入。</strong> 它只讀不寫，不會改任何設定，也<strong>不會把任何東西送到外部</strong> —— 只是在本機產生一個檔案，要不要寄出去是你的決定。</p>
 <p>按下去之後在背景收集（採集不會中斷），完成時檔案總管會自動把 zip 選起來，方便直接拖進郵件：</p>
