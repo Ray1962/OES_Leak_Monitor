@@ -208,7 +208,7 @@ P0  分類器 + ProcessClass + per-process gate + 站點比值組        <- 已�
 P1' 注入 harness:鏈路驗證 + transfer 量測(離線)                <- 已完成,見 §9
 P2  批次層:10-30 s 窗口中位數、批次 CSV + 索引                    <- 已完成,見 §10
 P2b Baseline Builder 分 class                                    <- 已完成,見 §11
-P3  結構:A/B 的 TrendOnly + 守衛量 + 批次趨勢頁
+P3  結構:A/B 的 TrendOnly + 守衛量 + 批次趨勢頁                  <- 已完成,見 §12 §13
 P1  受控漏氣測試 -> 靈敏度
     ═══ GO / NO-GO ═══
 P3' C 的警報門檻
