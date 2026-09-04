@@ -1,0 +1,128 @@
+<UserControl x:Class="OES_Leak_Monitor.BatchTrendPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:oxy="http://oxyplot.org/wpf"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1200"
+             Background="#F4F6FA">
+
+    <UserControl.Resources>
+        <Style x:Key="ToolbarButton" TargetType="Button">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Margin"  Value="0,0,4,0"/>
+            <Setter Property="MinWidth" Value="84"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Batch Trend"
+                   FontSize="16" FontWeight="Bold" Foreground="#1F3A66"
+                   Margin="6,4,6,8"/>
+
+        <!-- What the page is, in one line. Without it the chart looks like the Ratio Review's
+             and gets read at the wrong time scale: a point here is a whole batch. -->
+        <Border Grid.Row="1" Background="#FFF9E6" BorderBrush="#E6D28A" BorderThickness="1"
+                CornerRadius="4" Padding="10,7" Margin="0,0,0,8">
+            <TextBlock TextWrapping="Wrap" Foreground="#5A4A00">
+                One point per batch, taken at the same point in every batch — the first step of
+                each process, ten to thirty seconds after its plasma lit. That is what makes
+                batches comparable to each other even though frames inside one are not: the
+                viewport fouls measurably during a batch and clears when the chamber is cleaned.
+            </TextBlock>
+        </Border>
+
+        <!-- Toolbar -->
+        <Border Grid.Row="2" Background="#EEF2F7" BorderBrush="#CCC" BorderThickness="1"
+                CornerRadius="4" Padding="10,8" Margin="0,0,0,8">
+            <WrapPanel VerticalAlignment="Center">
+                <Button Content="Refresh" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding RefreshCommand}"
+                        ToolTip="Re-read the batch record."/>
+                <Button Content="Zoom All" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding ZoomAllCommand}"/>
+                <Button Content="Save PNG" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding SavePngCommand}"/>
+                <Button Content="Copy" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding CopyImageCommand}"/>
+                <Button Content="Open Record" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding OpenIndexCommand}"
+                        ToolTip="Open the batch record CSV."/>
+                <Button Content="Open Folder" Style="{StaticResource ToolbarButton}"
+                        Command="{Binding OpenFolderCommand}"
+                        ToolTip="Open the data folder in Windows Explorer."/>
+
+                <Separator Margin="8,0" Width="1" Background="#CCC"/>
+
+                <CheckBox Content="Normalize (÷ own median)" VerticalAlignment="Center"
+                          Margin="4,0,12,0" IsChecked="{Binding Normalise}"
+                          ToolTip="Divide each ratio by its own median so ratios of different processes — an order of magnitude apart — share one axis."/>
+                <CheckBox Content="Show ±3 σ band" VerticalAlignment="Center"
+                          IsChecked="{Binding ShowBand}"
+                          ToolTip="The band a new batch is judged against. Drawn from 1.4826 × the median absolute deviation, not the standard deviation, so a run of unusual batches cannot widen the band meant to catch it."/>
+            </WrapPanel>
+        </Border>
+
+        <!-- Series picker + chart -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="White" BorderBrush="#CCC" BorderThickness="1"
+                    CornerRadius="4" Margin="0,0,8,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Ratios" FontWeight="SemiBold"
+                               Margin="10,8,10,4" Foreground="#1F3A66"/>
+                    <TextBlock DockPanel.Dock="Bottom" Margin="10,4,10,8" FontSize="11"
+                               Foreground="#666" TextWrapping="Wrap"
+                               Text="σ is how far the newest batch sits from that ratio's own median. Three consecutive batches past 3 σ is the rule the plan sets."/>
+                    <ListBox ItemsSource="{Binding Rows}" BorderThickness="0" Margin="4"
+                             HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="4,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding Shown}"
+                                              VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Detail}" FontSize="10.5"
+                                                   Foreground="#777" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding LatestText}"
+                                               VerticalAlignment="Center" FontFamily="Consolas"
+                                               Margin="6,0,2,0" Foreground="#333"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="1" Background="White" BorderBrush="#CCC" BorderThickness="1"
+                    CornerRadius="4">
+                <oxy:PlotView Model="{Binding PlotModel}" Controller="{Binding PlotController}"
+                              Background="White" Margin="2"/>
+            </Border>
+        </Grid>
+
+        <TextBlock Grid.Row="4" Text="{Binding Status}" Margin="6,8,6,2"
+                   Foreground="#444" TextWrapping="Wrap"/>
+    </Grid>
+</UserControl>
