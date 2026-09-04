@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>實驗機台洩漏測試分析 2026-09-04</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#1-資料">1. 資料</a>
+<a class="l3" href="#11-漏氣量換算">1.1 漏氣量換算</a>
+<a class="l2" href="#2-主要結果n₂-3371-的劑量曲線">2. 主要結果:N₂ 337.1 的劑量曲線</a>
+<a class="l3" href="#e1-o₂-30-sccm033-torr">E1 — O₂ 30 sccm,0.33 torr</a>
+<a class="l3" href="#e2-o₂-30-ar-30-sccm0495-torr">E2 — O₂ 30 + Ar 30 sccm,0.495 torr</a>
+<a class="l3" href="#e3-o₂-50-ar-50-sccm104-torr">E3 — O₂ 50 + Ar 50 sccm,1.04 torr</a>
+<a class="l3" href="#21-線性">2.1 線性</a>
+<a class="l2" href="#3-其他譜線誰有反應誰沒有">3. 其他譜線:誰有反應,誰沒有</a>
+<a class="l2" href="#4-外推到生產機台">4. 外推到生產機台</a>
+<a class="l3" href="#41-為什麼不能用-ar-7504-當橋樑">4.1 為什麼不能用 Ar 750.4 當橋樑</a>
+<a class="l3" href="#42-生產機台的無漏讀值">4.2 生產機台的無漏讀值</a>
+<a class="l3" href="#43-可偵測的漏氣量">4.3 可偵測的漏氣量</a>
+<a class="l2" href="#5-體積不進來但時間會">5. 體積不進來,但時間會</a>
+<a class="l2" href="#6-go-no-go目標數字要重算">6. GO / NO-GO:目標數字要重算</a>
+<a class="l2" href="#7-這次實驗不能回答的事">7. 這次實驗不能回答的事</a>
+<a class="l2" href="#8-對程式的影響">8. 對程式的影響</a>
+<a class="l2" href="#附錄重現">附錄:重現</a>
+</nav>
+<main>
+<h1 id="實驗機台洩漏測試分析2026-09-04">實驗機台洩漏測試分析(2026-09-04)</h1>
+<p><code>C:\DualOES\202609\04</code> 的 24 筆錄檔,三組製程條件、8~9 個 dosing valve 位置。 <strong>這是本專案第一次拿到「已知漏氣量 → 光譜響應」的完整劑量曲線。</strong></p>
+<p>前一份洩漏測試分析(<code>leak-test-20260819-analysis-zh-TW.md</code>)量到的是一台把儲存門檻設在 無漏電漿之上的機台,漏氣本身才把放電點亮到閘門打開 —— 那份資料無法給出靈敏度。 這一份可以。</p>
+<blockquote><p><strong>一句話結論</strong>:N₂ 337.1 nm 對空氣漏率的響應在 2.5 個十倍程內是線性的(殘差 4 %), 而且<strong>可以外推到生產機台</strong> —— 但外推的橋樑是<strong>氣體流量比</strong>,不是腔體體積。 體積 15 L → 400 L 對穩態訊號<strong>完全沒有影響</strong>,它只改變達到穩態所需的時間(13 s → 1~5 分鐘)。</p></blockquote>
+<hr>
+<h2 id="1-資料">1. 資料</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>實驗</th><th>壓力</th><th>氣體</th><th>功率</th><th>Dosing valve index</th><th>檔案</th></tr></thead>
+<tbody>
+<tr><td>E1</td><td>0.33 torr</td><td>O₂ 30 sccm</td><td>80 W</td><td>0,25,50,75,100,125,150,175</td><td><code>P_*_0904183612</code> ～ <code>0904185058</code></td></tr>
+<tr><td>E2</td><td>0.495 torr</td><td>O₂ 30 + Ar 30 sccm</td><td>80 W</td><td>0,25,50,75,100,125,150,175</td><td><code>P_*_0904190206</code> ～ <code>0904192403</code></td></tr>
+<tr><td>E3</td><td>1.04 torr</td><td>O₂ 50 + Ar 50 sccm</td><td>80 W</td><td>20,25,50,75,100,125,150,175</td><td><code>P_*_0904192818</code> ～ <code>0904194152</code></td></tr>
+</tbody></table></div>
+<p>兩台光譜儀:<strong>OES1 覆蓋 470.0–870.1 nm</strong>(1914 點,0.209 nm/點), <strong>OES2 覆蓋 179.9–500.1 nm</strong>(1865 點,0.172 nm/點)。每筆約 60 幀、間隔 1 s。</p>
+<p>三件資料上的事實,先講清楚,因為它們限制了後面能說什麼:</p>
+<ol>
+<li><strong>E1 的 index=200 有 notes 但沒有 CSV</strong>(<code>P_0904185250.notes.txt</code> 沒有對應的錄檔), 所以 E1 只有 8 個點。
+</li>
+<li><strong>E2 的 index=0 不是無漏基準。</strong> 它緊接在 E1 的 index=175(大漏)之後, N₂ 337 讀到 226,而隨後的 25/50 只有 198/196 —— 腔體還在把前一次的空氣抽掉。 後續計算一律<strong>排除 E2 的 index=0</strong>,改以 25/50/75 為基準。
+</li>
+<li><strong>E3 沒有 index=0</strong>,最低是 20。以下表換算,index 20 的漏氣量佔總流量 3×10⁻⁶, 預期抬升 0.6 %,當基準綽綽有餘。
+</li>
+</ol>
+<p>每筆錄檔取<strong>中段 20 %～90 % 的逐點中位數</strong>作為該點的光譜(丟掉點火暫態與收尾段), 抽取方式與 app 的 <code>LineIntensityExtractor</code> <strong>PeakHeight</strong> 完全一致: 帶內平均減去兩側連續視窗拉出的直線,幾何沿用計畫 §4.2 的站點設定 (N₂ 337:half 0.70、gap 1.30、width 1.10)。</p>
+<h3 id="11-漏氣量換算">1.1 漏氣量換算</h3>
+<p>Dosing valve index → Q 用使用者提供的對照表,表列點之間以 <strong>log Q 對 N 線性內插</strong>:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>index</th><th>20</th><th>25</th><th>50</th><th>75</th><th>100</th><th>125</th><th>150</th><th>175</th><th>200</th></tr></thead>
+<tbody>
+<tr><td>Q (mbar·L/s)</td><td>5.0e-6</td><td>6.3e-6</td><td>2.0e-5</td><td>6.7e-5</td><td>3.0e-4</td><td>7.2e-4</td><td>1.7e-3</td><td>4.2e-3</td><td>1.0e-2</td></tr>
+</tbody></table></div>
+<blockquote><p>⚠️ 對照表除了 index 300 之外<strong>全部是「曲線估讀」</strong>。這代表 Q 的絕對值可能整體偏移, 而下面所有以 <strong>airFrac</strong>(漏氣佔總氣體流量的比例)表示的結果會等比例平移。 但<strong>線性度</strong>、<strong>指標之間的相對優劣</strong>、以及<strong>外推到生產機台的算術</strong>都不受它影響 —— 因為外推走的是流量比,對照表的誤差在分子分母上同時出現。</p></blockquote>
+<p>製程氣體流量:1 sccm = 1.01325/60 mbar·L/s,所以 E1 = 0.507、E2 = 1.013、E3 = 1.689 mbar·L/s。</p>
+<hr>
+<h2 id="2-主要結果n₂-3371-的劑量曲線">2. 主要結果:N₂ 337.1 的劑量曲線</h2>
+<p>參考線:E1 沒有氬氣,用 <strong>O 777.4</strong>;E2/E3 用 <strong>ArUV</strong>(415–436 nm 的 Ar I 多重線, 扣兩側連續光)。為什麼不是 Ar 750.4,見 §4.1。</p>
+<h3 id="e1-o₂-30-sccm033-torr">E1 — O₂ 30 sccm,0.33 torr</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>index</th><th>Q (mbar·L/s)</th><th>airFrac</th><th>N₂ 337</th><th>N₂337/O777</th><th>相對基準</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>0</td><td>0</td><td>90.4</td><td>0.0197</td><td>0.0 %</td></tr>
+<tr><td>25</td><td>6.3e-6</td><td>1.25e-5</td><td>88.8</td><td>0.0194</td><td>−1.7 %</td></tr>
+<tr><td>50</td><td>2.0e-5</td><td>3.95e-5</td><td>81.3</td><td>0.0179</td><td>−8.9 %</td></tr>
+<tr><td>75</td><td>6.7e-5</td><td>1.33e-4</td><td>110.0</td><td>0.0243</td><td><strong>+23.2 %</strong></td></tr>
+<tr><td>100</td><td>3.0e-4</td><td>5.92e-4</td><td>193.5</td><td>0.0429</td><td>+117.9 %</td></tr>
+<tr><td>125</td><td>7.2e-4</td><td>1.42e-3</td><td>408.3</td><td>0.0910</td><td>+362.2 %</td></tr>
+<tr><td>150</td><td>1.7e-3</td><td>3.42e-3</td><td>772.9</td><td>0.1734</td><td>+780.5 %</td></tr>
+<tr><td>175</td><td>4.2e-3</td><td>8.22e-3</td><td>1453.2</td><td>0.3288</td><td>+1570.2 %</td></tr>
+</tbody></table></div>
+<h3 id="e2-o₂-30-ar-30-sccm0495-torr">E2 — O₂ 30 + Ar 30 sccm,0.495 torr</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>index</th><th>Q (mbar·L/s)</th><th>airFrac</th><th>N₂ 337</th><th>N₂337/ArUV</th><th>相對基準</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>0</td><td>0</td><td>226.0</td><td>0.2527</td><td>*(排除,見 §1)*</td></tr>
+<tr><td>25</td><td>6.3e-6</td><td>6.24e-6</td><td>198.5</td><td>0.2238</td><td>0.0 %</td></tr>
+<tr><td>50</td><td>2.0e-5</td><td>1.97e-5</td><td>195.8</td><td>0.2207</td><td>−1.4 %</td></tr>
+<tr><td>75</td><td>6.7e-5</td><td>6.65e-5</td><td>211.8</td><td>0.2392</td><td><strong>+6.9 %</strong></td></tr>
+<tr><td>100</td><td>3.0e-4</td><td>2.96e-4</td><td>251.7</td><td>0.2831</td><td>+26.5 %</td></tr>
+<tr><td>125</td><td>7.2e-4</td><td>7.11e-4</td><td>382.6</td><td>0.4280</td><td>+91.2 %</td></tr>
+<tr><td>150</td><td>1.7e-3</td><td>1.71e-3</td><td>610.4</td><td>0.6793</td><td>+203.5 %</td></tr>
+<tr><td>175</td><td>4.2e-3</td><td>4.11e-3</td><td>1032.0</td><td>1.1449</td><td>+411.5 %</td></tr>
+</tbody></table></div>
+<h3 id="e3-o₂-50-ar-50-sccm104-torr">E3 — O₂ 50 + Ar 50 sccm,1.04 torr</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>index</th><th>Q (mbar·L/s)</th><th>airFrac</th><th>N₂ 337</th><th>N₂337/ArUV</th><th>相對基準</th></tr></thead>
+<tbody>
+<tr><td>20</td><td>5.0e-6</td><td>2.96e-6</td><td>157.4</td><td>0.2257</td><td>0.0 %</td></tr>
+<tr><td>25</td><td>6.3e-6</td><td>3.75e-6</td><td>148.5</td><td>0.2115</td><td>−6.3 %</td></tr>
+<tr><td>50</td><td>2.0e-5</td><td>1.18e-5</td><td>150.9</td><td>0.2145</td><td>−5.0 %</td></tr>
+<tr><td>75</td><td>6.7e-5</td><td>3.99e-5</td><td>155.6</td><td>0.2207</td><td>−2.2 %</td></tr>
+<tr><td>100</td><td>3.0e-4</td><td>1.78e-4</td><td>208.1</td><td>0.2932</td><td><strong>+29.9 %</strong></td></tr>
+<tr><td>125</td><td>7.2e-4</td><td>4.27e-4</td><td>321.0</td><td>0.4508</td><td>+99.7 %</td></tr>
+<tr><td>150</td><td>1.7e-3</td><td>1.03e-3</td><td>555.1</td><td>0.7802</td><td>+245.6 %</td></tr>
+<tr><td>175</td><td>4.2e-3</td><td>2.46e-3</td><td>971.3</td><td>1.3653</td><td>+504.8 %</td></tr>
+</tbody></table></div>
+<h3 id="21-線性">2.1 線性</h3>
+<p>以 <strong>airFrac</strong> 為自變數、<strong>過原點</strong>擬合超出基準的上升量:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>實驗</th><th>k = d(N₂337/ref)/d(airFrac)</th><th>擬合殘差(佔全幅)</th></tr></thead>
+<tbody>
+<tr><td>E1(比 O777)</td><td>38.3</td><td>4.1 %</td></tr>
+<tr><td>E2(比 ArUV)</td><td>233.3</td><td>3.9 %</td></tr>
+<tr><td>E3(比 ArUV)</td><td>480.7</td><td>3.7 %</td></tr>
+</tbody></table></div>
+<p><strong>跨越 2.5 個十倍程、殘差只有 4 %。</strong> 這是一條可以拿來校正的曲線,而不只是「有反應」。 E2 與 E3 的 k 差 2.1 倍,而壓力差 2.1 倍 —— 兩者大致同比例,合理: 較高壓力下同樣的 N₂ 分壓給出更多輻射。這也是後面外推要保留一個係數不確定度的原因。</p>
+<hr>
+<h2 id="3-其他譜線誰有反應誰沒有">3. 其他譜線:誰有反應,誰沒有</h2>
+<p>同樣以 airFrac 為自變數、同一台偵測器(OES2)、同一個 ArUV 參考:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>特徵</th><th>k(E2)</th><th>k(E3)</th><th>評價</th></tr></thead>
+<tbody>
+<tr><td><strong>N₂ SPS 337.1</strong></td><td><strong>233</strong></td><td><strong>481</strong></td><td><strong>最強,而且遠遠最強</strong></td></tr>
+<tr><td>N₂ SPS 357.7</td><td>139</td><td>269</td><td>次強,但生產機台上這個窗口讀到負值(見 §4.3)</td></tr>
+<tr><td>NO γ 236.6</td><td>96</td><td>73</td><td>有反應。生產機台上 NO 的散度 62 %,不堪用</td></tr>
+<tr><td>N₂ SPS 380.5</td><td>33</td><td>71</td><td>弱</td></tr>
+<tr><td>N₂⁺ 391.4</td><td>19</td><td>−8</td><td>不一致,窗口被鄰近結構污染</td></tr>
+<tr><td>OH 309</td><td>~0</td><td>~0</td><td><strong>沒有反應</strong> —— 乾空氣漏進來不帶水</td></tr>
+</tbody></table></div>
+<p>反向的也記一下:<strong>Hα 656.3 與 N₂ 第一正系 ~675 nm 隨漏氣「下降」</strong> (E1 的 Hα 23.6 → 19.1),而 <strong>O 777.4 下降 3~5 %</strong>、<strong>Ar 750.4/811.5 幾乎不動(&lt; 1 %)</strong>。 所以:</p>
+<ul>
+<li><strong>Ar 750.4 / 811.5 是極好的參考線</strong> —— 整個 20 倍的 N₂ 變化裡它們只動 1 % 以內。 這一點直接支持出廠比值組與站點比值組把 Ar 當分母的選擇。
+</li>
+<li><strong>O 777 會被漏氣稍微壓下去</strong>,所以 N₂/O777 的靈敏度略高於 N₂ 絕對值 —— 代價是分母也在動。
+</li>
+</ul>
+<hr>
+<h2 id="4-外推到生產機台">4. 外推到生產機台</h2>
+<h3 id="41-為什麼不能用-ar-7504-當橋樑">4.1 為什麼不能用 Ar 750.4 當橋樑</h3>
+<p>實驗機台把 <strong>N₂ 337 量在 OES2、Ar 750 量在 OES1</strong>,兩台不同的光譜儀、各自未經輻射校正。 <code>N₂337(OES2 counts) / Ar750(OES1 counts)</code> 這個數字<strong>沒有物理意義可以搬到別台機器上</strong>。</p>
+<p>實測的證據:<code>ArUV/Ar750</code> 在實驗機台是 0.14~0.17,在生產機台是 <strong>0.026</strong> —— 差 6 倍。 那不是電漿差異,是兩台光譜儀在 425 nm 與 750 nm 的相對響應差異。 用 Ar 750 當橋樑會得到 φ_min ≈ 1.5×10⁻⁵ 這種<strong>過度樂觀 3~7 倍</strong>的數字。</p>
+<p>所以橋樑必須是<strong>同一台偵測器上、而且波長靠近 337 的參考</strong>: 415–436 nm 的 Ar I 多重線(ArUV)。337 與 426 相距 89 nm,兩台光譜儀在這個區間的 相對響應差異遠小於 337 對 750。</p>
+<blockquote><p><strong>這是本次分析裡唯一一個「換個算法就差 5 倍」的地方。</strong> 記下來,因為它下次還會出現。</p></blockquote>
+<h3 id="42-生產機台的無漏讀值">4.2 生產機台的無漏讀值</h3>
+<p>用同一套抽取幾何(站點設定 §4.2,含 +0.30 nm 軸偏移)掃 2026-08-20/21 全部 226 筆錄檔, 取製程 C(Ar/O &gt; 0.5)的 74 筆:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>量</th><th>平均</th><th>標準差</th></tr></thead>
+<tbody>
+<tr><td>N₂ 337 peak height</td><td><strong>144.0</strong></td><td>52.9(36.7 %)</td></tr>
+<tr><td>ArUV</td><td>796.3</td><td>215.9(27.1 %)</td></tr>
+<tr><td>Ar 750</td><td>30415</td><td>2822(9.3 %)</td></tr>
+<tr><td>CO 330</td><td>13402</td><td>4698(35.1 %)</td></tr>
+<tr><td><code>R = N₂337/CO330</code></td><td>0.01080</td><td>0.00115(<strong>10.7 %</strong>)</td></tr>
+</tbody></table></div>
+<p><code>R</code> 在兩天全部 C 段上的散度 10.7 %,而計畫 §3 在<strong>固定取樣點</strong>上量到的是 3.1 % —— 差的那一截正是批次內視窗結垢的漂移,也就是 P2 那一整層存在的理由。這一致性同時說明 本次抽取重現了計畫當初的設定。</p>
+<h3 id="43-可偵測的漏氣量">4.3 可偵測的漏氣量</h3>
+<p>判準沿用計畫 §5.1:<code>R_N2CO_C</code> 要動 <strong>3 × 3.1 % = 9.3 %</strong> 才算偵測到。 分母 CO 330 不隨漏氣變,所以這等於分子要多出</p>
+<p>9.3 % × 144 = 13.4 counts 的 N₂ 337</p>
+<p>而實驗機台給出每單位 airFrac 的增量(換算到生產機台的 ArUV 尺度):</p>
+<div class="tablewrap"><table>
+<thead><tr><th>k 來源</th><th>dN₂337/d(airFrac)</th><th><strong>φ_min</strong></th></tr></thead>
+<tbody>
+<tr><td>E2(0.495 torr)</td><td>1.86×10⁵ counts</td><td><strong>7.2×10⁻⁵</strong></td></tr>
+<tr><td>E3(1.04 torr)</td><td>3.83×10⁵ counts</td><td><strong>3.5×10⁻⁵</strong></td></tr>
+</tbody></table></div>
+<p>也就是:<strong>生產機台能偵測到「空氣佔總氣體流量 3.5×10⁻⁵ ~ 7.2×10⁻⁵」的漏氣。</strong></p>
+<p>換成漏率要乘上生產機台的<strong>總製程氣體流量</strong>:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>總流量</th><th>F (mbar·L/s)</th><th>Q_det(E2 的 k)</th><th>Q_det(E3 的 k)</th></tr></thead>
+<tbody>
+<tr><td>100 sccm</td><td>1.69</td><td>1.2e-4</td><td>5.9e-5</td></tr>
+<tr><td>200 sccm</td><td>3.38</td><td>2.4e-4</td><td>1.2e-4</td></tr>
+<tr><td>300 sccm</td><td>5.07</td><td>3.6e-4</td><td>1.8e-4</td></tr>
+<tr><td>500 sccm</td><td>8.44</td><td>6.1e-4</td><td>3.0e-4</td></tr>
+<tr><td>1000 sccm</td><td>16.9</td><td>1.2e-3</td><td>5.9e-4</td></tr>
+<tr><td>2000 sccm</td><td>33.8</td><td>2.4e-3</td><td>1.2e-3</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="5-體積不進來但時間會">5. 體積不進來,但時間會</h2>
+<p><strong>穩態的光譜訊號只取決於漏氣佔總流量的比例,與腔體體積無關。</strong> 穩態下任一物種的分壓 = 它的流量 ÷ 抽速,兩種氣體被同一套幫浦抽,所以 N₂ 與 O₂ 的比例就是它們流量的比例。15 L 換成 400 L 不改變這件事。</p>
+<p>體積改變的是<strong>時間常數</strong> τ = V·P/F —— 漏氣開始之後多久才到穩態:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>情境</th><th>τ</th></tr></thead>
+<tbody>
+<tr><td>實驗機台 E1 / E2 / E3</td><td>13.0 / 9.8 / 12.3 s</td></tr>
+<tr><td>生產 400 L,1 torr,100 sccm</td><td><strong>316 s</strong></td></tr>
+<tr><td>生產 400 L,1 torr,250 sccm</td><td>126 s</td></tr>
+<tr><td>生產 400 L,1 torr,500 sccm</td><td>63 s</td></tr>
+<tr><td>生產 400 L,0.5 torr,500 sccm</td><td>32 s</td></tr>
+</tbody></table></div>
+<blockquote><h3 id="這一段的結論會改變設計判斷">這一段的結論會改變設計判斷</h3>
+<p>生產機台的電漿步驟長約 <strong>84 s</strong>。若總流量在數百 sccm 以下,τ 是<strong>分鐘等級</strong> —— <strong>一個剛出現的漏氣,在單一步驟之內根本到不了穩態</strong>。</p>
+<p>也就是說:<strong>逐幀監看不是這個問題的正確工具,跨批次比較才是。</strong> P2/P3 建的那一層(一批一個點、固定取樣位置、穩健 σ 帶)不是備案,是主力。 而且 τ 遠大於步驟長度也意味著漏氣訊號在批次之間會<strong>平滑地爬升</strong>, 正好是「連續三批超過 3 σ」這條規則要抓的形狀。</p>
+<p>反過來說,實驗機台 13 s 的 τ 讓每一筆 60 s 錄檔都穩穩落在穩態 —— 上面的劑量曲線可信。</p></blockquote>
+<hr>
+<h2 id="6-go-no-go目標數字要重算">6. GO / NO-GO:目標數字要重算</h2>
+<p>計畫 §5.1 的 <code>Q_min = 1×10⁻⁴ mbar·L/s</code> 是從「rate-of-rise 1 mTorr/min × 腔體約 50 L」推的。 <strong>腔體實際是 400 L,這個數字必須重算</strong>,而且方向對本計畫有利:同樣的 rate-of-rise 規格 套在更大的腔體上,允許的漏率就更大。</p>
+<p>Q = (rate-of-rise) × V</p>
+<div class="tablewrap"><table>
+<thead><tr><th>rate-of-rise 規格</th><th>× 400 L → Q</th></tr></thead>
+<tbody>
+<tr><td>1 mTorr/min</td><td>8.9×10⁻³ mbar·L/s</td></tr>
+<tr><td>0.3 mTorr/min</td><td>2.7×10⁻³</td></tr>
+<tr><td>0.1 mTorr/min</td><td>8.9×10⁻⁴</td></tr>
+<tr><td>0.03 mTorr/min</td><td>2.7×10⁻⁴</td></tr>
+<tr><td>0.01 mTorr/min</td><td>8.9×10⁻⁵</td></tr>
+</tbody></table></div>
+<p>把它和 §4.3 的偵測能力擺在一起(取 500 sccm、E2 的保守 k,Q_det = 6.1×10⁻⁴):</p>
+<div class="tablewrap"><table>
+<thead><tr><th>規格</th><th>目標 Q</th><th>餘裕</th></tr></thead>
+<tbody>
+<tr><td>1 mTorr/min</td><td>8.9e-3</td><td><strong>15 倍,明確 GO</strong></td></tr>
+<tr><td>0.3 mTorr/min</td><td>2.7e-3</td><td>4.4 倍,GO</td></tr>
+<tr><td>0.1 mTorr/min</td><td>8.9e-4</td><td>1.5 倍,勉強</td></tr>
+<tr><td>0.03 mTorr/min</td><td>2.7e-4</td><td><strong>不足,NO-GO</strong></td></tr>
+<tr><td>舊的 1e-4 目標</td><td>1.0e-4</td><td>不足 6 倍</td></tr>
+</tbody></table></div>
+<p><strong>結論取決於兩個目前還沒有的數字</strong>:</p>
+<ol>
+<li><strong>生產機台製程 C 的總氣體流量</strong>(sccm)。
+</li>
+<li><strong>這台機台實際的 rate-of-rise / 漏率驗收規格。</strong>
+</li>
+</ol>
+<p>有了這兩個數字,上面兩張表交叉一次就得到答案,不需要再上機做一次漏氣測試。</p>
+<hr>
+<h2 id="7-這次實驗不能回答的事">7. 這次實驗不能回答的事</h2>
+<ol>
+<li><strong>實驗機台沒有 TEOS。</strong> 這是最大的一條。已經處理掉的部分:外推用的是 <strong>生產機台自己的無漏讀值(144 counts)與自己的跨批次 σ(3.1 %)</strong>, 所以 TEOS 連續光把 337 墊高、以及它帶來的散度,都已經算在裡面了。 <strong>沒有處理掉的部分</strong>:k 本身可能因為 TEOS 而改變。含碳電漿裡漏進來的 N₂ 會有一部分變成 CN/HCN 或進到膜裡,那會<strong>減少</strong> N₂ 337。這個折損目前無法量化, 可能是幾成,也可能是幾倍。
+</li>
+<li><strong>CN 388 不是零背景指標。</strong> 原本期待「無氮的含碳電漿裡 CN 應該是零,所以任何 N 進來都會亮」, 但生產機台無漏時 388 nm 就讀到 1204 counts(是 ArUV 的 1.5 倍),散度 25 %。 那個窗口在 TEOS 電漿裡本來就有東西(CH/C₂/CO 都在附近), <strong>不要把它當成 CN,也不要當成漏氣指標</strong> —— 這是一個看起來很好、實際上不成立的想法, 和計畫 §3 記下的那三個一樣。
+</li>
+<li><strong>N₂ 357.7 在生產機台上讀到負值</strong>(−239),它的連續視窗高於帶本身。 實驗機台上 357.7 是第二強的指標,<strong>但它搬不過去</strong>。只有 337.1 兩邊都成立。
+</li>
+<li><strong>兩台光譜儀的相對輻射響應</strong>沒有校正,只用「337 與 426 靠得夠近」來論證。 這是外推裡最後一個未量化的假設,估計影響在 1.5 倍以內。
+</li>
+<li><strong>對照表的絕對值。</strong> 見 §1.1。
+</li>
+</ol>
+<hr>
+<h2 id="8-對程式的影響">8. 對程式的影響</h2>
+<p><strong>沒有需要改的程式碼。</strong> 這份資料驗證的是既有設計的三個選擇:</p>
+<ul>
+<li><strong>N₂ 337.1 是對的指標</strong> —— 它比第二名強 1.7~2.4 倍,而且是唯一一個在兩台機器上都成立的。
+</li>
+<li><strong>Ar 750.4 / 811.5 是對的參考線</strong> —— 20 倍的 N₂ 變化裡它們動不到 1 %。
+</li>
+<li><strong>跨批次層(P2/P3)是主力而不是備案</strong> —— §5 的時間常數說明逐幀判定在 400 L 上做不到。
+</li>
+</ul>
+<p><strong>這份資料不能當成生產機台的 <code>LeakCalibration</code> 匯入</strong>:機台不同、沒有 TEOS, 而校正在程式裡是綁定某一份 Golden Run 的。它是<strong>選指標與估靈敏度的依據</strong>,不是校正係數。</p>
+<hr>
+<h2 id="附錄重現">附錄:重現</h2>
+<p>分析腳本在 <code>$CLAUDE_JOB_DIR/tmp</code>(load / qmap / extract / fit2 / transfer / transfer2 / table), 純 Python,無外部相依。抽取幾何與 app 的 <code>LineIntensityExtractor</code> PeakHeight 一致, 所以同一組窗口參數貼進 <code>settings.json</code> 會得到同樣的數字。</p>
+</main>
+</div>
+</body>
+</html>
