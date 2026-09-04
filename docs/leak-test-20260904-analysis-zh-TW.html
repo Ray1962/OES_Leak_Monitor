@@ -209,6 +209,8 @@ td code{white-space:nowrap;}
 <tr><td>E2(比 ArUV)</td><td>233.3</td><td>3.9 %</td></tr>
 <tr><td>E3(比 ArUV)</td><td>480.7</td><td>3.7 %</td></tr>
 </tbody></table></div>
+<blockquote><p>⚠️ <strong>上表用的是帶內平均,引擎用的是帶內最大值。</strong> <code>LineIntensityExtractor</code> 的 <code>PeakHeight</code> 取的是視窗內扣連續光後的<strong>最大值</strong>,而本文前面的離線抽取取的是平均。兩者不是同一個數, 所以<strong>外推必須整套改用引擎的定義</strong>(§4.3 已經改用)。改用之後 k 變成 <strong>424.5(E2)/ 980.3(E3)</strong>,而且線性更好(殘差 2.4 % / 2.0 %)。</p>
+<p>計畫 §4.1 早就寫過這條:「離線分析用的是自寫的 peak-height,視窗幾何與 <code>LineIntensityExtractor</code> 不同,所以離線的 CV 不會自動移轉」。這次仍然踩到了, 差別是這回連<strong>抽取的定義</strong>都不同,不只是視窗幾何。</p></blockquote>
 <p><strong>跨越 2.5 個十倍程、殘差只有 4 %。</strong> 這是一條可以拿來校正的曲線,而不只是「有反應」。 E2 與 E3 的 k 差 2.1 倍,而壓力差 2.1 倍 —— 兩者大致同比例,合理: 較高壓力下同樣的 N₂ 分壓給出更多輻射。這也是後面外推要保留一個係數不確定度的原因。</p>
 <hr>
 <h2 id="3-其他譜線誰有反應誰沒有">3. 其他譜線:誰有反應,誰沒有</h2>
@@ -239,37 +241,37 @@ td code{white-space:nowrap;}
 <blockquote><p><strong>這是本次分析裡唯一一個「換個算法就差 5 倍」的地方。</strong> 記下來,因為它下次還會出現。</p></blockquote>
 <h3 id="42-生產機台的無漏讀值">4.2 生產機台的無漏讀值</h3>
 <p>用同一套抽取幾何(站點設定 §4.2,含 +0.30 nm 軸偏移)掃 2026-08-20/21 全部 226 筆錄檔, 取製程 C(Ar/O &gt; 0.5)的 74 筆:</p>
+<p><strong>以引擎自己的 <code>PeakHeight</code>(帶內最大值)抽取</strong>,74 筆製程 C:</p>
 <div class="tablewrap"><table>
 <thead><tr><th>量</th><th>平均</th><th>標準差</th></tr></thead>
 <tbody>
-<tr><td>N₂ 337 peak height</td><td><strong>144.0</strong></td><td>52.9(36.7 %)</td></tr>
-<tr><td>ArUV</td><td>796.3</td><td>215.9(27.1 %)</td></tr>
-<tr><td>Ar 750</td><td>30415</td><td>2822(9.3 %)</td></tr>
-<tr><td>CO 330</td><td>13402</td><td>4698(35.1 %)</td></tr>
-<tr><td><code>R = N₂337/CO330</code></td><td>0.01080</td><td>0.00115(<strong>10.7 %</strong>)</td></tr>
+<tr><td>N₂ 337 peak height</td><td><strong>467.1</strong></td><td>154.8(33 %)</td></tr>
+<tr><td>ArUV</td><td>804.8</td><td>—</td></tr>
+<tr><td><code>R = N₂337/CO330</code></td><td><strong>0.02162</strong></td><td>0.00152(<strong>7.0 %</strong>)</td></tr>
 </tbody></table></div>
-<p><code>R</code> 在兩天全部 C 段上的散度 10.7 %,而計畫 §3 在<strong>固定取樣點</strong>上量到的是 3.1 % —— 差的那一截正是批次內視窗結垢的漂移,也就是 P2 那一整層存在的理由。這一致性同時說明 本次抽取重現了計畫當初的設定。</p>
+<p>(同一份資料用帶內平均抽取是 144.0 與 0.01080 —— 見 §2.1 的警告,那組數字不能拿來外推。)</p>
+<p><code>R</code> 在兩天全部 C 段上的散度 7.0 %,而計畫 §3 在<strong>固定取樣點</strong>上量到的是 3.1 % —— 差的那一截正是批次內視窗結垢的漂移,也就是 P2 那一整層存在的理由。這一致性同時說明 本次抽取重現了計畫當初的設定。</p>
 <h3 id="43-可偵測的漏氣量">4.3 可偵測的漏氣量</h3>
 <p>判準沿用計畫 §5.1:<code>R_N2CO_C</code> 要動 <strong>3 × 3.1 % = 9.3 %</strong> 才算偵測到。 分母 CO 330 不隨漏氣變,所以這等於分子要多出</p>
-<p>9.3 % × 144 = 13.4 counts 的 N₂ 337</p>
-<p>而實驗機台給出每單位 airFrac 的增量(換算到生產機台的 ArUV 尺度):</p>
+<p>9.3 % × 467.1 = 43.4 counts 的 N₂ 337</p>
+<p>而實驗機台給出每單位 airFrac 的增量(全部以引擎的 <code>PeakHeight</code> 抽取,換算到 ArUV 尺度):</p>
 <div class="tablewrap"><table>
-<thead><tr><th>k 來源</th><th>dN₂337/d(airFrac)</th><th><strong>φ_min</strong></th></tr></thead>
+<thead><tr><th>k 來源</th><th>k</th><th>dN₂337/d(airFrac)</th><th><strong>φ_min</strong></th></tr></thead>
 <tbody>
-<tr><td>E2(0.495 torr)</td><td>1.86×10⁵ counts</td><td><strong>7.2×10⁻⁵</strong></td></tr>
-<tr><td>E3(1.04 torr)</td><td>3.83×10⁵ counts</td><td><strong>3.5×10⁻⁵</strong></td></tr>
+<tr><td>E2(0.495 torr)</td><td>424.5</td><td>3.42×10⁵ counts</td><td><strong>1.27×10⁻⁴</strong></td></tr>
+<tr><td>E3(1.04 torr)</td><td>980.3</td><td>7.89×10⁵ counts</td><td><strong>5.5×10⁻⁵</strong></td></tr>
 </tbody></table></div>
-<p>也就是:<strong>生產機台能偵測到「空氣佔總氣體流量 3.5×10⁻⁵ ~ 7.2×10⁻⁵」的漏氣。</strong></p>
+<p>也就是:<strong>生產機台能偵測到「空氣佔總氣體流量 5.5×10⁻⁵ ~ 1.27×10⁻⁴」的漏氣。</strong></p>
 <p>換成漏率要乘上生產機台的<strong>總製程氣體流量</strong>:</p>
 <div class="tablewrap"><table>
 <thead><tr><th>總流量</th><th>F (mbar·L/s)</th><th>Q_det(E2 的 k)</th><th>Q_det(E3 的 k)</th></tr></thead>
 <tbody>
-<tr><td>100 sccm</td><td>1.69</td><td>1.2e-4</td><td>5.9e-5</td></tr>
-<tr><td>200 sccm</td><td>3.38</td><td>2.4e-4</td><td>1.2e-4</td></tr>
-<tr><td>300 sccm</td><td>5.07</td><td>3.6e-4</td><td>1.8e-4</td></tr>
-<tr><td>500 sccm</td><td>8.44</td><td>6.1e-4</td><td>3.0e-4</td></tr>
-<tr><td>1000 sccm</td><td>16.9</td><td>1.2e-3</td><td>5.9e-4</td></tr>
-<tr><td>2000 sccm</td><td>33.8</td><td>2.4e-3</td><td>1.2e-3</td></tr>
+<tr><td>100 sccm</td><td>1.69</td><td>2.1e-4</td><td>9.3e-5</td></tr>
+<tr><td>200 sccm</td><td>3.38</td><td>4.3e-4</td><td>1.9e-4</td></tr>
+<tr><td>300 sccm</td><td>5.07</td><td>6.4e-4</td><td>2.8e-4</td></tr>
+<tr><td><strong>500 sccm(實際值)</strong></td><td><strong>8.44</strong></td><td><strong>1.07e-3</strong></td><td><strong>4.65e-4</strong></td></tr>
+<tr><td>1000 sccm</td><td>16.9</td><td>2.1e-3</td><td>9.3e-4</td></tr>
+<tr><td>2000 sccm</td><td>33.8</td><td>4.3e-3</td><td>1.9e-3</td></tr>
 </tbody></table></div>
 <hr>
 <h2 id="5-體積不進來但時間會">5. 體積不進來,但時間會</h2>
@@ -318,15 +320,15 @@ td code{white-space:nowrap;}
 <tbody>
 <tr><td>總流量</td><td>500 sccm = <strong>8.444 mbar·L/s</strong></td></tr>
 <tr><td>目標漏率</td><td>1 mTorr/min × 400 L = <strong>8.89×10⁻³ mbar·L/s</strong></td></tr>
-<tr><td>可偵測(保守 k,E2)</td><td><strong>6.1×10⁻⁴ mbar·L/s</strong> → <strong>餘裕 14.6 倍</strong></td></tr>
-<tr><td>可偵測(E3 的 k)</td><td>3.0×10⁻⁴ mbar·L/s → 餘裕 30.1 倍</td></tr>
+<tr><td>可偵測(保守 k,E2)</td><td><strong>1.07×10⁻³ mbar·L/s</strong> → <strong>餘裕 8.3 倍</strong></td></tr>
+<tr><td>可偵測(E3 的 k)</td><td>4.65×10⁻⁴ mbar·L/s → 餘裕 19.1 倍</td></tr>
 </tbody></table></div>
 <p><strong>GO,而且不是勉強過關。</strong></p>
 <p>規格大小的漏氣在 <code>R_N2CO_C</code> 上不是一個 9.3 % 的邊緣訊號,而是</p>
-<p>+196 counts(保守)～ +403 counts,對上無漏的 144 counts = <strong>+136 % ～ +280 %</strong></p>
-<p>也就是<strong>讀值會變成兩到四倍</strong>。這個餘裕的意義在於它<strong>吸收得掉 §7 那條沒有量化的風險</strong>: 就算 TEOS 把 k 砍掉一個數量級,仍然偵測得到規格大小的漏氣。</p>
+<p>+360 counts(保守)～ +830 counts,對上無漏的 467 counts = <strong>+77 % ～ +178 %</strong></p>
+<p>也就是<strong>讀值會變成兩到三倍</strong>。這個餘裕的意義在於它<strong>吸收得掉 §7 那條沒有量化的風險</strong>: 就算 TEOS 把 k 砍掉八倍,仍然偵測得到規格大小的漏氣。</p>
 <p>順帶得到洩漏率校正的靈敏度(P5 用):</p>
-<p>x = s × Q,  s = 153（E2 的 k）～ 315（E3 的 k） per (mbar·L/s)</p>
+<p>x = s × Q,  s = 86.6（E2 的 k）～ 200（E3 的 k） per (mbar·L/s)</p>
 <p>其中 x 是 <code>R_N2CO_C</code> 相對無漏基準的分數上升量。</p>
 <hr>
 <h2 id="7-這次實驗不能回答的事">7. 這次實驗不能回答的事</h2>
