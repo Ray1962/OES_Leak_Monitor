@@ -21,7 +21,9 @@ public sealed class SettingsService
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() },
+        // OesSdkEnumJsonConverter first: it reads the enum names Aqst.OesSpectrometer 0.5.0 renamed
+        // ("HardwareAverage"), which would otherwise fail to parse and make Load() fall back to defaults.
+        Converters = { new OesSdkEnumJsonConverter(), new JsonStringEnumConverter() },
     };
 
     public string ConfigDirectory { get; }

@@ -37,7 +37,7 @@ public class RatioRoleTests
         return new SpectrumSample
         {
             Timestamp = Epoch.AddSeconds(seconds), Wavelengths = wl, Intensities = inten,
-            IntegrationTime = 0, AverageCount = 0, SerialNumber = "T", IsTestMode = true,
+            IntegrationTime = 0, AverageCount = 0, SerialNumber = "T", IsSimulated = true,
         };
     }
 

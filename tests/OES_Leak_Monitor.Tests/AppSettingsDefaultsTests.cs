@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using OES_Leak_Monitor;
 using Xunit;
@@ -63,5 +64,34 @@ public class AppSettingsDefaultsTests
             """{"devices":[{"forceTestMode":true}]}""", OnDisk)!;
 
         Assert.True(settings.Devices[0].ForceTestMode);
+    }
+
+    /// <summary>
+    /// Aqst.OesSpectrometer 0.5.0 renamed <c>OesAcquireMode.HardwareAverage</c> to <c>HWAvg</c> with
+    /// no alias. Every settings.json saved before the upgrade says "HardwareAverage"; if that fails
+    /// to parse, <c>Load</c> falls back to defaults and the next Save overwrites the site's
+    /// installed configuration. Goes through the real <c>SettingsService</c>, because the fallback
+    /// that hides the failure lives there.
+    /// </summary>
+    [Fact]
+    public void SettingsSavedBeforeSdk050_StillLoad()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "OesLeakSettings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "settings.json"),
+                """{"devices":[{"integrationTimeMs":150,"acquireMode":"HardwareAverage","averageMode":"Software"}]}""");
+
+            var settings = new SettingsService(dir).Load();
+
+            Assert.Equal(150f, settings.Devices[0].IntegrationTimeMs);   // not the factory 50 ms
+            Assert.Equal(Aqst.OesSpectrometer.Models.OesAcquireMode.HWAvg, settings.Devices[0].AcquireMode);
+            Assert.Equal(Aqst.OesSpectrometer.Models.OesAverageMode.Software, settings.Devices[0].AverageMode);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }

@@ -48,7 +48,7 @@ public class ReplayEndResetTests
             IntegrationTime = 0,
             AverageCount = 0,
             SerialNumber = "TEST",
-            IsTestMode = true,
+            IsSimulated = true,
         };
     }
 

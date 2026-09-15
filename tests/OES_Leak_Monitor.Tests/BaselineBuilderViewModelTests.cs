@@ -96,4 +96,29 @@ public class AcquisitionFingerprintTests
 
         Assert.Contains("integration 150 → 40", slower.Differences(Live()));
     }
+
+    /// <summary>
+    /// Baselines and sidecars recorded before Aqst.OesSpectrometer 0.5.0 stored
+    /// <c>OesAcquireMode.ToString()</c> as "HardwareAverage"; the same call now returns "HWAvg".
+    /// Same acquire method, different spelling — reporting it would warn on every frame against
+    /// every existing baseline.
+    /// </summary>
+    [Fact]
+    public void AcquireModeRecordedBeforeSdk050_IsNotAChange()
+    {
+        var recordedBefore = Live();                        // "HardwareAverage"
+        var liveNow = Live();
+        liveNow.AcquireMode = "HWAvg";
+
+        Assert.Equal("", liveNow.Differences(recordedBefore));
+    }
+
+    [Fact]
+    public void ARealAcquireModeChangeIsStillReported()
+    {
+        var liveNow = Live();
+        liveNow.AcquireMode = "Oneshot";
+
+        Assert.Contains("acquire mode", liveNow.Differences(Live()));
+    }
 }

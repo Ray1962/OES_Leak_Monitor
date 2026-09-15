@@ -268,7 +268,9 @@ public sealed class AcquisitionFingerprint
             Cmp("integration", IntegrationTimeMs, other.IntegrationTimeMs);
             Cmp("average", AverageCount, other.AverageCount);
             Cmp("boxcar", BoxcarWidth, other.BoxcarWidth);
-            Cmp("acquire mode", AcquireMode, other.AcquireMode);
+            // Recorded before SDK 0.5.0 as "HardwareAverage"; the same method is "HWAvg" now.
+            Cmp("acquire mode", OesSdkEnumJsonConverter.CanonicalName<Aqst.OesSpectrometer.Models.OesAcquireMode>(AcquireMode),
+                                OesSdkEnumJsonConverter.CanonicalName<Aqst.OesSpectrometer.Models.OesAcquireMode>(other.AcquireMode));
             Cmp("average mode", AverageMode, other.AverageMode);
             Cmp("background removal", BackgroundRemove, other.BackgroundRemove);
             Cmp("stray-light correction", StraylightCorrection, other.StraylightCorrection);

@@ -298,7 +298,7 @@ public class LeakInjectionTests
                 IntegrationTime = f.IntegrationTime,
                 AverageCount = f.AverageCount,
                 SerialNumber = f.SerialNumber,
-                IsTestMode = true,
+                IsSimulated = true,
             });
         }
         return seen;

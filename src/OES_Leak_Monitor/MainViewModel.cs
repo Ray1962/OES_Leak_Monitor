@@ -497,7 +497,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // recorders are pointed at replay output when such a frame arrives, the replay cannot
         // deliver anything and the SIM prefix is now filing *measurement* as replay output,
         // which is the safeguard used exactly backwards. Tear it down on the first such frame.
-        if (!raw.IsTestMode && _replayOutputActive) AbortReplayForHardware();
+        if (!raw.IsSimulated && _replayOutputActive) AbortReplayForHardware();
 
         var tick = _replay.Advance(raw);
         if ((uint)slot < (uint)_replayHandledFrame.Length) _replayHandledFrame[slot] = tick.Handled;
