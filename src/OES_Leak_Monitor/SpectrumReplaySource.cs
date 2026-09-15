@@ -269,11 +269,11 @@ public sealed class SpectrumReplaySource
     /// tick emptied the recording.
     /// <see cref="ReplayTick.Handled"/> is false — and the caller should use the device's own
     /// frame — when no recording is loaded, playback has not been started, or the frame came
-    /// from real hardware (<see cref="SpectrumSample.IsTestMode"/> false), which always wins.
+    /// from real hardware (<see cref="SpectrumSample.IsSimulated"/> false), which always wins.
     /// </summary>
     public ReplayTick Advance(SpectrumSample raw)
     {
-        if (raw is null || !raw.IsTestMode) return default;
+        if (raw is null || !raw.IsSimulated) return default;
 
         List<SpectrumSample>? frames = null;
         SpectrumSample? display;
@@ -361,7 +361,7 @@ public sealed class SpectrumReplaySource
             IntegrationTime = raw.IntegrationTime,
             AverageCount    = raw.AverageCount,
             SerialNumber    = raw.SerialNumber,
-            IsTestMode      = true,
+            IsSimulated     = true,
         };
     }
 

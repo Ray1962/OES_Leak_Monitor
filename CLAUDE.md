@@ -55,16 +55,18 @@ Two guards exist because a publish can "succeed" and still produce an unshippabl
 
 | Package | Pinned | Built from |
 |---|---|---|
-| `Aqst.OesApp.Core` | 0.1.9 | `Ray1962/DualOes_PlasmaMonitor` — `dotnet pack DualOes_PlasmaMonitor.sln -c Release -p:Platform=x64` |
-| `Aqst.OesApp.Wpf` | 0.1.15 | same solution, same command |
-| `Aqst.OesSpectrometer` | 0.4.6 | a **different** repo, `Ray1962/Aqst.OesSpectrometer` — the hardware SDK, not the app framework |
+| `Aqst.OesApp.Core` | 0.1.10 | `Ray1962/DualOes_PlasmaMonitor` — `dotnet pack DualOes_PlasmaMonitor.sln -c Release -p:Platform=x64` |
+| `Aqst.OesApp.Wpf` | 0.1.16 | same solution, same command |
+| `Aqst.OesSpectrometer` | 0.5.0 | a **different** repo, `Ray1962/Aqst.OesSpectrometer` — the hardware SDK, not the app framework |
 | `Aqusen.Secs` | 0.6.0 | a **third** repo, `Ray1962/Test_SECS` — the SECS/GEM library (see its `整合指南.md`). Packed with `dotnet pack src/Aqusen.Secs/Aqusen.Secs.csproj -c Release -o nupkgs`, then the nupkg is copied into `LocalPackages` |
 
 `nuget.config` also lists a second local source, `aqusen`, pointing at `Test_SECS\nupkgs`. Both on purpose: `local-aqst` is what makes a build reproducible on a machine with no `Test_SECS` checkout, `aqusen` is what picks up a fresh pack during development without a copy step. `Secs4Net` 2.4.4 comes from nuget.org (via `Aqusen.Secs`, and referenced directly for `SecsGemOptions`).
 
 The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj as the source of truth and update this table when it moves. Bumping `Aqst.OesApp.*` means editing `<Version>` in that library's csproj, re-packing (the `<PackageOutputPath>` writes straight into the local feed), then bumping the `<PackageReference>` here — and in `DualOes_PlasmaMonitor`'s own app and `template/`, which pin the same packages.
 
-`0.4.6` of the SDK is what supplies `OesAcquireMode` / `OesAverageMode`; it also stopped opting into `UAI_BackgroundRemove` implicitly, though `DeviceViewModel` still passes `EnableBackgroundRemove = true`, so this app's behaviour is unchanged.
+`0.4.6` of the SDK is what supplied `OesAcquireMode` / `OesAverageMode`; it also stopped opting into `UAI_BackgroundRemove` implicitly, though `DeviceViewModel` still passes `EnableBackgroundRemove = true`, so this app's behaviour is unchanged.
+
+`0.5.0` of the SDK renamed `OesAcquireMode.HardwareAverage` → `HWAvg` (and `MeasurementMode.Normal` → `Intensity`, `DeviceConnectionStatus.TestMode` → `Simulating`) **with no alias**, plus `SpectrumSample.IsTestMode` → `IsSimulated`. Two places in this app hold the old spelling as text and must keep reading it: `settings.json` (`"acquireMode": "HardwareAverage"`) — `SettingsService` registers Core 0.1.10's `OesSdkEnumJsonConverter` **before** `JsonStringEnumConverter`, without which `Load()` throws, falls back to defaults and the next Save wipes the site configuration — and every baseline / sidecar `AcquisitionFingerprint.AcquireMode`, which `Differences()` compares through `OesSdkEnumJsonConverter.CanonicalName` so an old baseline does not report `acquire mode HardwareAverage → HWAvg` on every frame. Both have tests (`SettingsSavedBeforeSdk050_StillLoad`, `AcquireModeRecordedBeforeSdk050_IsNotAChange`). `DeviceSettings.ForceTestMode`, `DeviceViewModel.IsTestMode`, the snapshot `TestMode`, `SuppressAlarmsInTestMode` and the `oes.testMode` SECS binding are this app's / the framework's own names and were deliberately left alone.
 
 `Core 0.1.4` fixes the intensity logger's silent data loss on a mid-session wavelength-axis change. `IntensityCsvWriter.WriteRow` now takes the frame's own axis (`WriteRow(timestamp, wavelengths, intensities)`) and returns a `RowWriteResult`; when the axis differs from the one the header was written from it closes the file and continues into the next rotation file (summary companion included) carrying the new axis. Previously such rows were dropped with no signal at all, so the session stayed in `Saving` with a CSV that never gained another row. `DualIntensityLogger` surfaces it as the new `FileRolled` event (`FileRollReason.SpectrumAxisChanged` / `RowLimit`), which `MainViewModel.OnIntensityFileRolled` logs — Warning for an axis change, since it means an acquisition parameter was reapplied mid-save and any Golden Run from the old exposure no longer applies. `Wpf 0.1.8` is only a re-pack against the new Core.
 
@@ -104,7 +106,7 @@ This is a **single-OES** leak-monitoring fork of a previously dual-OES codebase.
 - `AccessControlService`, `UserRole` (Guest < Operator < Engineer < Admin), `LoginDialog`, `UserManagementDialog`, `AccessControlConfig`
 - `OesAppPaths` — resolves per-user AppData subfolders (`Config`, `Log`, `Data`) under the app folder name
 - `RelayCommand`, `DeviceSettings`, `LoggerSettings`, `LogSeverity`
-  - `DeviceSettings.AcquireMode` (`HardwareAverage` / `Oneshot` / `Standard`) and `DeviceSettings.AverageMode` (`Hardware` / `Software`) are exposed as combo boxes in the Configuration tab and hot-applied by Apply (`UpdateParametersAsync`). `Oneshot` is the fix for segmented / torn frames on Z5 / Ethernet modules; `Software` averaging trades N× wall-clock for avoiding the peak shift / broadening some hardware averagers introduce. Both round-trip through `settings.json` as strings (`SettingsService` registers `JsonStringEnumConverter`), so pre-existing files without the keys just keep the defaults.
+  - `DeviceSettings.AcquireMode` (`HWAvg` / `Oneshot` / `Standard`; `HWAvg` was `HardwareAverage` before SDK 0.5.0) and `DeviceSettings.AverageMode` (`Hardware` / `Software`) are exposed as combo boxes in the Configuration tab and hot-applied by Apply (`UpdateParametersAsync`). `Oneshot` is the fix for segmented / torn frames on Z5 / Ethernet modules; `Software` averaging trades N× wall-clock for avoiding the peak shift / broadening some hardware averagers introduce. Both round-trip through `settings.json` as strings (`SettingsService` registers `JsonStringEnumConverter`), so pre-existing files without the keys just keep the defaults.
 - WPF user controls bound in `MainWindow.xaml`: `DevicePanel`, `ConfigurationPanel`, `LoggerPanel`, `LogViewerPanel`
 - Global `using Aqst.OesApp.Core;` and `using Aqst.OesApp.Wpf;` are injected via the csproj, so these types appear unqualified throughout.
 

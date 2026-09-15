@@ -787,7 +787,7 @@ public sealed class LeakMonitorEngine : IDisposable
             oldOverall = _overall;
             _overall = ComputeOverall();
             newOverall = _overall;
-            snap = BuildSnapshot(sample.Timestamp, sample.IsTestMode);
+            snap = BuildSnapshot(sample.Timestamp, sample.IsSimulated);
         }
 
         SampleProcessed?.Invoke(this, snap);

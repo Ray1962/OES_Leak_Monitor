@@ -56,7 +56,7 @@ public class ProcessClassTests
             IntegrationTime = 0,
             AverageCount = 0,
             SerialNumber = "TEST",
-            IsTestMode = true,
+            IsSimulated = true,
         };
     }
 

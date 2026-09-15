@@ -67,7 +67,7 @@ internal static class RecordedRun
 
         /// <summary>
         /// One frame, on the recording's own axis and at its own interval. Marked
-        /// <c>IsTestMode</c> because that is what it is — replayed, not measured; the tests
+        /// <c>IsSimulated</c> because that is what it is — replayed, not measured; the tests
         /// that need alarm transitions switch the engine's suppression off explicitly rather
         /// than pretending otherwise.
         /// </summary>
@@ -79,7 +79,7 @@ internal static class RecordedRun
             IntegrationTime = 0,
             AverageCount = 0,
             SerialNumber = "REPLAY",
-            IsTestMode = true,
+            IsSimulated = true,
         };
     }
 }

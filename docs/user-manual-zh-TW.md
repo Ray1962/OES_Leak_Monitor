@@ -1,6 +1,6 @@
 # OES Leak Monitor 操作手冊
 
-> 版本對應：`Aqst.OesSpectrometer 0.4.6` / `Aqst.OesApp.Core 0.1.7` / `Aqst.OesApp.Wpf 0.1.12`
+> 版本對應：`Aqst.OesSpectrometer 0.5.0` / `Aqst.OesApp.Core 0.1.7` / `Aqst.OesApp.Wpf 0.1.12`
 > 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）
 
 ---
@@ -331,7 +331,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | 參數 | 預設 | 說明 |
 |---|---|---|
 | **Integration Time (ms)** | 50 | 積分時間，0.001–10000 ms。**接受小數，離開欄位才送出** |
-| **Acquire Mode** | `HardwareAverage` | 底層擷取方式，見下表 |
+| **Acquire Mode** | `HWAvg` | 底層擷取方式，見下表 |
 | **Average Count** | 1 | 平均次數，1–1000 |
 | **Average Mode** | `Hardware` | 平均在硬體或軟體做，見下表 |
 | **Boxcar Width** | 1 | Boxcar 平滑視窗（1 = 關閉） |
@@ -343,7 +343,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 | 值 | 何時用 |
 |---|---|
-| `HardwareAverage` | **預設。** 傳統 USB 機種的標準做法 |
+| `HWAvg` | **預設。** 傳統 USB 機種的標準做法(SDK 0.5.0 之前顯示為 `HardwareAverage`,舊設定檔會自動沿用) |
 | `Oneshot` | 當畫面出現**斷裂／撕裂的光譜幀**時改用這個 —— 常見於 Z5／乙太網路機種在長積分時間下 |
 | `Standard` | 一般擷取，前兩者都不合用時再試 |
 
@@ -1345,7 +1345,7 @@ Configuration → **Average Mode** 改成 `Software` → **Apply**。某些機�
 
 處理方式：
 
-1. 到 Configuration 分頁把 **Acquire Mode** 從 `HardwareAverage` 改成 **`Oneshot`** → Apply → Save，這是 Z5 / Ethernet 模組出現分段或撕裂幀時的既有解法。
+1. 到 Configuration 分頁把 **Acquire Mode** 從 `HWAvg` 改成 **`Oneshot`** → Apply → Save，這是 Z5 / Ethernet 模組出現分段或撕裂幀時的既有解法。
 2. 跑一段一樣長的時間，比較日誌裡 `SpectrumFrameDropout` 的 `FramesThisSession` 數字有沒有下降。
 3. 若沒有改善，檢查 USB／網路線材與接頭，並考慮降低積分時間。
 
@@ -1406,7 +1406,7 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 | 參數 | 預設值 |
 |---|---|
 | Integration Time | 50 ms |
-| Acquire Mode | `HardwareAverage` |
+| Acquire Mode | `HWAvg` |
 | Average Count | 1 |
 | Average Mode | `Hardware` |
 | Boxcar Width | 1（關閉） |
