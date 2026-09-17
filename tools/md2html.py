@@ -62,7 +62,13 @@ def slug(text):
     # fullwidth block (U+FF00-FFEF) carries punctuation like "：", which GitHub
     # strips — keeping it desynchronises the hand-written TOC links.
     s = re.sub(r"[^\w\s-]", "", s)
-    return re.sub(r"\s+", "-", s).strip("-")
+    # One hyphen per space, not per run of them. GitHub substitutes each space
+    # individually, so a heading like "S1F3 / S1F4 — 設備狀態查詢" — where the
+    # stripped punctuation leaves two spaces adjacent — becomes "s1f3--s1f4--…"
+    # there and would become "s1f3-s1f4-…" under "\s+". The divergence is
+    # invisible from either side alone: a hand-written TOC link resolves in the
+    # rendering it was written against and silently fails in the other.
+    return re.sub(r"\s", "-", s).strip("-")
 
 
 # ---------------------------------------------------------------- blocks

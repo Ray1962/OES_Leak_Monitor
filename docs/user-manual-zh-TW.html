@@ -118,12 +118,12 @@ td code{white-space:nowrap;}
 <a class="l3" href="#33-自動鎖定">3.3 自動鎖定</a>
 <a class="l2" href="#4-畫面總覽">4. 畫面總覽</a>
 <a class="l2" href="#5-快速上手從零到監控">5. 快速上手：從零到監控</a>
-<a class="l3" href="#步驟-1-連線並確認有光譜">步驟 1 — 連線並確認有光譜</a>
-<a class="l3" href="#步驟-2-調整硬體參數">步驟 2 — 調整硬體參數</a>
-<a class="l3" href="#步驟-3-設定要監控的比值">步驟 3 — 設定要監控的比值</a>
-<a class="l3" href="#步驟-4-錄基準線golden-run">步驟 4 — 錄基準線（Golden Run）</a>
+<a class="l3" href="#步驟-1--連線並確認有光譜">步驟 1 — 連線並確認有光譜</a>
+<a class="l3" href="#步驟-2--調整硬體參數">步驟 2 — 調整硬體參數</a>
+<a class="l3" href="#步驟-3--設定要監控的比值">步驟 3 — 設定要監控的比值</a>
+<a class="l3" href="#步驟-4--錄基準線golden-run">步驟 4 — 錄基準線（Golden Run）</a>
 <a class="l3" href="#步驟-5選用-洩漏率定量校正">步驟 5（選用）— 洩漏率定量校正</a>
-<a class="l3" href="#步驟-6-開啟資料記錄">步驟 6 — 開啟資料記錄</a>
+<a class="l3" href="#步驟-6--開啟資料記錄">步驟 6 — 開啟資料記錄</a>
 <a class="l2" href="#6-分頁詳解">6. 分頁詳解</a>
 <a class="l3" href="#61-monitor即時監看">6.1 Monitor（即時監看）</a>
 <a class="l3" href="#62-configuration設定">6.2 Configuration（設定）</a>
@@ -148,7 +148,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#82-換配方">8.2 換配方</a>
 <a class="l3" href="#83-警報發生時">8.3 警報發生時</a>
 <a class="l3" href="#84-定期維護">8.4 定期維護</a>
-<a class="l3" href="#85-演算法驗證抓基線-重播-比對轉態時間">8.5 演算法驗證：抓基線 → 重播 → 比對轉態時間</a>
+<a class="l3" href="#85-演算法驗證抓基線--重播--比對轉態時間">8.5 演算法驗證：抓基線 → 重播 → 比對轉態時間</a>
 <a class="l2" href="#9-疑難排解">9. 疑難排解</a>
 <a class="l3" href="#91-按-connect-後掉進測試模式明明接了硬體">9.1 按 Connect 後掉進測試模式（明明接了硬體）</a>
 <a class="l3" href="#92-光譜幀出現斷裂撕裂">9.2 光譜幀出現斷裂／撕裂</a>
@@ -338,7 +338,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <hr>
 <h2 id="5-快速上手從零到監控">5. 快速上手：從零到監控</h2>
 <p>第一次在一台新機台上導入，依序做完這六步：</p>
-<h3 id="步驟-1-連線並確認有光譜">步驟 1 — 連線並確認有光譜</h3>
+<h3 id="步驟-1--連線並確認有光譜">步驟 1 — 連線並確認有光譜</h3>
 <ol>
 <li>到 <strong>Monitor</strong> 分頁。
 </li>
@@ -350,7 +350,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <li>按 <strong>Start</strong>。全光譜圖應開始更新，<strong>Last</strong> 時間持續跳動。
 </li>
 </ol>
-<h3 id="步驟-2-調整硬體參數">步驟 2 — 調整硬體參數</h3>
+<h3 id="步驟-2--調整硬體參數">步驟 2 — 調整硬體參數</h3>
 <ol>
 <li>到 <strong>Configuration</strong> 分頁（需 Engineer）。
 </li>
@@ -361,7 +361,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <li>按 <strong>Apply</strong> 推送到硬體，再按 <strong>Save</strong> 寫入 <code>settings.json</code>。
 </li>
 </ol>
-<h3 id="步驟-3-設定要監控的比值">步驟 3 — 設定要監控的比值</h3>
+<h3 id="步驟-3--設定要監控的比值">步驟 3 — 設定要監控的比值</h3>
 <ol>
 <li>到 <strong>Ratio Setup</strong> 分頁。
 </li>
@@ -376,7 +376,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <li><strong>⚠️ 回 Monitor 分頁按 Stop → 再按 Start</strong>。Ratio Setup 的修改是「暫存」的，只有在擷取重啟後才生效。
 </li>
 </ol>
-<h3 id="步驟-4-錄基準線golden-run">步驟 4 — 錄基準線（Golden Run）</h3>
+<h3 id="步驟-4--錄基準線golden-run">步驟 4 — 錄基準線（Golden Run）</h3>
 <ol>
 <li>讓機台跑一段<strong>確定沒有洩漏</strong>的良品製程，電漿條件穩定。
 </li>
@@ -397,7 +397,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <blockquote><p><strong>製程不是一直穩定的怎麼辦？</strong> 緩啟動（前幾秒還在爬升）或短製程（一次 run 比擷取視窗還短），現場擷取抓不到乾淨的一段。改用 <strong>Baseline Builder</strong> 分頁：事後從錄製檔上把穩定段挑出來，短製程還可以把好幾次 run 合起來（見 §6.7）。多步驟製程則需要每個 step 各一份基準、換 step 時人工切換。</p></blockquote>
 <h3 id="步驟-5選用-洩漏率定量校正">步驟 5（選用）— 洩漏率定量校正</h3>
 <p>只有需要把「比值上升」讀成 <strong>mbar·L/s</strong> 時才要做。見 §6.5。</p>
-<h3 id="步驟-6-開啟資料記錄">步驟 6 — 開啟資料記錄</h3>
+<h3 id="步驟-6--開啟資料記錄">步驟 6 — 開啟資料記錄</h3>
 <ol>
 <li><strong>Configuration</strong> → 下半部 <strong>Data Logger</strong>。
 </li>
@@ -1261,7 +1261,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>定期</td><td>檢視 <code>Data\</code> 資料夾用量（見 §7.4）。程式<strong>不會刪除</strong>量測資料 —— 需要時開啟自動壓縮，或自行轉存到伺服器</td></tr>
 </tbody></table></div>
 <hr>
-<h3 id="85-演算法驗證抓基線-重播-比對轉態時間">8.5 演算法驗證：抓基線 → 重播 → 比對轉態時間</h3>
+<h3 id="85-演算法驗證抓基線--重播--比對轉態時間">8.5 演算法驗證：抓基線 → 重播 → 比對轉態時間</h3>
 <blockquote><p>權限：<strong>Engineer 以上</strong>。不需要硬體，也不會動到正在生產的機台。</p></blockquote>
 <p><strong>什麼時候做</strong>：改過比值設定、抽取模式、警報門檻或波長校正之後，要回答「這組新設定拿去跑當初那一次真實洩漏，抓不抓得到、以及慢多久」。這是唯一能在不製造洩漏的情況下量化偵測靈敏度與延遲的方法。</p>
 <h4 id="準備兩段來自同一次製程的錄檔">準備：兩段來自同一次製程的錄檔</h4>
@@ -1280,7 +1280,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <li>注意錄檔會<strong>輪替</strong>：一次採集可能被切成 <code>_0807211351</code> / <code>_0807212620</code> / <code>_0807213124</code> 好幾個檔，它們共用同一份 <code>P_Ratio_*</code> 比值檔。用 Logs 裡的 <code>IntensityLogger_FilesChanged</code> 對出每個檔涵蓋的時間。
 </li>
 </ul>
-<h4 id="步驟-1-用基線段抓-golden-run">步驟 1 — 用基線段抓 Golden Run</h4>
+<h4 id="步驟-1--用基線段抓-golden-run">步驟 1 — 用基線段抓 Golden Run</h4>
 <ol>
 <li><strong>Replay</strong> 分頁 → <strong>Choose CSV…</strong> → 選<strong>基線段</strong>。
 </li>
@@ -1296,7 +1296,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </li>
 </ol>
 <blockquote><p>⚠️ <strong>絕對不要拿事件段抓基線。</strong> 基線若落在洩漏已經發生的區間，同一份資料之後就會顯得正常，警報延後甚至完全不跳。實測過一次：把基線抓在告警期間，同一份事件檔的 <strong>Warning 延後 181 秒、Alarm 延後 212 秒</strong>，而原始比值一模一樣 —— 純粹是基線的位置造成的。</p></blockquote>
-<h4 id="步驟-2-重播事件段">步驟 2 — 重播事件段</h4>
+<h4 id="步驟-2--重播事件段">步驟 2 — 重播事件段</h4>
 <ol>
 <li><strong>Replay</strong> → <strong>Stop</strong>（若還在播）→ <strong>Choose CSV…</strong> → 選<strong>事件段</strong>。
 </li>
@@ -1309,7 +1309,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <li>讓它播到底（狀態變 <code>FINISHED</code>）。中途按 Stop 的話日誌會寫 <code>stopped by the operator</code>，那一輪的資料不完整、不能拿來比。
 </li>
 </ol>
-<h4 id="步驟-3-比對轉態時間">步驟 3 — 比對轉態時間</h4>
+<h4 id="步驟-3--比對轉態時間">步驟 3 — 比對轉態時間</h4>
 <p>資料有兩個來源，兩個都看：</p>
 <ul>
 <li>系統日誌的 <code>LeakMonitorState</code>（<code>From=Normal,To=Warning</code> 這種）。

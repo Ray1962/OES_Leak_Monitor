@@ -113,14 +113,14 @@ td code{white-space:nowrap;}
 <a class="l2" href="#2-巡檢層級頻率與責任分工">2. 巡檢層級、頻率與責任分工</a>
 <a class="l2" href="#3-巡檢前準備">3. 巡檢前準備</a>
 <a class="l2" href="#4-第一階段l1每日巡檢">4. 第一階段（L1）每日巡檢</a>
-<a class="l3" href="#40-步驟-0-連線與擷取狀態30-秒">4.0 步驟 0 — 連線與擷取狀態（30 秒）</a>
-<a class="l3" href="#41-步驟-1-檢查電漿強度光譜重點一">4.1 步驟 1 — 檢查電漿強度光譜【重點一】</a>
-<a class="l3" href="#42-步驟-2-檢查電漿強度趨勢重點二">4.2 步驟 2 — 檢查電漿強度趨勢【重點二】</a>
-<a class="l3" href="#43-步驟-3-leak-monitor-狀態與比值列">4.3 步驟 3 — Leak Monitor 狀態與比值列</a>
-<a class="l3" href="#44-步驟-4-資料記錄器與儲存空間">4.4 步驟 4 — 資料記錄器與儲存空間</a>
-<a class="l3" href="#45-步驟-5-系統日誌快掃">4.5 步驟 5 — 系統日誌快掃</a>
+<a class="l3" href="#40-步驟-0--連線與擷取狀態30-秒">4.0 步驟 0 — 連線與擷取狀態（30 秒）</a>
+<a class="l3" href="#41-步驟-1--檢查電漿強度光譜重點一">4.1 步驟 1 — 檢查電漿強度光譜【重點一】</a>
+<a class="l3" href="#42-步驟-2--檢查電漿強度趨勢重點二">4.2 步驟 2 — 檢查電漿強度趨勢【重點二】</a>
+<a class="l3" href="#43-步驟-3--leak-monitor-狀態與比值列">4.3 步驟 3 — Leak Monitor 狀態與比值列</a>
+<a class="l3" href="#44-步驟-4--資料記錄器與儲存空間">4.4 步驟 4 — 資料記錄器與儲存空間</a>
+<a class="l3" href="#45-步驟-5--系統日誌快掃">4.5 步驟 5 — 系統日誌快掃</a>
 <a class="l3" href="#46-l1-判定準則與處置">4.6 L1 判定準則與處置</a>
-<a class="l2" href="#5-光譜-趨勢-綜合判讀表">5. 光譜 × 趨勢 綜合判讀表</a>
+<a class="l2" href="#5-光譜--趨勢-綜合判讀表">5. 光譜 × 趨勢 綜合判讀表</a>
 <a class="l2" href="#6-第二階段l2深入巡檢">6. 第二階段（L2）深入巡檢</a>
 <a class="l3" href="#61-基準線golden-run有效性複核">6.1 基準線（Golden Run）有效性複核</a>
 <a class="l3" href="#62-訊噪比與光路健康度">6.2 訊噪比與光路健康度</a>
@@ -159,7 +159,7 @@ td code{white-space:nowrap;}
 </li>
 <li><a href="#4-第一階段l1每日巡檢">第一階段（L1）每日巡檢</a>
 </li>
-<li><a href="#5-光譜-趨勢-綜合判讀表">光譜 × 趨勢 綜合判讀表</a>
+<li><a href="#5-光譜--趨勢-綜合判讀表">光譜 × 趨勢 綜合判讀表</a>
 </li>
 <li><a href="#6-第二階段l2深入巡檢">第二階段（L2）深入巡檢</a>
 </li>
@@ -239,7 +239,7 @@ td code{white-space:nowrap;}
 <hr>
 <h2 id="4-第一階段l1每日巡檢">4. 第一階段（L1）每日巡檢</h2>
 <p><strong>原則</strong>：由「光」到「數」——先看光譜長相（§4.1），再看時間趨勢（§4.2），最後才看系統給的結論（§4.3）。反過來只看警報燈，會漏掉「還沒到門檻但已經在爬」的緩漏。</p>
-<h3 id="40-步驟-0-連線與擷取狀態30-秒">4.0 步驟 0 — 連線與擷取狀態（30 秒）</h3>
+<h3 id="40-步驟-0--連線與擷取狀態30-秒">4.0 步驟 0 — 連線與擷取狀態（30 秒）</h3>
 <p>在 <strong>Monitor</strong> 分頁確認：</p>
 <ul>
 <li>☐ <code>Test Mode</code> = <strong>False</strong>
@@ -252,7 +252,7 @@ td code{white-space:nowrap;}
 </li>
 </ul>
 <p>任一項不符 → <strong>停止判讀，直接進入 §8 升級流程</strong>。</p>
-<h3 id="41-步驟-1-檢查電漿強度光譜重點一">4.1 步驟 1 — 檢查電漿強度光譜【重點一】</h3>
+<h3 id="41-步驟-1--檢查電漿強度光譜重點一">4.1 步驟 1 — 檢查電漿強度光譜【重點一】</h3>
 <p>畫面：<strong>Monitor</strong> 分頁上半部的全譜圖（DevicePanel）。操作：滑鼠滾輪縮放、右鍵 → <strong>Zoom All</strong>（快捷鍵 <code>A</code>）回到全譜。</p>
 <p>看五件事，<strong>由粗到細</strong>：</p>
 <h4 id="1-整體強度水準">(1) 整體強度水準</h4>
@@ -306,7 +306,7 @@ td code{white-space:nowrap;}
 <li>這是 Z5／乙太網路機種在長積分時間下的已知現象，處置是 L2 把 Acquire Mode 改為 <code>Oneshot</code>（手冊 §9.2）。
 </li>
 </ul>
-<h3 id="42-步驟-2-檢查電漿強度趨勢重點二">4.2 步驟 2 — 檢查電漿強度趨勢【重點二】</h3>
+<h3 id="42-步驟-2--檢查電漿強度趨勢重點二">4.2 步驟 2 — 檢查電漿強度趨勢【重點二】</h3>
 <p>畫面：<strong>Monitor</strong> 分頁下半部的 <strong>Wavelength Trend</strong>（時間 vs 強度，保留 30 分鐘）。</p>
 <p>這張圖畫的是<strong>每幀原始計數</strong>（刻意不濾波），最多 6 條線：Trigger 波長 ＋ Monitored Wavelengths 前 5 個。</p>
 <p><strong>建議巡檢操作順序</strong>：</p>
@@ -337,7 +337,7 @@ td code{white-space:nowrap;}
 </li>
 </ul>
 <blockquote><p>💡 每條趨勢線取的是該波長 <strong>±0.5 nm 內的峰值</strong>（吸收波長漂移用的峰值定位，不是濾波）， 所以小幅波長漂移不會讓線掉下去；若某線<strong>莫名掉到接近零</strong>，多半是漂移已超過 ±0.5 nm，或該峰真的消失了。</p></blockquote>
-<h3 id="43-步驟-3-leak-monitor-狀態與比值列">4.3 步驟 3 — Leak Monitor 狀態與比值列</h3>
+<h3 id="43-步驟-3--leak-monitor-狀態與比值列">4.3 步驟 3 — Leak Monitor 狀態與比值列</h3>
 <p>畫面：<strong>Leak Monitor</strong> 分頁。這一步是看「系統的結論」，但要<strong>用前兩步的觀察去驗證它</strong>。</p>
 <ul>
 <li>☐ <strong>狀態橫幅</strong>：應為綠色 <code>OK — within baseline</code>。
@@ -373,7 +373,7 @@ td code{white-space:nowrap;}
 </ul>
 </li>
 </ul>
-<h3 id="44-步驟-4-資料記錄器與儲存空間">4.4 步驟 4 — 資料記錄器與儲存空間</h3>
+<h3 id="44-步驟-4--資料記錄器與儲存空間">4.4 步驟 4 — 資料記錄器與儲存空間</h3>
 <p>畫面：<strong>Monitor</strong> 分頁的 <strong>Recorder 狀態列</strong>（Reset Run 下方那條，唯讀，不需權限即可檢視）。</p>
 <ul>
 <li>☐ <strong>徽章不是紅色 <code>OFF</code></strong> —— <code>OFF</code> 代表<strong>全光譜記錄器</strong>沒武裝，不會產生強度 CSV（比值 CSV 不受影響，仍照常寫）。有電漿時應為 <code>SAVING</code>；沒電漿時 <code>ARMED</code> 為正常。
@@ -395,7 +395,7 @@ td code{white-space:nowrap;}
 </li>
 </ul>
 <p>⚠️ 武裝／解除武裝在 Engineer 權限的 Configuration 分頁，<strong>L1 人員無法也不需要操作</strong> —— 只負責看狀態列並回報。這是一次性設定，不是每日動作。</p></blockquote>
-<h3 id="45-步驟-5-系統日誌快掃">4.5 步驟 5 — 系統日誌快掃</h3>
+<h3 id="45-步驟-5--系統日誌快掃">4.5 步驟 5 — 系統日誌快掃</h3>
 <p>畫面：<strong>Logs</strong> 分頁，掃過上一班次的記錄。</p>
 <ul>
 <li>☐ 無 <code>Error</code> 等級記錄。
@@ -418,7 +418,7 @@ td code{white-space:nowrap;}
 <tr><td><strong>緊急</strong></td><td>ALARM 橫幅、多條洩漏指標同步陡升、洩漏率讀值明顯攀升</td><td><strong>立即</strong>依 §8 通報，並依廠內規定評估是否暫停投料</td></tr>
 </tbody></table></div>
 <hr>
-<h2 id="5-光譜-趨勢-綜合判讀表">5. 光譜 × 趨勢 綜合判讀表</h2>
+<h2 id="5-光譜--趨勢-綜合判讀表">5. 光譜 × 趨勢 綜合判讀表</h2>
 <p>這張表是 L1 與 L2 共用的核心判讀工具——<strong>同樣一個「數值變了」，要靠「哪些線一起變」才能分辨原因</strong>。</p>
 <div class="tablewrap"><table>
 <thead><tr><th>光譜表現</th><th>強度趨勢</th><th>比值（% of baseline）</th><th>最可能原因</th><th>動作</th></tr></thead>
