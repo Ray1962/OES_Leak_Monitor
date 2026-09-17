@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor Baseline Builder 操作 SOP</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#1-這份-sop-什麼時候用">1. 這份 SOP 什麼時候用</a>
+<a class="l2" href="#2-角色與分工">2. 角色與分工</a>
+<a class="l2" href="#3-前置一掃描前必須凍結的設定">3. 前置一：掃描前必須凍結的設定</a>
+<a class="l2" href="#4-前置二站台比值對照表">4. 前置二：站台比值對照表</a>
+<a class="l2" href="#5-共同步驟列出錄製與掃描">5. 共同步驟：列出錄製與掃描</a>
+<a class="l2" href="#6-分岔單檔還是跨檔">6. 分岔：單檔還是跨檔</a>
+<a class="l2" href="#7-流程-a單檔建基準">7. 流程 A：單檔建基準</a>
+<a class="l2" href="#8-流程-b跨檔合併建基準">8. 流程 B：跨檔合併建基準</a>
+<a class="l3" href="#跨檔的特殊風險絕對強度項">跨檔的特殊風險：絕對強度項</a>
+<a class="l2" href="#9-只是想評估停在這裡">9. 只是想評估？停在這裡</a>
+<a class="l2" href="#10-判讀結果面板">10. 判讀結果面板</a>
+<a class="l3" href="#meanσ-剛好過門檻要當回事">mean/σ 剛好過門檻要當回事</a>
+<a class="l3" href="#視窗穩定度怎麼讀">視窗穩定度怎麼讀</a>
+<a class="l3" href="#回套檢查">回套檢查</a>
+<a class="l3" href="#被擱置的錄製-與-keep-anyway">被擱置的錄製 與 Keep anyway</a>
+<a class="l2" href="#11-go-與-no-go-判斷表">11. go 與 no-go 判斷表</a>
+<a class="l2" href="#12-紀錄必做不可省略">12. 紀錄（必做，不可省略）</a>
+<a class="l3" href="#舊錄製沒有-acqjson-時">舊錄製沒有 .acq.json 時</a>
+<a class="l2" href="#13-存檔">13. 存檔</a>
+<a class="l2" href="#14-收尾驗證">14. 收尾驗證</a>
+<a class="l2" href="#15-baseline-builder-獨有的拒絕訊息">15. Baseline Builder 獨有的拒絕訊息</a>
+<a class="l2" href="#16-現行版本的限制">16. 現行版本的限制</a>
+<a class="l2" href="#附錄-a多製程站台分類器開啟時">附錄 A：多製程站台（分類器開啟時）</a>
+<a class="l3" href="#a1-掃描後按-class-盤點">A.1 掃描後按 class 盤點</a>
+<a class="l3" href="#a2-缺-class-時的處置">A.2 缺 class 時的處置</a>
+<a class="l3" href="#a3-其他會按-class-分開算的東西">A.3 其他會按 class 分開算的東西</a>
+<a class="l2" href="#附錄-b檢核表可列印">附錄 B：檢核表（可列印）</a>
+</nav>
+<main>
+<h1 id="baseline-builder-操作-sopoes-leak-monitor">Baseline Builder 操作 SOP（OES Leak Monitor）</h1>
+<blockquote><p><strong>用途</strong>：用<strong>已經存在硬碟上的錄製檔</strong>建立 Golden Run 基準線。這是本站建基準的<strong>常態作法</strong>，不是現場擷取失敗時的補救手段。</p>
+<p><strong>這份文件寫給誰</strong></p>
+<ul>
+<li><strong>Engineer／設備工程師</strong>：全部。建置、判讀、存檔、驗證都在這裡。
+</li>
+<li><strong>Operator</strong>：可以做到第 <a href="#5-共同步驟列出錄製與掃描">5</a> 節（列出、掃描、看曲線），<strong>不要</strong>自行往下走——第 <a href="#6-分岔單檔還是跨檔">6</a> 節之後的每一步都需要判斷，判斷錯的代價是一條「看起來正常、真的漏氣時不會叫」的基準線。
+</li>
+</ul>
+<p><strong>相關文件</strong></p>
+<ul>
+<li>這個分頁<strong>每個區塊是什麼</strong>（參考，不是程序）：<a href="user-manual-zh-TW.md"><code>user-manual-zh-TW.md</code></a> §6.7
+</li>
+<li>比值基準被拒絕的<strong>根因分析</strong>：<a href="golden-run-baseline-troubleshooting-zh-TW.md"><code>golden-run-baseline-troubleshooting-zh-TW.md</code></a>
+</li>
+<li>現場即時擷取（Leak Monitor 分頁的 Capture）：<a href="user-manual-zh-TW.md"><code>user-manual-zh-TW.md</code></a> §6.6
+</li>
+</ul></blockquote>
+<hr>
+<h2 id="目錄">目錄</h2>
+<ul>
+<li><a href="#1-這份-sop-什麼時候用">1. 這份 SOP 什麼時候用</a>
+</li>
+<li><a href="#2-角色與分工">2. 角色與分工</a>
+</li>
+<li><a href="#3-前置一掃描前必須凍結的設定">3. 前置一：掃描前必須凍結的設定</a>
+</li>
+<li><a href="#4-前置二站台比值對照表">4. 前置二：站台比值對照表</a>
+</li>
+<li><a href="#5-共同步驟列出錄製與掃描">5. 共同步驟：列出錄製與掃描</a>
+</li>
+<li><a href="#6-分岔單檔還是跨檔">6. 分岔：單檔還是跨檔</a>
+</li>
+<li><a href="#7-流程-a單檔建基準">7. 流程 A：單檔建基準</a>
+</li>
+<li><a href="#8-流程-b跨檔合併建基準">8. 流程 B：跨檔合併建基準</a>
+</li>
+<li><a href="#9-只是想評估停在這裡">9. 只是想評估？停在這裡</a>
+</li>
+<li><a href="#10-判讀結果面板">10. 判讀結果面板</a>
+</li>
+<li><a href="#11-go-與-no-go-判斷表">11. go 與 no-go 判斷表</a>
+</li>
+<li><a href="#12-紀錄必做不可省略">12. 紀錄（必做，不可省略）</a>
+</li>
+<li><a href="#13-存檔">13. 存檔</a>
+</li>
+<li><a href="#14-收尾驗證">14. 收尾驗證</a>
+</li>
+<li><a href="#15-baseline-builder-獨有的拒絕訊息">15. Baseline Builder 獨有的拒絕訊息</a>
+</li>
+<li><a href="#16-現行版本的限制">16. 現行版本的限制</a>
+</li>
+<li><a href="#附錄-a多製程站台分類器開啟時">附錄 A：多製程站台（分類器開啟時）</a>
+</li>
+<li><a href="#附錄-b檢核表可列印">附錄 B：檢核表（可列印）</a>
+</li>
+</ul>
+<hr>
+<h2 id="1-這份-sop-什麼時候用">1. 這份 SOP 什麼時候用</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>情境</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>換配方後建基準</strong>（主線）</td><td>製程會 ramp（前幾秒功率還在爬）或很短（一次 run 比擷取視窗還短）時，站在機台前按 Capture 是猜的。這類機台<strong>本來就該走這條路</strong>。</td></tr>
+<tr><td><strong>清機／換光學件後重建</strong></td><td>視窗結垢會讓絕對強度整個平移，舊基準不再成立。</td></tr>
+<tr><td><strong>現場 Capture 失敗後補救</strong></td><td>日誌出現 <code>GoldenRunEmpty</code>、或大量比值被拒（<code>GoldenRunRatioLowSnr</code>、<code>GoldenRunRatioUnstableBaseline</code>）。</td></tr>
+<tr><td><strong>評估既有錄製</strong></td><td>想知道某幾天的錄製能不能拿來當基準。走到第 <a href="#9-只是想評估停在這裡">9</a> 節就停，<strong>不要存檔</strong>。</td></tr>
+</tbody></table></div>
+<p><strong>週期綁事件，不綁日曆。</strong> 配方變更、清機、換光學件之後必做；製程沒變時不需要定期重建——沒有必要的重建只會讓每條基準線的來歷變得更難追。</p>
+<hr>
+<h2 id="2-角色與分工">2. 角色與分工</h2>
+<p>分頁<strong>不受權限限制</strong>，任何人都能進去看、掃描、按 Build。只有 <strong>Save 需要 Engineer 以上</strong>（權限不足時畫面會顯示橘字 <code>Engineer sign-in required to save</code>）。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>步驟</th><th>誰做</th></tr></thead>
+<tbody>
+<tr><td>第 3–5 節（凍結設定、對照表、列出、掃描、看曲線）</td><td>Operator 或 Engineer</td></tr>
+<tr><td>第 6–14 節（分岔判斷、選視窗、Build、判讀、存檔、驗證）</td><td><strong>Engineer</strong></td></tr>
+</tbody></table></div>
+<blockquote><p>⚠️ <strong>Build 與 Save 必須由同一人、同一次連續完成。</strong></p>
+<p>程式<strong>不會</strong>因為你改了勾選、改了視窗或改了 <code>Keep anyway</code> 就讓上一次的 Build 結果失效——<code>Save as active baseline</code> 仍然可按，而它存下去的是<strong>上一次 Build 的結果</strong>，不是畫面上現在的樣子。交接給別人做最後一步，正是這個陷阱會發作的場景。</p></blockquote>
+<hr>
+<h2 id="3-前置一掃描前必須凍結的設定">3. 前置一：掃描前必須凍結的設定</h2>
+<p>掃描會用<strong>當下的設定</strong>把每一幀重新萃取一次。之後改動下列任何一項，既有掃描就失效了，而且<strong>畫面上沒有任何提示</strong>——它看起來還是掃好的。</p>
+<p>掃描是整個流程唯一花時間的一步，所以這個確認放在最前面：</p>
+<ul>
+<li>[ ] <strong>Ratio Setup</strong>：比值定義（監控方式、譜線、萃取方式、Role、ProcessClass）已定案
+</li>
+<li>[ ] <strong>Wavelength Calibration</strong>：波長修正表已定案
+</li>
+<li>[ ] <strong>Process Classifier</strong>（若有啟用）：分類規則已定案
+</li>
+<li>[ ] <strong>Logger 的觸發門檻</strong>（Configuration 分頁）：電漿閘門用它決定哪些幀算數，改了它就改了「哪些幀進得了基準」
+</li>
+<li>[ ] <strong>日期範圍</strong>已經想好
+</li>
+</ul>
+<p>最後一項特別容易誤觸：<strong>改日期範圍或按 <code>Refresh</code>，會清光所有掃描、勾選、已選視窗與結果面板</strong>，全部要重來。</p>
+<blockquote><p>為什麼要把這四項列出來：其中<strong>波長修正</strong>和<strong>觸發門檻</strong>都不在 Baseline Builder 分頁上。人在這個畫面工作時，根本不會想到它們。</p></blockquote>
+<hr>
+<h2 id="4-前置二站台比值對照表">4. 前置二：站台比值對照表</h2>
+<p>結果面板只列比值的顯示名稱，<strong>不顯示 <code>Role</code>，也不顯示 <code>ProcessClass</code></strong>。但第 <a href="#11-go-與-no-go-判斷表">11</a> 節的 go/no-go 判斷和附錄 A 的缺 class 處置，都要靠這兩個欄位。</p>
+<p>所以先到 <strong>Ratio Setup</strong> 抄一張表，跟著紀錄一起存（第 <a href="#12-紀錄必做不可省略">12</a> 節）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>比值顯示名稱</th><th>監控方式</th><th>Role</th><th>ProcessClass</th></tr></thead>
+<tbody>
+<tr><td>例：N2 337.1 / Ar 750.4</td><td>Ratio</td><td>Alarm</td><td>（空白＝全製程）</td></tr>
+<tr><td>例：N2 337.1（絕對強度）</td><td>AbsoluteIntensity</td><td>Alarm</td><td>A</td></tr>
+<tr><td>例：CO 607.9 / Ar 811.5</td><td>Ratio</td><td>Guard</td><td>A</td></tr>
+</tbody></table></div>
+<p><strong>這張表不必每次重抄</strong>——只有改比值設定或改配方時才會變。每次執行本 SOP 時確認它還是最新的即可。</p>
+<p>一張表同時服務兩個判斷：</p>
+<ul>
+<li><strong>監控方式</strong>欄告訴你哪些是<strong>絕對強度項</strong>——第 <a href="#8-流程-b跨檔合併建基準">8</a> 節對它們有一條會推翻決定的限制。
+</li>
+<li><strong>Role</strong> 欄告訴你某條比值沒拿到基準時，那是<strong>必須退回</strong>（<code>Alarm</code>）還是<strong>可以註記待補</strong>（<code>TrendOnly</code> / <code>Guard</code>）。
+</li>
+</ul>
+<hr>
+<h2 id="5-共同步驟列出錄製與掃描">5. 共同步驟：列出錄製與掃描</h2>
+<ol>
+<li>進 <strong>Baseline Builder</strong> 分頁。
+</li>
+<li>設定 <strong>From / To</strong> 日期範圍（預設是最近 14 天），按 <strong>Refresh</strong>。
+<ul>
+<li>清單會列出資料夾裡的全光譜錄製，<strong>壓縮進 <code>DD.zip</code> 的也會列出來</strong>（<code>zip</code> 欄有標記）。</li>
+<li>狀態列會顯示 <code>{n} recording(s) in {資料夾}</code>。列出 0 筆就是日期或資料夾不對。</li>
+</ul>
+</li>
+<li>在 <strong><code>Use</code></strong> 欄勾選要用的錄製。
+<ul>
+<li><strong>勾選（<code>Use</code>）和點選（看曲線）是兩回事</strong>：清單只能單選，點某一列只是把它的曲線畫到右邊，不代表要用它建基準。</li>
+</ul>
+</li>
+<li>按 <strong>Scan ticked</strong>。這是唯一花時間的一步，掃描期間所有按鈕都會停用。
+</li>
+<li>掃完看 <strong><code>State</code></strong> 欄：
+<ul>
+<li><code>{幀數} frames, {秒數} s</code> —— 正常。</li>
+<li><code>{製程名} · {幀數} frames, {秒數} s</code> —— 分類器有啟用，見<a href="#附錄-a多製程站台分類器開啟時">附錄 A</a>。</li>
+<li><code>failed: not a full-spectrum recording</code> —— 這不是全光譜錄製（例如選到 Ratio CSV），取消勾選。</li>
+<li>掃描失敗的檔<strong>永遠進不了 Build</strong>，不必特別處理。</li>
+</ul>
+</li>
+<li>點選任一筆看它的曲線。
+</li>
+</ol>
+<p><strong>曲線怎麼看</strong>：每條比值都除以它自己在整段錄製的<strong>中位數</strong>，所以量級差很多的線可以共用一個縱軸（軸上寫 <code>× own median over the recording</code>）。這<strong>不是</strong> Leak Monitor 的「% of baseline」——這個分頁的前提就是基準還不存在。</p>
+<hr>
+<h2 id="6-分岔單檔還是跨檔">6. 分岔：單檔還是跨檔</h2>
+<p>掃描完成後，看 <code>State</code> 欄的幀數，並在曲線上找平台段：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>條件</th><th>走哪條</th></tr></thead>
+<tbody>
+<tr><td>單一錄製的<strong>平台段</strong> ≥ 120 幀，而且曲線在那一段確實是平的</td><td><a href="#7-流程-a單檔建基準">流程 A：單檔</a></td></tr>
+<tr><td>單一錄製湊不出來（短製程、或平台段太短）</td><td><a href="#8-流程-b跨檔合併建基準">流程 B：跨檔</a></td></tr>
+</tbody></table></div>
+<p><strong>為什麼用幀不用秒</strong>：硬門檻是幀數——所有選中視窗<strong>加總</strong>要有 60 幀，不足就整條比值被拒。而秒數在這裡會騙人：同樣 60 秒，5 fps 是 300 幀，0.56 fps 只有 34 幀，後者連門檻都過不了。建議抓 <strong>120 幀</strong>（門檻的兩倍）留餘裕，因為你之後很可能會把視窗縮小。</p>
+<p><strong>幀數夠不代表那一段是平的。</strong> 曲線有否決權：看起來還在爬升，就回頭走流程 B 或重錄，不要硬選。</p>
+<hr>
+<h2 id="7-流程-a單檔建基準">7. 流程 A：單檔建基準</h2>
+<p>適用：製程會 ramp，但一次 run 夠長，平台段自己就湊得出 120 幀以上。</p>
+<ol>
+<li>點選那一筆錄製，讓它的曲線顯示在右邊。
+</li>
+<li>按 <strong>Suggest</strong> 當起點。它會填入「最平的一段」，長度等於 Configuration 分頁的 <code>GoldenRunCaptureSeconds</code>（預設 60 秒）。
+<ul>
+<li>狀態列會顯示 <code>Flattest {n} s window: {a}–{b} s ({幀數} frames).</code></li>
+<li>若顯示 <code>No steady stretch found</code> —— 直接跳到第 3 步自己拖。</li>
+</ul>
+</li>
+<li><strong>在圖上按住左鍵拖曳</strong>，確認或調整這一段。左右拖都可以。
+<ul>
+<li>也可以在上方 <code>Baseline window:</code> 兩個框直接打數字（離開欄位才生效）。</li>
+</ul>
+</li>
+<li>檢查視窗落在平台上，不含起始爬升段、不含結束段。
+</li>
+<li>填 <strong>Golden Run name</strong> → 按 <strong>Build</strong>。
+</li>
+<li>跳到第 <a href="#10-判讀結果面板">10</a> 節判讀。
+</li>
+</ol>
+<blockquote><p>⚠️ <strong>Suggest 不能當決定。</strong> 它的提示文字自己寫得很清楚：<strong>它看得出一段很平，看不出一段沒有漏</strong>。它的工作是把游標放到對的位置附近，判斷仍然是你的。</p></blockquote>
+<blockquote><p>⚠️ <strong>不要用 <code>Whole file</code> 做正式建置。</strong> 視窗一旦涵蓋整份錄製的 95 % 以上，<strong>回套檢查就被關掉了</strong>——那是唯一會發現「這份錄製別的地方跑到 59 σ」的守衛。結果面板會明白印出 <code>No back-check</code>。<code>Whole file</code> 只用在第 <a href="#9-只是想評估停在這裡">9</a> 節的評估用途。</p></blockquote>
+<p><strong>流程 A 的驗收重點</strong>（詳見第 10 節）：<strong>視窗穩定度</strong> 與 <strong>回套檢查</strong>。</p>
+<hr>
+<h2 id="8-流程-b跨檔合併建基準">8. 流程 B：跨檔合併建基準</h2>
+<p>適用：短製程，一次 run 湊不出足夠的幀，要把好幾次合起來。</p>
+<ol>
+<li>勾選要合併的<strong>所有</strong>錄製，確認全部掃描成功。
+</li>
+<li><strong>逐一</strong>點選每一筆，各自選一段（方法同流程 A 第 2–4 步）。
+<ul>
+<li><strong>一個檔只能選一段。</strong> 沒有「新增視窗」的控制項，每一次拖曳都是<strong>取代</strong>上一段。</li>
+<li>理由：同一份錄製的兩段若是<strong>同一個</strong>操作點，它們本來就該是連續的一段（中間有空隙不影響）；若是<strong>不同</strong>操作點，把它們平均成一個 mean 正是這整件事要避免的錯誤。</li>
+</ul>
+</li>
+<li>確認每一筆的 <strong><code>Window</code></strong> 欄都有數字——空白的表示你漏了那一筆，它會以整份錄製參與建置。
+</li>
+<li>填 <strong>Golden Run name</strong> → 按 <strong>Build</strong>。
+</li>
+<li>跳到第 <a href="#10-判讀結果面板">10</a> 節判讀，<strong>但先讀下面這段</strong>。
+</li>
+</ol>
+<h3 id="跨檔的特殊風險絕對強度項">跨檔的特殊風險：絕對強度項</h3>
+<p><strong>每個視窗都很穩，合併後 <code>mean/σ</code> 還是很差</strong>——這種情況幾乎都是「檔間差距」造成的：不同 run 的電漿亮度本來就不完全一樣，合併等於把那個差距寫進 σ。</p>
+<ul>
+<li><strong>比值項會把它除掉</strong>——這正是參考線的用途。
+</li>
+<li><strong>絕對強度項沒得除</strong>，差多少就原封不動進 σ。
+</li>
+</ul>
+<p>實測（同一天相隔一小時的兩次 run，各自視窗內都只有 0.7–1.3 % 散度）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>比值</th><th>檔間差距</th></tr></thead>
+<tbody>
+<tr><td>N2 337.1 / Ar 750.4</td><td>2.1 %</td></tr>
+<tr><td><strong>N2 337.1（絕對強度）</strong></td><td><strong>19.0 %</strong></td></tr>
+<tr><td>uN2 335.5 / Ar 750.4</td><td>4.8 %</td></tr>
+<tr><td>N2 353.7 / Ar 750.4</td><td>4.0 %</td></tr>
+</tbody></table></div>
+<p>那條絕對強度項的 <code>mean/σ</code> 因此從單檔的 ~125 掉到合併後的 <strong>10.7</strong>，剛好擦過門檻並被標成 marginal。</p>
+<blockquote><p><strong>做法</strong>：對照第 <a href="#4-前置二站台比值對照表">4</a> 節的表，<strong>絕對強度項盡量只用單一錄製</strong>建基準；真要合併，先看結果面板的「檔間差距」那一段確認亮度一致。比值項則可以放心合併。</p></blockquote>
+<p><strong>流程 B 的驗收重點</strong>：<strong>檔間差距</strong>（第一優先）、視窗穩定度、被擱置的錄製。</p>
+<hr>
+<h2 id="9-只是想評估停在這裡">9. 只是想評估？停在這裡</h2>
+<p>想知道某幾天的錄製能不能當基準，走完第 5 節 → 隨便選視窗（這時 <code>Whole file</code> 是合理的）→ 按 <strong>Build</strong> → 讀結果面板 → <strong>不要按 Save</strong>。</p>
+<p><strong>這樣做是安全的</strong>：<code>Build</code> 只計算，<strong>不會動到現在使用中的基準線</strong>。只有 <code>Save as active baseline</code> 會。</p>
+<hr>
+<h2 id="10-判讀結果面板">10. 判讀結果面板</h2>
+<p>結果面板（畫面最下方的文字框）由上而下有這幾段：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>區塊</th><th>意思</th></tr></thead>
+<tbody>
+<tr><td><code>Baselines (n):</code></td><td>每個比值的 <code>mean ± σ</code>、<code>mean/σ</code>、採用幀數</td></tr>
+<tr><td><code>No baseline for:</code></td><td>沒拿到基準的比值與原因 → 第 <a href="#11-go-與-no-go-判斷表">11</a>、<a href="#15-baseline-builder-獨有的拒絕訊息">15</a> 節</td></tr>
+<tr><td><code>Set aside by the consistency check</code></td><td>水準跟其他檔差太多（&gt; 5 σ）而<strong>預設被排除</strong>的錄製</td></tr>
+<tr><td><code>How far the recordings disagree with each other</code></td><td><strong>檔間差距</strong>：每條比值在各錄製之間的水準差，以及那是「檔內散度」的幾倍</td></tr>
+<tr><td><code>How steady each chosen window is</code></td><td><strong>視窗穩定度</strong>：每個檔在<strong>自己視窗以內</strong>的 <code>σ/mean</code> 與漂移（取該檔最差的那條比值）</td></tr>
+<tr><td><code>Furthest each recording goes outside its own window</code></td><td><strong>回套檢查</strong>：每個檔在<strong>自己視窗以外</strong>最遠跑到幾 σ</td></tr>
+</tbody></table></div>
+<h3 id="meanσ-剛好過門檻要當回事"><code>mean/σ</code> 剛好過門檻要當回事</h3>
+<p>硬門檻是 <strong>10</strong>（低於就整條被拒）。但 <code>mean/σ = 10.2</code> 和 <code>mean/σ = 97</code> 在 Leak Monitor 分頁上長得<strong>一模一樣</strong>（都只是「有基準」），而前者的警報門檻寬了十倍——看起來設定完成、真的漏氣時不會叫。</p>
+<p>低於 <strong>20</strong> 時結果面板會在該行尾端標 <code>&lt;&lt; only just clears the floor</code>。<strong>看到它就回頭檢查視窗</strong>，通常代表視窗框進了不該進來的東西。</p>
+<h3 id="視窗穩定度怎麼讀">視窗穩定度怎麼讀</h3>
+<p>一段真正的平台大約是 <code>σ/mean ≈ 1 %</code>。十倍於此，代表視窗吃進了製程正在做的事：</p>
+<ul>
+<li><strong>漂移大</strong> → 那是一段爬升，視窗放錯位置。
+</li>
+<li><strong>只有 σ 大、漂移小</strong> → 是雜訊，電漿本身不穩。
+</li>
+</ul>
+<h3 id="回套檢查">回套檢查</h3>
+<p>數字大<strong>不代表壞</strong>——視窗以外本來就是製程在變的地方。但如果那份錄製裡真的有一次洩漏，這個數字就是它。</p>
+<p><strong>整檔框選會讓這道檢查失效</strong>，結果面板會印 <code>No back-check</code>。這時<strong>視窗穩定度是唯一的判準</strong>。</p>
+<h3 id="被擱置的錄製-與-keep-anyway">被擱置的錄製 與 <code>Keep anyway</code></h3>
+<p><strong>預設排除是對的。</strong> 這道檢查擋的是這整件事裡最危險的一種錯誤——把一份<strong>當時真的在漏</strong>的錄製混進基準。一旦混進去，那個漏就變成「正常」，之後永遠測不到它。</p>
+<p><strong>勾 <code>Keep anyway</code> 的條件</strong>：你<strong>說得出</strong>那份錄製水準不同的原因，而且那個原因<strong>不是洩漏</strong>（例如已知它是清機後第一批、或中間換過視窗）。「看起來還好」不是原因。覆寫一定要寫進紀錄。</p>
+<p>兩點提醒：</p>
+<ul>
+<li>這道檢查需要<strong>至少 3 份錄製</strong>才會啟動。只有兩份時這一段不會有東西——兩個檔選不出誰是異類；但「檔間差距」照樣會報，因為「這兩個彼此不合」不需要先知道誰錯。
+</li>
+<li><strong>覆寫常常白費工</strong>：差很遠的錄製合進來會讓 σ 膨脹，<code>mean/σ ≥ 10</code> 那道硬門檻通常會自己把結果擋掉。這時該做的是<strong>重錄</strong>，不是硬推。
+</li>
+</ul>
+<hr>
+<h2 id="11-go-與-no-go-判斷表">11. go 與 no-go 判斷表</h2>
+<p>判讀完只要回答一個問題：<strong>這次還能不能往下走？</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>看到什麼</th><th>判斷</th><th>下一步</th></tr></thead>
+<tbody>
+<tr><td><code>Refused: …</code>（整批被拒）</td><td><strong>NO-GO</strong></td><td>見第 <a href="#15-baseline-builder-獨有的拒絕訊息">15</a> 節。<code>Save</code> 本來就會是停用的</td></tr>
+<tr><td>有 <code>Alarm</code> 比值出現在 <code>No baseline for:</code></td><td><strong>NO-GO</strong></td><td>對照第 4 節的表確認 Role。是 <code>Alarm</code> 就退回：那個製程整段沒有洩漏監測，而 Leak Monitor 分頁上「No Baseline」看不出是缺錄檔還是比值壞了</td></tr>
+<tr><td>只有 <code>TrendOnly</code> / <code>Guard</code> 比值沒拿到基準</td><td><strong>GO（有條件）</strong></td><td>可以存，但在紀錄裡註明待補</td></tr>
+<tr><td>有比值標 <code>&lt;&lt; only just clears the floor</code></td><td><strong>暫停</strong></td><td>回頭縮小／移動視窗再 Build。改善不了才考慮接受，並寫進紀錄</td></tr>
+<tr><td>視窗穩定度 <code>σ/mean</code> &gt; 10 %，漂移也大</td><td><strong>NO-GO</strong></td><td>視窗選在爬升段，重選</td></tr>
+<tr><td>印出 <code>No back-check</code> 而你不是在做評估</td><td><strong>NO-GO</strong></td><td>你用了 <code>Whole file</code>。改成拖曳選段</td></tr>
+<tr><td>檔間差距大，且大的是絕對強度項</td><td><strong>暫停</strong></td><td>見第 <a href="#8-流程-b跨檔合併建基準">8</a> 節：那條改用單一錄製</td></tr>
+<tr><td>以上皆無</td><td><strong>GO</strong></td><td>往第 <a href="#12-紀錄必做不可省略">12</a> 節</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="12-紀錄必做不可省略">12. 紀錄（必做，不可省略）</h2>
+<p><strong>結果面板裡的判斷依據不會被保存。</strong> <code>mean ± σ</code>、<code>mean/σ</code>、檔間差距、視窗穩定度、回套檢查這些數字<strong>只存在那個文字框裡</strong>，重按一次 Build 就沒了；<code>settings.json</code> 只留下最後的 mean/σ。三個月後有人問「這條基準線當初為什麼可以接受」，能回答的只有那段文字——尤其 <code>mean/σ = 10.2</code> 和 <code>97</code> 事後從 <code>settings.json</code> 完全分不出健康程度。</p>
+<p>所以 <strong>Build 之後、Save 之前</strong>，做兩件事：</p>
+<ol>
+<li><strong>存進日資料夾</strong>：把結果面板全文複製出來，存成文字檔放進這次用到的錄製所在的日資料夾：
+</li>
+</ol>
+<p>``<code> {資料夾}\YYYYMM\DD\_baseline_{Golden Run 名稱}_{yyyyMMdd}.txt </code>``</p>
+<p><strong>檔名一定要用底線開頭</strong>——底線開頭的檔會被錄製檔掃描跳過，不會污染 Recordings／Ratio Review 清單，壓成 <code>DD.zip</code> 時也會一起收進去。這樣「這些錄製」和「它們被判定可以當基準的理由」會被一起複製走。</p>
+<ol>
+<li><strong>貼進工單／機台變更紀錄</strong>，連同：
+<ul>
+<li>第 <a href="#4-前置二站台比值對照表">4</a> 節的比值對照表</li>
+<li>用了哪幾個檔、各自的視窗</li>
+<li>任何 <code>Keep anyway</code> 覆寫及其理由</li>
+<li>任何接受 marginal 基準的理由</li>
+<li>若用到沒有 <code>.acq.json</code> 的舊錄製：註明「<strong>取像條件無法驗證</strong>」（見下）</li>
+</ul>
+</li>
+</ol>
+<blockquote><p><strong>程式不會自動寫這份報告</strong>，這是人工複製貼上的步驟。系統日誌只會記 <code>GoldenRunBuiltOffline</code>（名稱、用了幾個檔、幾條比值、幾個檔被擱置、每個檔的視窗時間）——<strong>不含</strong>上面那些判斷依據。</p></blockquote>
+<h3 id="舊錄製沒有-acqjson-時">舊錄製沒有 <code>.acq.json</code> 時</h3>
+<p>每個錄製檔旁邊的 <code>{檔名}.acq.json</code> 記錄當時的積分時間與平均設定，但那是後來才加的功能，<strong>之前錄的檔沒有</strong>。</p>
+<p>用沒有 sidecar 的錄製建基準，<code>LeakMonitorAcquisitionMismatch</code> 這道自動守衛就<strong>只比得了波長軸</strong>，積分時間差異完全偵測不到（這是刻意的：猜一個填進去，會讓該擋的時候放行）。而<strong>絕對強度會隨積分時間整個縮放</strong>。</p>
+<p><strong>可以用，但</strong>：紀錄裡要寫明「這條基準線的取像條件靠人工確認」，而且第 <a href="#14-收尾驗證">14</a> 節的實跑驗證要<strong>特別盯絕對強度項</strong>——那是唯一還能發現積分時間對不上的機會。</p>
+<hr>
+<h2 id="13-存檔">13. 存檔</h2>
+<ol>
+<li>確認畫面上的勾選與視窗，<strong>就是你剛剛 Build 的那一組</strong>。任何改動之後都要<strong>重按 Build</strong>（見第 2 節的警告）。
+</li>
+<li>按 <strong>Save as active baseline</strong>。需要 Engineer 以上。
+</li>
+<li>若跳出 <strong><code>Replace Golden Run?</code></strong> 對話框：
+<ul>
+<li>它表示同名的既有基準線裡，<strong>有些比值在新的這份裡沒有基準</strong>，而且這個取代<strong>無法復原</strong>。對話框會列出是哪幾條。</li>
+<li>對照第 4 節的表：其中有 <code>Alarm</code> 比值就按 <strong>No</strong>，回頭補足再來。</li>
+<li>沒有這個對話框，代表沒有任何比值會失去基準，直接存檔。</li>
+</ul>
+</li>
+<li>狀態列出現 <code>Golden Run "{名稱}" saved and made active.</code> 才算完成。
+</li>
+</ol>
+<p><strong>存檔是立即生效的</strong>——不需要重啟擷取，也不用重開程式。</p>
+<hr>
+<h2 id="14-收尾驗證">14. 收尾驗證</h2>
+<p>存檔只證明「存進去了」，<strong>不證明「這條基準線對得上現在這台機」</strong>。有三條路徑會<strong>安靜地</strong>讓它失效或不完整：</p>
+<ul>
+<li><code>ApplyGoldenRun</code> 只在<strong>監控方式、參考線名稱、萃取版本</strong>全部相符時才採用該比值的基準。<strong>Scan 之後改過 Ratio Setup，那條基準就會被忽略，畫面不報錯。</strong>
+</li>
+<li>取像條件不符，只在 Leak Monitor 的橫幅出現一行。
+</li>
+<li>洩漏率校正可能因為<strong>新的 Golden Run 名稱</strong>而被自動解除配對，估算整個關掉。
+</li>
+</ul>
+<p>所以四步都要做：</p>
+<ol>
+<li>[ ] <strong>Leak Monitor</strong> 分頁 → <strong>Baseline</strong> 下拉已經切到新的名稱。
+</li>
+<li>[ ] 橫幅<strong>沒有</strong>取像條件警示（<code>Acquisition differs from Golden Run …</code>）。有的話，那條基準線不適用於目前的積分／平均設定。
+</li>
+<li>[ ] 該有基準的比值<strong>都不是</strong> <code>No Baseline</code>。
+</li>
+<li>[ ] <strong>洩漏率校正狀態</strong>正常（不是 <code>Not calibrated</code> / <code>Baseline mismatch</code>，除非本來就沒有校正）。
+</li>
+<li>[ ] <strong>實跑一個 step</strong>，看各比值的 <strong>% of baseline 是否落在 100 附近</strong>。
+</li>
+</ol>
+<blockquote><p>第 5 步是唯一能同時驗證上面三條安靜失效路徑的動作：基準沒被採用的話 % of baseline 不會在 100 附近；取像條件不對的話絕對強度項會整個偏掉。<strong>少了這一步，這份 SOP 的終點是「我按了 Save」，而不是「它在量」。</strong></p></blockquote>
+<hr>
+<h2 id="15-baseline-builder-獨有的拒絕訊息">15. Baseline Builder 獨有的拒絕訊息</h2>
+<p>下面四種訊息<strong>只有這個分頁會出現</strong>，<a href="golden-run-baseline-troubleshooting-zh-TW.md"><code>golden-run-baseline-troubleshooting-zh-TW.md</code></a> 沒有收。其餘的拒絕句子跟現場擷取共用，請查那份文件。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>訊息（節錄）</th><th>意思</th><th>做什麼</th></tr></thead>
+<tbody>
+<tr><td><code>The selected recordings were taken on different wavelength axes …</code></td><td>選到的錄製<strong>波長軸不同</strong>（點數或起迄波長不同），合起來的基準沒有意義</td><td>只選同一軸的錄製。軸是從 CSV 標頭讀的，跟有沒有 sidecar 無關</td></tr>
+<tr><td><code>only {n} usable frames across the selected windows, fewer than the {60} required</code></td><td>所有視窗<strong>加總</strong>不足 60 幀</td><td>放寬視窗，或再加一份錄製（流程 B）</td></tr>
+<tr><td><code>none of the selected recordings ran process {X}, which is the class this ratio measures (they are: …)</code></td><td>這條比值只量製程 X，但選到的錄製裡沒有 X</td><td>見<a href="#附錄-a多製程站台分類器開啟時">附錄 A</a></td></tr>
+<tr><td><code>Every selected recording was set aside by the consistency check.</code></td><td>每一份都被判為異類</td><td>錄製之間差異太大，多半是操作點根本不同。重新挑檔，不要用 <code>Keep anyway</code> 硬推</td></tr>
+</tbody></table></div>
+<p>其餘會出現在 <code>No baseline for:</code> 的句子（沒有可用幀、SNR 不足、基準不夠遠離 0），<strong>意思與處置和現場擷取完全相同</strong>，查 troubleshooting 文件。</p>
+<hr>
+<h2 id="16-現行版本的限制">16. 現行版本的限制</h2>
+<p>下列是<strong>目前實作的限制</strong>，不是設計原則——程式擴充時它們可能改變。改版時只要改這一節。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>限制</th><th>現況</th></tr></thead>
+<tbody>
+<tr><td>最少幀數</td><td>固定 <strong>60</strong>，所有視窗加總，<strong>操作員不可調</strong></td></tr>
+<tr><td>異常錄製門檻</td><td>固定 <strong>5 σ</strong>，<strong>不可調</strong>；需要至少 3 份錄製才啟動</td></tr>
+<tr><td>一個檔一段</td><td>沒有「新增視窗」的控制項，每次選取都是取代</td></tr>
+<tr><td>多操作點</td><td>一條 Golden Run 只描述<strong>一個</strong>穩定操作點。多步驟製程要每個 step 各一份基準、人工切換</td></tr>
+<tr><td>製程分類</td><td>只顯示在 <code>State</code> 欄，<strong>不能篩選、不能人工覆寫</strong>判定結果</td></tr>
+<tr><td>Build 結果不會失效</td><td>改勾選／視窗／<code>Keep anyway</code> <strong>不會</strong>使上次 Build 的結果失效，<code>Save</code> 仍可按且存的是舊結果</td></tr>
+<tr><td>掃描會被靜默作廢</td><td>改 Ratio Setup／波長修正／分類器／觸發門檻後，既有掃描<strong>沒有任何提示</strong>就不再正確</td></tr>
+<tr><td><code>Refresh</code> 會清空</td><td>改日期或按 Refresh 會清掉所有掃描、勾選、視窗與結果</td></tr>
+</tbody></table></div>
+<blockquote><p>其中「<strong>改完要重按 Build</strong>」同時也是第 <a href="#2-角色與分工">2</a> 節的硬性動作——它會直接造成存錯基準線，不能只放在這一節讓人自己想起來。</p></blockquote>
+<hr>
+<h2 id="附錄-a多製程站台分類器開啟時">附錄 A：多製程站台（分類器開啟時）</h2>
+<p>啟用 Process Classifier 後，<strong>每個比值只從自己 class 的錄製取樣</strong>。<code>MinFrames = 60</code> 是按取樣後的結果算的，等於<strong>每個 class 各自要湊滿 60 幀</strong>。</p>
+<p><strong>流程照舊走<a href="#8-流程-b跨檔合併建基準">流程 B（跨檔）</a></strong>——單一 class 的一次 step 很難自己湊滿，跨檔就是它的流程。只多兩件事：</p>
+<h3 id="a1-掃描後按-class-盤點">A.1 掃描後按 class 盤點</h3>
+<p><code>State</code> 欄會顯示 <code>{製程名} · {幀數} frames, {秒數} s</code>。這是<strong>唯一</strong>顯示 class 的地方：沒有 class 欄位、沒有篩選、不能人工改判。</p>
+<p>盤點方式：對照第 <a href="#4-前置二站台比值對照表">4</a> 節的表，逐一確認<strong>每一個有比值在用的 class</strong>，勾選的錄製裡都有它，而且該 class 的幀數加總 ≥ 60（建議 ≥ 120）。</p>
+<p>兩種 <code>State</code> 要注意：</p>
+<ul>
+<li><strong><code>Unknown ·  …</code></strong> —— 沒有規則match得上，或錄製在判定幀之前就結束了。這份錄製<strong>任何 class-scoped 的比值都用不到</strong>。
+</li>
+<li><strong>沒有 class 前綴</strong> —— 分類器沒有啟用，或設定不可用。這時所有比值都適用所有錄製（等同單製程）。
+</li>
+</ul>
+<h3 id="a2-缺-class-時的處置">A.2 缺 class 時的處置</h3>
+<p>結果面板會具名拒絕：<code>none of the selected recordings ran process {X}, which is the class this ratio measures (they are: …)</code>。</p>
+<p>對照第 4 節的表看那條比值的 <strong>Role</strong>：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>缺的比值 Role</th><th>判斷</th><th>做法</th></tr></thead>
+<tbody>
+<tr><td><strong><code>Alarm</code></strong></td><td><strong>NO-GO</strong></td><td>補錄那個製程的錄製再重建。存下去等於<strong>那個製程整段沒有洩漏監測</strong>，而 Leak Monitor 分頁上看不出是缺錄檔還是比值本身壞了</td></tr>
+<tr><td><code>TrendOnly</code> / <code>Guard</code></td><td>GO（有條件）</td><td>本來就不參與警報，可以先存，<strong>紀錄裡註明待補</strong></td></tr>
+</tbody></table></div>
+<h3 id="a3-其他會按-class-分開算的東西">A.3 其他會按 class 分開算的東西</h3>
+<p>這幾項都只拿<strong>同 class</strong> 的錄製比較，所以數字比單製程站台少是正常的：</p>
+<ul>
+<li><strong>異常錄製檢查</strong>：需要同一 class 內至少 3 份錄製
+</li>
+<li><strong>檔間差距</strong>、<strong>視窗穩定度</strong>、<strong>回套檢查</strong>：不同 class 的錄製互不比較（否則別的製程的電漿會讓每一項看起來都很糟）
+</li>
+</ul>
+<hr>
+<h2 id="附錄-b檢核表可列印">附錄 B：檢核表（可列印）</h2>
+<p><strong>Golden Run 名稱</strong>：________________　<strong>日期</strong>：__________　<strong>執行人</strong>：__________</p>
+<p><strong>前置</strong></p>
+<ul>
+<li>[ ] Ratio Setup／波長修正／分類器／觸發門檻 已定案
+</li>
+<li>[ ] 站台比值對照表 已確認為最新
+</li>
+<li>[ ] 日期範圍已想好（改日期會清空一切）
+</li>
+</ul>
+<p><strong>建置</strong></p>
+<ul>
+<li>[ ] Refresh → 勾選錄製 → Scan ticked
+</li>
+<li>[ ] 每一筆 <code>State</code> 正常（無 <code>failed:</code>）
+</li>
+<li>[ ] 判斷走向：□ 流程 A 單檔　□ 流程 B 跨檔
+</li>
+<li>[ ] 每個勾選的檔都有自己的視窗（<code>Window</code> 欄非空）
+</li>
+<li>[ ] 正式建置<strong>沒有</strong>使用 <code>Whole file</code>
+</li>
+<li>[ ] 填入 Golden Run 名稱 → Build
+</li>
+</ul>
+<p><strong>判讀</strong></p>
+<ul>
+<li>[ ] 無 <code>Refused:</code>
+</li>
+<li>[ ] <code>Alarm</code> 比值全部拿到基準
+</li>
+<li>[ ] 無 <code>&lt;&lt; only just clears the floor</code>（或已記錄接受理由）
+</li>
+<li>[ ] 視窗穩定度 <code>σ/mean</code> 合理（≈ 1 %）
+</li>
+<li>[ ] 無 <code>No back-check</code>
+</li>
+<li>[ ] 檔間差距可接受（尤其絕對強度項）
+</li>
+<li>[ ] <code>Keep anyway</code> 未使用（或已記錄理由）
+</li>
+</ul>
+<p><strong>紀錄</strong></p>
+<ul>
+<li>[ ] 結果面板全文 → <code>_baseline_*.txt</code> 存入日資料夾
+</li>
+<li>[ ] 全文＋比值對照表＋視窗＋例外理由 → 工單
+</li>
+<li>[ ] 若用到無 <code>.acq.json</code> 的錄製：已註明「取像條件無法驗證」
+</li>
+</ul>
+<p><strong>存檔與驗證</strong></p>
+<ul>
+<li>[ ] 畫面狀態與最後一次 Build 一致（有改動已重按 Build）
+</li>
+<li>[ ] Save as active baseline（Engineer）→ 狀態列顯示 <code>saved and made active</code>
+</li>
+<li>[ ] Leak Monitor 的 Baseline 下拉已切到新名稱
+</li>
+<li>[ ] 無取像條件警示
+</li>
+<li>[ ] 該有基準的比值都不是 No Baseline
+</li>
+<li>[ ] 洩漏率校正狀態正常
+</li>
+<li>[ ] <strong>實跑一個 step，% of baseline 落在 100 附近</strong>
+</li>
+</ul>
+<p><strong>簽名</strong>：________________</p>
+</main>
+</div>
+</body>
+</html>

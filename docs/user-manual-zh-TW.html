@@ -875,7 +875,9 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <hr>
 <h3 id="67-baseline-builder離線建基準">6.7 Baseline Builder（離線建基準）</h3>
 <blockquote><p>權限：分頁<strong>人人可看</strong>，<strong>Save 需要 Engineer 以上</strong>。</p></blockquote>
-<p>用<strong>已經存在硬碟上的錄製檔</strong>產生 Golden Run，補現場擷取搆不到的兩種製程：</p>
+<p>用<strong>已經存在硬碟上的錄製檔</strong>產生 Golden Run。</p>
+<blockquote><p><strong>照著做的程序在另一份文件</strong>：<a href="baseline-builder-sop-zh-TW.md"><code>baseline-builder-sop-zh-TW.md</code></a>（交付資料夾裡是 <code>baseline-builder-sop-zh-TW.html</code>）。本節說明這個分頁<strong>每個區塊是什麼</strong>，操作順序、判斷準則、紀錄與驗證步驟都在那份 SOP 裡——兩邊各寫一份程序必然會不同步。</p></blockquote>
+<p>對下面這兩種製程，它<strong>不是備案，而是建基準的正常作法</strong>——站在機台前按 Capture 在這兩種情況下做不出可用的基準：</p>
 <ul>
 <li><strong>緩啟動</strong>：前幾秒功率還在爬升，穩定段從哪裡開始只有曲線看得出來，站在機台前按下 Capture 是猜的。
 </li>
@@ -883,24 +885,17 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </li>
 </ul>
 <p><strong>不適用：多步驟製程。</strong> 一個 Golden Run 只描述<strong>一個</strong>穩定操作點。要監測多個 step，就每個 step 各錄一份基準、換 step 時人工切換作用中的基準。原因與代價寫在 <code>docs/adr/0001</code>。</p>
-<h4 id="操作步驟">操作步驟</h4>
-<ol>
-<li>選日期範圍 → <strong>Refresh</strong>，列出資料夾裡的全光譜錄製（壓縮進 <code>DD.zip</code> 的也會列出來）。
-</li>
-<li>勾要用的錄製 → <strong>Scan ticked</strong>。這一步會用<strong>現在</strong>的 Ratio Setup 與波長修正把每一幀重新萃取一次，所以改過那些設定之後要重掃。這是整個流程唯一花時間的一步。
-</li>
-<li>點清單裡的一筆看它的曲線。
-</li>
-<li><strong>在圖上按住左鍵拖曳</strong>選出穩定段；也可以按 <strong>Suggest</strong> 讓它填入「最平的一段」，或直接在上方兩個框裡打數字。
+<h4 id="畫面上有什麼">畫面上有什麼</h4>
+<p>由左而右：日期範圍 + <strong>Refresh</strong>、錄製清單（<code>Use</code> 勾選欄、檔名、日期、時間、大小、<code>zip</code> 標記、<code>Window</code> 已選視窗、<code>State</code> 掃描狀態、<code>Keep anyway</code> 覆寫欄）、<strong>Scan ticked</strong>；右邊是視窗數字框 + <strong>Suggest</strong> / <strong>Whole file</strong> 與曲線圖；最下方是 Golden Run 名稱、<strong>Build</strong>、<strong>Save as active baseline</strong> 與結果面板。</p>
+<p><strong>勾選（<code>Use</code>）和點選是兩回事</strong>：清單只能單選，點某一列只是把它的曲線畫到右邊，不代表要用它建基準；建置用的是所有勾了 <code>Use</code> 的錄製。</p>
+<p><strong>選視窗有四種方式，都寫進同一組數字</strong>：在圖上按住左鍵拖曳、直接在數字框裡打、<strong>Suggest</strong>（填入「最平的一段」，長度等於 Configuration 分頁的 <code>GoldenRunCaptureSeconds</code>）、<strong>Whole file</strong>。</p>
 <ul>
-<li>Suggest 只找得出「這一段很平」，<strong>找不出「這一段沒有漏」</strong>——它的工作是把游標放到對的地方附近，判斷仍然是你的。</li>
+<li>Suggest 只找得出「這一段很平」，<strong>找不出「這一段沒有漏」</strong>——它的工作是把游標放到對的地方附近，判斷仍然是你的。
+</li>
+<li><code>Whole file</code> 會讓視窗涵蓋整份錄製，<strong>回套檢查因此失效</strong>（見下）。
+</li>
 </ul>
-</li>
-<li>每個檔各自選一段（<strong>一個檔只能一段</strong>，理由見下）。
-</li>
-<li>下方填 Golden Run 名稱 → <strong>Build</strong> → 看結果面板 → <strong>Save as active baseline</strong>。
-</li>
-</ol>
+<p><strong>掃描（<code>Scan ticked</code>）會用現在的 Ratio Setup 與波長修正把每一幀重新萃取一次</strong>，所以改過那些設定之後要重掃；這是整個流程唯一花時間的一步。改日期範圍或按 <code>Refresh</code> 會清掉所有掃描、勾選與結果。</p>
 <h4 id="圖怎麼看">圖怎麼看</h4>
 <p>每條比值都除以它自己在整段錄製的中位數，所以量級差很多的線可以共用一個縱軸；軸上直接寫 <code>× own median</code>。這<strong>不是</strong> Leak Monitor 的「% of baseline」——這個分頁的前提就是基準還不存在。</p>
 <h4 id="結果面板的四件事">結果面板的四件事</h4>

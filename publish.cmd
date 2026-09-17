@@ -78,6 +78,7 @@ for %%F in (
     secs-acceptance-sheet-zh-TW.html
     CONTEXT-zh-TW.html
     golden-run-baseline-troubleshooting-zh-TW.html
+    baseline-builder-sop-zh-TW.html
     check-oes-connect.ps1
     check-oes-connect.cmd
 ) do (
@@ -105,6 +106,7 @@ if defined MISSING (
     echo    python3 tools\md2html.py docs\secs-operation-sop-zh-TW.md docs\secs-operation-sop-zh-TW.html "OES Leak Monitor SECS SOP"
     echo    python3 tools\md2html.py docs\CONTEXT-zh-TW.md docs\CONTEXT-zh-TW.html "OES Leak Monitor terms"
     echo    python3 tools\md2html.py docs\golden-run-baseline-troubleshooting-zh-TW.md docs\golden-run-baseline-troubleshooting-zh-TW.html "OES Leak Monitor Golden Run baseline troubleshooting"
+    echo    python3 tools\md2html.py docs\baseline-builder-sop-zh-TW.md docs\baseline-builder-sop-zh-TW.html "OES Leak Monitor Baseline Builder SOP"
     echo.
     echo  secs-acceptance-sheet-zh-TW.html has NO Markdown source - it is a form,
     echo  hand-authored as HTML. Do not regenerate it; restore it from git.
@@ -114,7 +116,7 @@ if defined MISSING (
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 20 files present ***
+echo  *** PUBLISH SUCCEEDED - all 21 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -133,6 +135,8 @@ echo    secs-acceptance-sheet-zh-TW.html   SECS acceptance sheet (print and sign
 echo    CONTEXT-zh-TW.html         glossary of the terms on screen
 echo    golden-run-baseline-troubleshooting-zh-TW.html
 echo                               why a Golden Run baseline was refused
+echo    baseline-builder-sop-zh-TW.html
+echo                               building a Golden Run from recordings on disk
 echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
 echo.
 
