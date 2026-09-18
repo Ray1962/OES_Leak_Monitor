@@ -18,7 +18,7 @@
   <ItemGroup>
     <PackageReference Include="Aqst.OesApp.Core" Version="0.1.10" />
     <PackageReference Include="Aqst.OesApp.Wpf"  Version="0.1.16" />
-    <PackageReference Include="Aqst.OesSpectrometer" Version="0.6.0" />
+    <PackageReference Include="Aqst.OesSpectrometer" Version="0.6.2" />
     <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
     <!-- SECS/GEM equipment side. Secs4Net is referenced directly too, for the
          SecsGemOptions / ConnectionState types the SECS tab binds to. -->
