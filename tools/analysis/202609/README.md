@@ -9,7 +9,7 @@ python3 03_search.py         # §4.3
 python3 04_rule_check.py     # §4.4
 python3 05_decision_frame.py # §4.5
 python3 06_site_state.py     # §1, §3
-python3 07_line_points.py    # four lines at fixed time points, 09-03/08/10/20 (standalone)
+python3 07_line_points.py    # four lines at fixed time points, 08-19 and 09-03/08/10/20 (standalone)
 python3 08_o777_baseline.py  # O 777.2 as a baseline in B / C; N2/O and NO/O in B (reads the cache)
 ```
 
@@ -20,7 +20,9 @@ reading `out/cache.json`, because `202609/20` is not in that cache; `--verify` c
 labels it produces against `cp_labels` for the three days that are, and prints any
 mismatch. Where a day carries its own `*.notes.txt` (09-20: process + dosing valve index)
 those are the authoritative label and the spectral class is kept beside them -- on 09-20
-they disagree for every B step.
+they disagree for every B step. 08-19 is a different tool (the leak-valve test day) and is grouped
+by the operator's three test conditions rather than A/B/C; an archived day (`DD.zip`) is read
+from the archive.
 
 `08_o777_baseline.py` asks whether O I 777.2 can carry a Golden Run in process B and C, and
 whether N2 337.1 / O 777.2 and NO 237 / O 777.2 are usable leak indicators in B. It reports
