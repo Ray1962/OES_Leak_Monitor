@@ -91,8 +91,12 @@ public static class SpectralLineCatalog
         Add("Cl", 256.1, 725.7, 741.4, 754.7, 771.8, 774.5);
         Add("Cl2", 256, 308.9);
         Add("CN", 289.8, 304.2, 359, 386.2, 387, 387.1, 388.3, 418.1, 419.7, 421.6, 585, 646.7, 692.6, 787.3);
+        // 329.6 is the denominator of the site ratio set (R_N2CO_*, leak-monitor-plan §4.3). It is
+        // where that band peaks on the measured spectrometer's axis, which reads +0.30 nm high, not
+        // a literature band head. Without it the Ratio Setup picker resolved "CO 329.6" to the
+        // nearest CO line, 325.3, and one re-selection re-pointed the ratio and dropped its baseline.
         Add("CO", 209, 219.7, 223.8, 231.2, 233.8, 239.3, 259.8, 283.3, 292.5, 302.8,
-                  313.4, 313.8, 325.3, 451.1, 482.5, 483.5, 519, 519.8, 561, 608);
+                  313.4, 313.8, 325.3, 329.6, 451.1, 482.5, 483.5, 519, 519.8, 561, 608);
         Add("Co", 271.2, 331.2, 349.2, 369.9, 662);
         Add("CO2+", 288.4, 289.8);
         Add("Cr", 359.3, 360.5, 425.4, 520.8);
