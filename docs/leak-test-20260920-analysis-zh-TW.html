@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生產機台受控漏氣測試分析 2026-09-20</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#0-結論一句話各一條">0. 結論(一句話各一條)</a>
+<a class="l2" href="#1-資料與實驗設計">1. 資料與實驗設計</a>
+<a class="l3" href="#11-錄檔">1.1 錄檔</a>
+<a class="l3" href="#12-製程">1.2 製程</a>
+<a class="l3" href="#13-閥位換算">1.3 閥位換算</a>
+<a class="l2" href="#2-當天真正的主導效應紫外穿透率">2. 當天真正的主導效應:紫外穿透率</a>
+<a class="l3" href="#21-陷阱劑量與時間共線">2.1 陷阱:劑量與時間共線</a>
+<a class="l3" href="#22-解開1645-的長清洗讓兩者不再共線">2.2 解開:16:45 的長清洗讓兩者不再共線</a>
+<a class="l2" href="#3-劑量曲線沒有響應">3. 劑量曲線:沒有響應</a>
+<a class="l3" href="#製程-cn--32222">製程 C(n = 3/2/2/2/2)</a>
+<a class="l3" href="#製程-bn--32222">製程 B(n = 3/2/2/2/2)</a>
+<a class="l2" href="#4-決定性證據整條光譜上沒有東西隨閥門變化">4. 決定性證據:整條光譜上沒有東西隨閥門變化</a>
+<a class="l3" href="#41-方法">4.1 方法</a>
+<a class="l3" href="#42-結果最相關的波長全部在近紅外而且全部是下降">4.2 結果:最相關的波長全部在近紅外,而且全部是下降</a>
+<a class="l3" href="#43-而漏氣必須抬升的那些全部是零">4.3 而漏氣必須抬升的那些,全部是零</a>
+<a class="l3" href="#44-穿透率配對不需要模型的版本">4.4 穿透率配對:不需要模型的版本</a>
+<a class="l3" href="#45-為什麼-cn-388-是最關鍵的一條">4.5 為什麼 CN 388 是最關鍵的一條</a>
+<a class="l2" href="#5-兩種讀法以及為什麼判閥門沒送氣">5. 兩種讀法,以及為什麼判「閥門沒送氣」</a>
+<a class="l3" href="#讀法-a--指標如校正般運作所以漏氣沒有送到">讀法 A —— 指標如校正般運作,所以漏氣沒有送到</a>
+<a class="l3" href="#讀法-b--漏氣送到了所以指標就是這麼不靈敏">讀法 B —— 漏氣送到了,所以指標就是這麼不靈敏</a>
+<a class="l3" href="#判-a理由是-43-那張表">判 A,理由是 §4.3 那張表</a>
+<a class="l2" href="#6-這一天仍然賺到的東西">6. 這一天仍然賺到的東西</a>
+<a class="l3" href="#61-r_n2co_c-的散度實測而且與計畫相符">6.1 R_N2CO_C 的散度,實測,而且與計畫相符</a>
+<a class="l3" href="#62-製程-b仍然收不到-baseline但批次層的再現性變好了">6.2 製程 B:仍然收不到 baseline,但批次層的再現性變好了</a>
+<a class="l3" href="#621-這個比錯的量計畫裡也有一份">6.2.1 這個比錯的量,計畫裡也有一份</a>
+<a class="l3" href="#63-守衛量-co-608--ar-811-表現良好">6.3 守衛量 CO 608 / Ar 811 表現良好</a>
+<a class="l3" href="#64-r_n2ar_c-否決票在這台機上不能用">6.4 R_N2Ar_C 否決票在這台機上不能用</a>
+<a class="l2" href="#7-兩個必須在重測前修掉的設定問題">7. 兩個必須在重測前修掉的設定問題</a>
+<a class="l3" href="#71-分類器的-hα-門檻餘裕已經吃掉了">7.1 分類器的 Hα 門檻餘裕已經吃掉了</a>
+<a class="l3" href="#72-站點設定從來沒有安裝到這台機器上">7.2 站點設定從來沒有安裝到這台機器上</a>
+<a class="l2" href="#8-重測這次實驗需要改的四件事">8. 重測這次實驗需要改的四件事</a>
+<a class="l2" href="#9-這次分析不能回答的">9. 這次分析不能回答的</a>
+<a class="l2" href="#附錄重現">附錄:重現</a>
+</nav>
+<main>
+<h1 id="生產機台受控漏氣測試分析2026-09-20">生產機台受控漏氣測試分析(2026-09-20)</h1>
+<blockquote><p>資料:<code>C:\DualOES\202609\20</code>(35 筆全譜錄檔,其中 22 筆帶 notes 標籤)、 診斷包 <code>C:\DualOES\log20260920</code>。 腳本在 <a href="../tools/analysis/20260920/"><code>tools/analysis/20260920/</code></a>,抽取幾何直接沿用 <a href="../tools/analysis/202609/common.py"><code>tools/analysis/202609/common.py</code></a>, 也就是釘在 app 自己的 <code>LineIntensityExtractor</code> 上。</p>
+<p>這是 <a href="leak-monitor-plan-zh-TW.md"><code>leak-monitor-plan-zh-TW.md</code></a> §5.1 那道硬性 gate <strong>第一次在生產機台上執行</strong>。2026-09-04 的 <a href="leak-test-20260904-analysis-zh-TW.md"><code>leak-test-20260904-analysis-zh-TW.md</code></a> 是在實驗機台上做的替代,GO 判定(§16,餘裕 8.3 倍)整個建立在一段外推上。 這一天本來要替那段外推結帳。</p></blockquote>
+<hr>
+<h2 id="0-結論一句話各一條">0. 結論(一句話各一條)</h2>
+<ol>
+<li><strong>沒有偵測到任何漏氣訊號 —— 整條光譜上都沒有。</strong> 12 個含氮特徵(N₂ 二正系六條帶、 N₂⁺ 兩條、CN violet 兩條、NO γ 兩條)在 index 0 → 200 之間的變化全部落在 <strong>−0.4 %～+0.8 %</strong>,|t| ≤ 2.3。
+</li>
+<li><strong>因此判定:測漏閥沒有把氣體送進腔體。</strong> 使用者在交付資料時已經懷疑這件事,資料證實了它。 這不是「指標失效」的證據 —— 指標這次<strong>根本沒有被測試到</strong>。
+</li>
+<li><strong>GO/NO-GO 仍然懸著。</strong> §16 的 8.3 倍餘裕既沒有被驗證,也沒有被推翻。
+</li>
+<li><strong>但這一天不是白跑的。</strong> 它第一次在生產機台上量到 <code>R_N2CO_C</code> 的三種散度, 而且<strong>與計畫的數字相符</strong>(跨錄檔 2.97 % 對 3.1 %、mean/σ 33.7 對 32.2); 它還意外提供了一次 3.06 倍的紫外穿透率擺動,把「7.5 nm 規則」從推論變成實測。
+</li>
+<li><strong>兩個設定問題必須在重測前修掉</strong>:分類器的 Hα 門檻餘裕已經從 1.5 倍吃到 <strong>1.11 倍</strong>; 站點設定(計畫 §17)<strong>從來沒有安裝到這台機器上</strong>,當天全程掛著一個與漏氣無關的 latched Alarm。
+</li>
+</ol>
+<hr>
+<h2 id="1-資料與實驗設計">1. 資料與實驗設計</h2>
+<h3 id="11-錄檔">1.1 錄檔</h3>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th></th></tr></thead>
+<tbody>
+<tr><td>全譜錄檔</td><td>35 筆,其中 <strong>22 筆</strong>有 <code>*.notes.txt</code> 標籤</td></tr>
+<tr><td>標籤內容</td><td>製程 B 或 C × dosing valve index ∈ {0, 50, 100, 150, 200}</td></tr>
+<tr><td>重複次數</td><td>每個 (製程, index) 兩筆;<strong>index 0 是三筆</strong></td></tr>
+<tr><td>單筆長度</td><td>B 約 105–110 s(≈ 180 幀)、C 約 79 s(≈ 131 幀)</td></tr>
+<tr><td>幀率</td><td><strong>1.65 fps</strong>(80 ms 積分 × 5 次硬體平均)</td></tr>
+<tr><td>波長軸</td><td>1896 點,179.80–850.30 nm</td></tr>
+<tr><td>取樣窗口</td><td>閘門開啟後 <strong>10–30 s</strong>,每筆 <strong>33 幀</strong>,逐點中位數(與 <code>BatchTracker</code> 相同)</td></tr>
+</tbody></table></div>
+<p>22 筆標籤錄檔全部閘門正常開啟、窗口都滿 33 幀。<strong>資料品質本身沒有問題。</strong></p>
+<h3 id="12-製程">1.2 製程</h3>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>使用者說明</th><th>實測判別量</th></tr></thead>
+<tbody>
+<tr><td><strong>B</strong></td><td>O₂ 為主,鍍膜前清潔,壓力 3.8 torr</td><td><code>Ar750/O777</code> 0.0015–0.0019、<code>Hα656/O777</code> <strong>0.0555–0.0587</strong></td></tr>
+<tr><td><strong>C</strong></td><td>TEOS 鍍膜,另有 Ar / He / O₂</td><td><code>Ar750/O777</code> <strong>1.5187–1.5382</strong>、<code>Hα656/O777</code> 0.1432–0.1574</td></tr>
+</tbody></table></div>
+<p>另有 13 筆未標籤錄檔(15:48–16:15 的暖機段、16:45 的 163 s 長清洗、18:17 之後的收尾兩筆)。 它們不進劑量分析,但在 §2 與 §5 都派上用場。</p>
+<h3 id="13-閥位換算">1.3 閥位換算</h3>
+<p>沿用 2026-09-04 使用者提供的對照表(同一把閥)。<strong>這張表除 index 300 外全部是曲線估讀</strong>, 絕對尺度可能整體平移;線性度與相對比較不受影響。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>index</th><th>0</th><th>50</th><th>100</th><th>150</th><th>200</th></tr></thead>
+<tbody>
+<tr><td>Q (mbar·L/s)</td><td>0</td><td>2.0×10⁻⁵</td><td>3.0×10⁻⁴</td><td>1.7×10⁻³</td><td><strong>1.0×10⁻²</strong></td></tr>
+<tr><td>airFrac @ 500 sccm</td><td>0</td><td>2.4×10⁻⁶</td><td>3.6×10⁻⁵</td><td>2.0×10⁻⁴</td><td><strong>1.2×10⁻³</strong></td></tr>
+</tbody></table></div>
+<p><strong>index 200 的標稱值 1.0×10⁻² 大於規格目標 8.89×10⁻³</strong>(1 mTorr/min × 400 L)。 也就是說,這次測試的最大劑量本來應該把「規格大小的漏氣」直接放進腔體 —— 按 §16.1 的外推,<code>R_N2CO_C</code> 應該上升 <strong>+77 %～+178 %</strong>。</p>
+<hr>
+<h2 id="2-當天真正的主導效應紫外穿透率">2. 當天真正的主導效應:紫外穿透率</h2>
+<p>在談漏氣之前必須先講這件事,因為它比任何漏氣訊號都大一個數量級, 而且它同時<strong>製造</strong>了一個陷阱和<strong>解開</strong>了一個陷阱。</p>
+<p>以 <code>UV/NIR = CO 330 / O 777</code> 當穿透率指標(同一幀、兩端波長):</p>
+<div class="tablewrap"><table>
+<thead><tr><th>時間</th><th>事件</th><th>製程 C 的 UV/NIR</th></tr></thead>
+<tbody>
+<tr><td>16:21 – 16:31</td><td>index 0 三筆</td><td>0.440 → 0.381 → <strong>0.322</strong></td></tr>
+<tr><td>16:45</td><td><strong>163 s 長清洗</strong>(未標籤,<code>0920164507</code>)</td><td>—</td></tr>
+<tr><td>17:09</td><td>index 50 第一筆</td><td><strong>0.899</strong> ← 跳了 2.79 倍</td></tr>
+<tr><td>17:09 – 18:13</td><td>index 50 → 200</td><td>0.899 → <strong>0.294</strong>,單調下降</td></tr>
+</tbody></table></div>
+<p><strong>單調結垢,半衰期 40 分鐘(製程 C)/ 60 分鐘(製程 B)</strong>,65 分鐘掉 3.06 倍。 紫外掉 3 倍的同期,近紅外幾乎不動:<code>O 777</code> 只從 27991 掉到 23180(−17 %)、 <code>Ar 811</code> 從 17512 到 14775(−16 %)。<strong>這是波長選擇性的視窗結垢</strong>, 正是計畫 §2.1 記錄的現象,只是這次的幅度遠大於「批次內 1.8 倍」。</p>
+<h3 id="21-陷阱劑量與時間共線">2.1 陷阱:劑量與時間共線</h3>
+<p>閥位是按 0 → 50 → 100 → 150 → 200 的順序、依時間遞增施加的,而穿透率在同一段時間內單調下降。 <strong>任何沒有在同一波長區段內正規化的量,都會給出一條看起來很漂亮的「劑量曲線」, 而那條曲線量的是視窗,不是漏氣。</strong></p>
+<p>§3 的表裡可以直接看到這件事:<code>NO 237 / CO 330</code> 在 index 50 上升 <strong>+167.5 %</strong> 然後單調回落 —— 它的欄位形狀與 <code>UV/NIR</code> 那一列<strong>一模一樣</strong>。</p>
+<h3 id="22-解開1645-的長清洗讓兩者不再共線">2.2 解開:16:45 的長清洗讓兩者不再共線</h3>
+<p>清洗發生在 index 0 組<strong>之後</strong>、index 50 組<strong>之前</strong>,所以:</p>
+<ul>
+<li>index 0 三筆的 UV/NIR 是 0.322 – 0.440(清洗前,已結垢)
+</li>
+<li>index 200 兩筆的 UV/NIR 是 0.294 – 0.350(結垢回來了)
+</li>
+</ul>
+<p><strong>兩組重疊。</strong> <code>corr(index, log UV/NIR) = −0.248</code> —— 低到足以做一個兩變數迴歸, 把穿透率與閥位分開。這是這次實驗最有價值的一個意外,§4 完全建立在它上面。</p>
+<hr>
+<h2 id="3-劑量曲線沒有響應">3. 劑量曲線:沒有響應</h2>
+<p>每一欄是該閥位所有重複的平均,相對 index 0 的變化量。分母一律取<strong>與分子同一波長區段</strong>的線, 所以視窗穿透率被除掉。</p>
+<h3 id="製程-cn--32222">製程 C(n = 3/2/2/2/2)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>指標</th><th>index 0 基準</th><th>基準散度</th><th>50</th><th>100</th><th>150</th><th><strong>200</strong></th></tr></thead>
+<tbody>
+<tr><td><strong><code>R_N2CO</code> N₂337/CO330</strong></td><td>0.02004</td><td>2.0 %</td><td>−4.8 %</td><td>−3.2 %</td><td>−2.0 %</td><td><strong>+1.9 %</strong></td></tr>
+<tr><td>N₂ 357 / CO 330</td><td>0.01325</td><td>4.9 %</td><td>−23.7 %</td><td>−16.7 %</td><td>−8.5 %</td><td>+4.7 %</td></tr>
+<tr><td>N₂ 380 / CO 330</td><td>0.01862</td><td>4.0 %</td><td>−24.4 %</td><td>−17.6 %</td><td>−5.5 %</td><td>+7.3 %</td></tr>
+<tr><td>N₂⁺ 391 / CO 330</td><td>0.01499</td><td>6.2 %</td><td>−26.8 %</td><td>−13.7 %</td><td>−3.6 %</td><td>+13.0 %</td></tr>
+<tr><td>CN 388 / CO 330</td><td>0.11389</td><td>3.7 %</td><td>−23.4 %</td><td>−15.5 %</td><td>−6.2 %</td><td>+4.5 %</td></tr>
+<tr><td>NO 237 / CO 330</td><td>0.01613</td><td>17.5 %</td><td>+167.5 %</td><td>+81.6 %</td><td>+20.3 %</td><td>−17.5 %</td></tr>
+<tr><td><code>R_N2Ar</code> N₂337/Ar750</td><td>0.00500</td><td>12.0 %</td><td>+109.4 %</td><td>+59.8 %</td><td>+16.6 %</td><td>−14.1 %</td></tr>
+<tr><td>守衛 CO608/Ar811</td><td>0.10026</td><td>1.9 %</td><td>+11.3 %</td><td>+7.2 %</td><td>+2.4 %</td><td>−2.4 %</td></tr>
+<tr><td>*(參考)* <strong>UV/NIR</strong></td><td>0.38108</td><td>12.6 %</td><td><strong>+120.6 %</strong></td><td><strong>+65.9 %</strong></td><td><strong>+19.1 %</strong></td><td><strong>−15.5 %</strong></td></tr>
+</tbody></table></div>
+<h3 id="製程-bn--32222">製程 B(n = 3/2/2/2/2)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>指標</th><th>index 0 基準</th><th>基準散度</th><th>50</th><th>100</th><th>150</th><th><strong>200</strong></th></tr></thead>
+<tbody>
+<tr><td><strong><code>R_N2CO</code> N₂337/CO330</strong></td><td>0.01164</td><td>8.2 %</td><td>+14.4 %</td><td>+11.2 %</td><td>+6.3 %</td><td><strong>+2.9 %</strong></td></tr>
+<tr><td>N₂ 380 / CO 330</td><td>0.01448</td><td>7.4 %</td><td>−46.2 %</td><td>−35.2 %</td><td>−12.3 %</td><td>+5.7 %</td></tr>
+<tr><td>N₂⁺ 391 / CO 330</td><td>0.06236</td><td>1.6 %</td><td>−11.1 %</td><td>−6.6 %</td><td>−2.4 %</td><td>+3.1 %</td></tr>
+<tr><td>CN 388 / CO 330</td><td>0.04425</td><td>2.8 %</td><td>−21.9 %</td><td>−14.3 %</td><td>−2.0 %</td><td>+8.5 %</td></tr>
+<tr><td>NO 237 / CO 330</td><td>0.00900</td><td>2.7 %</td><td>+227.6 %</td><td>+110.9 %</td><td>+12.2 %</td><td>−14.5 %</td></tr>
+<tr><td>守衛 CO608/Ar811</td><td>11.2424</td><td>4.1 %</td><td>+5.6 %</td><td>+7.1 %</td><td>+0.1 %</td><td>−1.2 %</td></tr>
+<tr><td>*(參考)* <strong>UV/NIR</strong></td><td>0.19346</td><td>8.4 %</td><td><strong>+68.1 %</strong></td><td><strong>+37.8 %</strong></td><td><strong>+11.5 %</strong></td><td><strong>−10.6 %</strong></td></tr>
+</tbody></table></div>
+<p>讀這兩張表只需要一條規則:<strong>把每一列拿去和最後一列比。</strong></p>
+<ul>
+<li>與 <code>UV/NIR</code> <strong>同向</strong>的(NO 237、<code>R_N2Ar</code>):分母在近紅外、分子在紫外,沒除掉結垢。
+</li>
+<li>與 <code>UV/NIR</code> <strong>反向</strong>的(N₂ 357/380、N₂⁺ 391、CN 388):分子分母都在紫外,但相距 20–60 nm, 結垢在這個距離上已經不是常數,所以殘留反向的殘差。
+</li>
+<li><strong>只有 <code>R_N2CO</code> 兩者都不是。</strong> 在 UV/NIR 擺動 +120 % / −16 % 的同一組錄檔上, 它只動 −4.8 %～+1.9 %,而且<strong>不單調</strong>。
+</li>
+</ul>
+<blockquote><h3 id="這是75-nm-規則的第一次生產機台實測">這是「7.5 nm 規則」的第一次生產機台實測</h3>
+<p>計畫 §2 寫的是「413 nm 的組合批次內漂 57 %;7.5 nm 的組合跨批次 CV 3 %」, 那是從 8/20–21 的資料推的。這一天提供了一次 <strong>3.06 倍</strong>的受控穿透率變化, 而 <code>N₂ 337 / CO 330</code>(相距 7.5 nm)把它壓到 3 % 以內。</p>
+<p><strong>這是一個正面結果,而且與漏氣測試是否成功無關。</strong></p></blockquote>
+<hr>
+<h2 id="4-決定性證據整條光譜上沒有東西隨閥門變化">4. 決定性證據:整條光譜上沒有東西隨閥門變化</h2>
+<p>§3 只看了九個事先挑好的量。如果漏氣以某種沒想到的方式呈現,上面那張表看不到。 所以把問題改成:<strong>1896 個波長裡,有沒有任何一個與閥位相關?</strong></p>
+<h3 id="41-方法">4.1 方法</h3>
+<p>對製程 C 的 11 筆錄檔,逐波長擬合</p>
+<pre><code>log( I(λ) / O777 )  =  a(λ)  +  b(λ) · log(UV/NIR)  +  c(λ) · index</code></pre>
+<p><code>b</code> 吸收視窗穿透率,<code>c</code> 是漏氣會動的那一項。§2.2 的 <code>corr = −0.248</code> 保證這個擬合是可辨識的。 輸出按 |t(c)| 排序 —— 有反應的氮帶不可能躲起來,它會和整個二正系一起排在最上面。</p>
+<h3 id="42-結果最相關的波長全部在近紅外而且全部是下降">4.2 結果:最相關的波長全部在近紅外,而且全部是下降</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>nm</th><th>index 0→200 變化</th><th>t</th></tr></thead>
+<tbody>
+<tr><td>844.31</td><td>−2.1 %</td><td>−16.20</td></tr>
+<tr><td>794.08</td><td>−4.8 %</td><td>−14.97</td></tr>
+<tr><td>844.00</td><td>−3.4 %</td><td>−14.92</td></tr>
+<tr><td>776.50</td><td>−5.4 %</td><td>−13.53</td></tr>
+<tr><td>776.18</td><td>−3.7 %</td><td>−12.82</td></tr>
+<tr><td>748.88</td><td>−2.2 %</td><td>−11.95</td></tr>
+<tr><td>…(前 20 名全部落在 744–844 nm)</td><td></td><td></td></tr>
+</tbody></table></div>
+<p>全部是 <strong>Ar I 與 O I 的近紅外線</strong>,全部<strong>下降</strong>。這是模型裡那個單一穿透率變數沒吸收乾淨的 近紅外緩慢漂移(它與時間相關,而時間與 index 相關),<strong>不是漏氣</strong> —— 漏進來的空氣不會讓氬線變暗 5 %,而 2026-09-04 實測 Ar 750/811 在 20 倍的 N₂ 變化裡動不到 1 %。</p>
+<h3 id="43-而漏氣必須抬升的那些全部是零">4.3 而漏氣必須抬升的那些,全部是零</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>特徵</th><th>對應 nm</th><th>index 0→200 變化</th><th>t</th><th>殘差 σ</th></tr></thead>
+<tbody>
+<tr><td>N₂ SPS 337.1</td><td>337.46</td><td><strong>−0.2 %</strong></td><td>−0.79</td><td>0.3 %</td></tr>
+<tr><td>N₂ SPS 357.7</td><td>357.88</td><td>+0.1 %</td><td>0.24</td><td>0.3 %</td></tr>
+<tr><td>N₂ SPS 380.5</td><td>380.80</td><td>+0.1 %</td><td>0.52</td><td>0.3 %</td></tr>
+<tr><td>N₂ SPS 375.5</td><td>375.64</td><td>+0.1 %</td><td>0.24</td><td>0.4 %</td></tr>
+<tr><td>N₂ SPS 353.7</td><td>354.17</td><td>+0.3 %</td><td>1.02</td><td>0.4 %</td></tr>
+<tr><td>N₂ SPS 315.9</td><td>316.21</td><td>−0.2 %</td><td>−0.36</td><td>0.6 %</td></tr>
+<tr><td>N₂⁺ FNS 391.4</td><td>391.86</td><td>−0.1 %</td><td>−0.25</td><td>0.3 %</td></tr>
+<tr><td>N₂⁺ FNS 427.8</td><td>428.18</td><td>−0.4 %</td><td>−1.47</td><td>0.4 %</td></tr>
+<tr><td><strong>CN violet 388</strong></td><td>388.55</td><td><strong>−0.1 %</strong></td><td>−0.27</td><td>0.4 %</td></tr>
+<tr><td>CN violet 359</td><td>359.36</td><td>−0.4 %</td><td>−2.31</td><td>0.2 %</td></tr>
+<tr><td>NO γ 236.6</td><td>236.87</td><td>+0.8 %</td><td>0.16</td><td>6.2 %</td></tr>
+<tr><td>NO γ 247.8</td><td>248.22</td><td>+0.3 %</td><td>0.07</td><td>4.2 %</td></tr>
+</tbody></table></div>
+<p><strong>十二個獨立特徵,涵蓋 236–428 nm,四種不同的化學路徑,全部落在 ±1 % 以內。</strong></p>
+<h3 id="44-穿透率配對不需要模型的版本">4.4 穿透率配對:不需要模型的版本</h3>
+<p>§4.1 的迴歸依賴一個模型。同樣的結論可以不用模型:直接找穿透率相近、閥位相反的錄檔。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>錄檔</th><th>index</th><th>UV/NIR</th><th><code>R_N2CO</code></th><th><code>CN/CO330</code></th></tr></thead>
+<tbody>
+<tr><td><code>0920162101</code></td><td>0</td><td>0.440</td><td>0.02002</td><td>0.1092</td></tr>
+<tr><td><code>0920162537</code></td><td>0</td><td>0.381</td><td>0.01957</td><td>0.1130</td></tr>
+<tr><td><code>0920163051</code></td><td>0</td><td><strong>0.322</strong></td><td><strong>0.02053</strong></td><td><strong>0.1195</strong></td></tr>
+<tr><td><code>0920180838</code></td><td><strong>200</strong></td><td><strong>0.350</strong></td><td><strong>0.01979</strong></td><td><strong>0.1165</strong></td></tr>
+<tr><td><code>0920181310</code></td><td><strong>200</strong></td><td>0.294</td><td>0.02104</td><td>0.1217</td></tr>
+</tbody></table></div>
+<p>UV/NIR 0.322 的 index 0 與 UV/NIR 0.350 的 index 200,<code>R_N2CO</code> 是 0.02053 對 0.01979 (index 200 <strong>較低</strong>),<code>CN/CO330</code> 是 0.1195 對 0.1165(同樣較低)。 <strong>五筆全部落在同一條以穿透率為參數的曲線上,閥位完全看不出來。</strong></p>
+<h3 id="45-為什麼-cn-388-是最關鍵的一條">4.5 為什麼 CN 388 是最關鍵的一條</h3>
+<p>計畫 §15.4 記的最大未量化風險是:<strong>含碳電漿裡漏進來的 N₂ 會有一部分變成 CN/HCN, 那會減少 N₂ 337,折損無法量化。</strong> 這是 GO 判定那 8.3 倍餘裕的唯一預算用途。</p>
+<p>這條風險有一個直接推論:<strong>如果 N₂ 真的被 TEOS 電漿吃掉,它必須變成 CN,而 CN 388 會亮起來。</strong> 所以 N₂ 337 與 CN 388 不可能同時對漏氣無反應 —— 除非<strong>沒有氮進來</strong>。</p>
+<p>兩者都是 −0.1 %～−0.2 %。</p>
+<hr>
+<h2 id="5-兩種讀法以及為什麼判閥門沒送氣">5. 兩種讀法,以及為什麼判「閥門沒送氣」</h2>
+<p>觀測到的事實只有一條:<strong>index 200(標稱 1.0×10⁻² mbar·L/s)相對 index 0, <code>R_N2CO_C</code> 動了 +1.9 %,判準是 9.3 %。</strong></p>
+<h3 id="讀法-a--指標如校正般運作所以漏氣沒有送到">讀法 A —— 指標如校正般運作,所以漏氣沒有送到</h3>
+<p>以 §16.2 的靈敏度 <code>x = s·Q</code> 反推送進去的量:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>s</th><th>上界 Q</th><th>佔對照表值</th></tr></thead>
+<tbody>
+<tr><td>86.6(E2 的 k,保守)</td><td><strong>&lt; 1.07×10⁻³ mbar·L/s</strong></td><td><strong>10.7 %</strong></td></tr>
+<tr><td>200(E3 的 k)</td><td>&lt; 4.65×10⁻⁴ mbar·L/s</td><td>4.6 %</td></tr>
+</tbody></table></div>
+<p>也就是:<strong>閥門最多送進標稱值的一成,而 §4 的光譜證據指向遠小於此。</strong></p>
+<h3 id="讀法-b--漏氣送到了所以指標就是這麼不靈敏">讀法 B —— 漏氣送到了,所以指標就是這麼不靈敏</h3>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th></th></tr></thead>
+<tbody>
+<tr><td>實測靈敏度</td><td>s = 1.9 per (mbar·L/s)</td></tr>
+<tr><td>可偵測漏率</td><td>Q_det = 4.97×10⁻² mbar·L/s</td></tr>
+<tr><td>相對規格 8.89×10⁻³</td><td><strong>5.6 倍 → NO-GO</strong></td></tr>
+<tr><td>相對 §16 外推</td><td>低 <strong>46 倍</strong></td></tr>
+</tbody></table></div>
+<h3 id="判-a理由是-43-那張表">判 A,理由是 §4.3 那張表</h3>
+<p>讀法 B 要求 <code>N₂ 337</code> 對漏氣的響應比外推低 46 倍。就算接受這件事(§15.4 的 TEOS 折損可以吃掉一部分), 它<strong>無法解釋另外十一個特徵也同時是零</strong>:</p>
+<ul>
+<li>N₂ 二正系的六條帶來自同一個電子態,它們不會有六種不同的折損。
+</li>
+<li>CN 388 是折損的<strong>產物</strong>(§4.5)—— 折損越嚴重它應該越亮。
+</li>
+<li>N₂⁺ 391.4 走的是離子化路徑,NO γ 走的是 N + O 化合路徑,都與 CN 無關。
+</li>
+</ul>
+<p><strong>要讓十二個化學路徑同時對 0.12 % 的空氣添加無反應,唯一的解釋是那 0.12 % 的空氣不存在。</strong></p>
+<blockquote><h3 id="這次測試不能回答的">這次測試不能回答的</h3>
+<p><strong>GO/NO-GO 完全沒有被觸碰。</strong> §16 的 8.3 倍餘裕既沒有被驗證也沒有被推翻, §15.4 的 TEOS 折損風險仍然是未量化的。</p>
+<p>這與 2026-08-19 那次的失敗不同(那次是 save 門檻設在無漏電漿之上,閘門整段關著, 見 <a href="leak-test-20260819-analysis.md"><code>leak-test-20260819-analysis.md</code></a>)—— 這次儀器、錄檔、閘門、抽取全部正常,<strong>缺的是腔體裡的氮</strong>。</p></blockquote>
+<hr>
+<h2 id="6-這一天仍然賺到的東西">6. 這一天仍然賺到的東西</h2>
+<p>以下四項與漏氣是否送到無關,全部是這一天第一次在生產機台上量到的。</p>
+<h3 id="61-r_n2co_c-的散度實測而且與計畫相符">6.1 <code>R_N2CO_C</code> 的散度,實測,而且與計畫相符</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>σ 的種類</th><th>2026-09-20 實測</th><th>計畫的值</th><th>出處</th></tr></thead>
+<tbody>
+<tr><td><strong>逐幀</strong>(窗口內 33 幀)</td><td><strong>3.69 %</strong>(全距 2.70–5.52 %)</td><td>3.04 %</td><td>§16.3</td></tr>
+<tr><td><strong>跨錄檔</strong>(全部 11 筆)</td><td><strong>2.97 %</strong> → mean/σ <strong>33.7</strong></td><td>3.1 % → 32.2</td><td>§3 / §4.1</td></tr>
+<tr><td>跨錄檔(僅 index 0,n=3)</td><td>1.95 % → mean/σ <strong>51.2</strong></td><td>—</td><td>—</td></tr>
+<tr><td>指標水準</td><td>0.01974</td><td>0.02162(8/20–21)</td><td>09-04 分析 §4.2</td></tr>
+</tbody></table></div>
+<p>三件事定下來:</p>
+<ol>
+<li><strong>計畫 §4.1 那張表在生產機台上重現了。</strong> 跨錄檔 2.97 % 對 3.1 %、mean/σ 33.7 對 32.2 —— 這同時證明抽取幾何、+0.30 nm 軸偏移、取樣窗口全部正確移植。
+</li>
+<li><strong>這一天可以建一份合格的 Golden Run。</strong> index 0 三筆的 mean/σ = 51.2, 遠高於引擎的 <code>MinBaselineMeanToSigma</code>(10)。
+</li>
+<li>指標水準比 8/20–21 低 8.7 %。與 <a href="production-data-202609-analysis-zh-TW.md"><code>production-data-202609-analysis-zh-TW.md</code></a> §5.1 記錄的那個<strong>未解釋的 8 % 落差</strong>同一個量級,方向也相同。這是第二次看到它, 值得當成一個待解的問題而不是雜訊。
+</li>
+</ol>
+<h3 id="62-製程-b仍然收不到-baseline但批次層的再現性變好了">6.2 製程 B:仍然收不到 baseline,但批次層的再現性變好了</h3>
+<blockquote><p>⚠️ <strong>本節初稿把兩個不同的量比錯了,結論反了。</strong> 初稿寫「B 的 mean/σ 是 12.3,會被收下」, 那個 12.3 是<strong>錄檔之間中位數</strong>的散度;而 <code>FinalizeCapture</code> 與 <code>BaselineBuilder</code> 測的是 <strong>擷取窗口內 pooled 幀</strong>的散度。下面是改正後的數字。</p></blockquote>
+<div class="tablewrap"><table>
+<thead><tr><th>量</th><th>誰在用</th><th>製程 C</th><th>製程 B</th></tr></thead>
+<tbody>
+<tr><td><strong>pooled 幀 mean/σ</strong>(窗口內全部幀)</td><td><code>MinBaselineMeanToSigma</code>(10)</td><td><strong>21.0</strong></td><td><strong>5.0</strong></td></tr>
+<tr><td>逐幀 CV 中位數</td><td>即時 EWMA σ</td><td>3.69 %</td><td>17.08 %</td></tr>
+<tr><td>跨錄檔 CV(窗口中位數之間)</td><td>Batch Trend 的穩健帶</td><td>2.97 %</td><td>7.01 %</td></tr>
+</tbody></table></div>
+<p><strong>B 的 pooled mean/σ 是 5.0 → <code>BaselineBuilder</code> 直接拒收</strong>,與計畫 §4.1 的判定一致 (那裡寫的是 6.5)。製程 A 更低:唯一一筆 A 錄檔(<code>0920160743</code>)是 <strong>2.5</strong>, 窗口放寬到 10–110 s 只會掉到 1.9。<strong>A 與 B 都拿不到 Golden Run 基準線,計畫的結論不變。</strong></p>
+<p>新的部分在另一個量上:<strong>B 的跨錄檔 CV 從 8/20–21 的 15.5 % 降到 7.01 %。</strong> 那是 Batch Trend 讀的量(比的是窗口中位數,不是幀),所以:</p>
+<blockquote><p><strong>B 沒有 baseline 不表示 B 沒有東西可讀。</strong> 逐幀路徑對 B 是死的 (<code>sigmaWarn 3</code> × 17.08 % = 要上升 51 % 才 Warning),但批次層的 3σ 是 21–24 %, 對照 C 的 5.9–8.9 % —— B 需要約三倍的漏氣,而不是完全看不見。 <code>TrendOnly</code> 依然是正確的角色,而且現在知道那條 trend 值多少。</p></blockquote>
+<h3 id="621-這個比錯的量計畫裡也有一份">6.2.1 這個比錯的量,計畫裡也有一份</h3>
+<p>計畫 §4.1 寫「A 與 B 的 mean/σ 是 7.3 與 6.5,低於引擎的 <code>MinBaselineMeanToSigma</code>(10) —— <code>FinalizeCapture</code> 會直接拒收它們的 baseline」。那張表的定義是 「取每批次第一支 step 的 10–30 s <strong>中位數</strong>」,也就是<strong>跨批次</strong>的量; 而 <code>MinBaselineMeanToSigma</code> 套用的是 <strong>pooled 幀</strong>的量。</p>
+<p><strong>結論碰巧是對的</strong>(兩個量在 A/B 上都遠低於 10),但比較本身是錯位的, 而錯位的方向會隨製程改變:製程 C 的跨錄檔 mean/σ 是 33.7,pooled 卻只有 21.0。 <strong>用跨批次的數字去預測一次擷取會不會被收下,對 C 會高估 1.6 倍。</strong></p>
+<p>⚠️ 另一個警告:這一天的 B(<code>Hα/O777</code> 0.0555–0.0587)與 8/20–21 的 B(0.0740–0.1146) <strong>不是同一個操作點</strong>。使用者說明這次的 B 是 3.8 torr 的 O₂ 清潔,上面的數字只對這個操作點成立。</p>
+<h3 id="63-守衛量-co-608--ar-811-表現良好">6.3 守衛量 <code>CO 608 / Ar 811</code> 表現良好</h3>
+<p>製程 C 的 index 0 基準散度 <strong>1.9 %</strong>,全天全距 −2.4 %～+11.3 %(那 +11.3 % 落在 UV/NIR 最高的 index 50, 方向與穿透率一致)。計畫 §17.1 選這組幾何時量到的是 4.4–6.5 %,這一天更好。</p>
+<h3 id="64-r_n2ar_c-否決票在這台機上不能用">6.4 <code>R_N2Ar_C</code> 否決票在這台機上不能用</h3>
+<p>計畫 §4 把它當「方向性否決票」(mean/σ 5.8)。這一天它的 index 0 基準散度是 <strong>12.0 %</strong>, 而且它的欄位形狀與 <code>UV/NIR</code> 完全同向(+109.4 % → −14.1 %)—— 因為分子在 337 nm、 分母在 750 nm,<strong>它量的主要是視窗結垢</strong>。</p>
+<blockquote><p><strong>在視窗會選擇性結垢的機台上,跨越 413 nm 的比值不能當否決票。</strong> 這正是計畫 §2 那一行「413 nm 的組合批次內漂 57 %」,只是這次它是用在否決票上而不是主判上。 否決票需要換成一個紫外內部的第二物種,或者接受沒有否決票。</p></blockquote>
+<hr>
+<h2 id="7-兩個必須在重測前修掉的設定問題">7. 兩個必須在重測前修掉的設定問題</h2>
+<h3 id="71-分類器的-hα-門檻餘裕已經吃掉了">7.1 分類器的 Hα 門檻餘裕已經吃掉了</h3>
+<p><code>settings.json</code> 與計畫 §17.2 的規則 2 是 <strong><code>Hα656/O777 &lt; 0.05</code> → A</strong>。</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>2026-08-20/21</th><th>2026-09-20</th><th>變化</th></tr></thead>
+<tbody>
+<tr><td>A 的上緣</td><td>0.0333</td><td><strong>0.0373</strong>(<code>0920160743</code>)</td><td>+12 %</td></tr>
+<tr><td>B 的下緣</td><td>0.0740</td><td><strong>0.0531</strong>(<code>0920181740</code>)</td><td><strong>−28 %</strong></td></tr>
+<tr><td></td><td></td><td>標籤 B 群是 0.0555–0.0587</td><td></td></tr>
+</tbody></table></div>
+<p>門檻 0.05 現在的餘裕:<strong>距 A 上緣 1.34 倍,距 B 下緣只剩 1.06 倍</strong>(標籤 B 群 1.11 倍)。 計畫 §17.2 當初把門檻從 0.07 改成 0.05,理由正是「0.07 離 B 的下緣只有 5 %」—— <strong>同一個問題已經從另一邊回來了。</strong></p>
+<blockquote><p><strong>建議把門檻改成 0.044</strong>(0.0373 與 0.0531 的幾何平均),兩側各留 1.18 / 1.21 倍。</p>
+<p>⚠️ 這一天只有<strong>一筆</strong> A 段錄檔(<code>0920160743</code>,117 s),所以 0.0373 這個上緣是單點。 改門檻之前應該先從近期的正常生產日補幾筆 A 段確認。<strong>現在就可以做,不需要機台時間。</strong></p></blockquote>
+<p>另外記一筆:<code>0920161008</code>(42 s,<code>CO 330</code> 只有 8 counts、<code>Hα/O777</code> = 0.0015)是一段幾乎沒有碳、 也沒有氫的純 O₂ 電漿,規則會把它判成 <strong>A</strong>。那不是 A。這類非標準 step 落在規則之外是預期的 (計畫 §6 的「分不出來的 step 是 <code>Unknown</code>」只涵蓋規則都不命中的情形,不涵蓋誤命中), 但值得在補 A 段資料時一併看一下。</p>
+<h3 id="72-站點設定從來沒有安裝到這台機器上">7.2 站點設定從來沒有安裝到這台機器上</h3>
+<p>診斷包 <code>config/settings.json</code> 顯示的是:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>計畫 §17 要求</th><th>2026-09-20 實際</th></tr></thead>
+<tbody>
+<tr><td>比值組</td><td><code>R_N2CO_C/_A/_B</code> + 兩個 Guard</td><td>六組舊比值,<strong>全部沒有 <code>processClass</code></strong></td></tr>
+<tr><td>抽取模式</td><td><code>PeakHeight</code></td><td><strong><code>RawMean</code></strong>(18:17:45 才改成 <code>PeakHeight</code>)</td></tr>
+<tr><td>分類器</td><td>enabled,三規則</td><td><strong>完全沒有 <code>processClassifier</code> 區塊</strong></td></tr>
+<tr><td><code>plasmaThreshold</code></td><td>A 1200 / B 2200 / C 8000</td><td>無</td></tr>
+<tr><td>save 門檻</td><td>2000</td><td><strong>1000</strong></td></tr>
+<tr><td>Golden Run</td><td>待重建</td><td><strong><code>Recipe 1</code>,2026-09-03 21:00</strong></td></tr>
+</tbody></table></div>
+<p>那份 <code>Recipe 1</code> 正是 <a href="production-data-202609-analysis-zh-TW.md"><code>production-data-202609-analysis-zh-TW.md</code></a> 判定為誤捕的那一份(落在沒有氬氣的 A 段上,三組比值基準線全失,三組絕對強度基準線 σ ≈ 1 %)。</p>
+<p><strong>後果:當天 16:14:52 – 18:14:27 全程掛著 latched Alarm。</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th><code>OverallState</code></th><th>幀數</th></tr></thead>
+<tbody>
+<tr><td>Idle</td><td>9822</td></tr>
+<tr><td>Normal</td><td>458</td></tr>
+<tr><td>Warning</td><td>27</td></tr>
+<tr><td><strong>Alarm</strong></td><td><strong>3513</strong></td></tr>
+</tbody></table></div>
+<p>Alarm 期間 <code>N₂ 358 absolute</code> 的 σ-score 中位數是 <strong>103.4</strong>、<code>NO 237 (abs)</code> 是 <strong>32.7</strong> —— 兩者都遠低於 150,所以這 3513 幀是<strong>一次 latch</strong>,不是持續的警報條件。 latch 發生在 27 幀 Warning(σ-score 296)的那一小段。</p>
+<blockquote><h3 id="不要把當天的-alarm-當成測到漏氣了">⚠️ 不要把當天的 Alarm 當成「測到漏氣了」</h3>
+<p>它在第一個劑量(index 0,16:18)<strong>之前</strong>就已經 latch(16:14:52), 它來自一個對著 09-03 壞基準線跑的 <code>RawMean</code> 絕對強度比值, 而絕對強度正是 §2 那個 3 倍穿透率擺動打得最兇的量。</p>
+<p>這與 09-08/10 整天 Alarm 是<strong>同一個原因</strong>,已經是第三次。</p></blockquote>
+<hr>
+<h2 id="8-重測這次實驗需要改的四件事">8. 重測這次實驗需要改的四件事</h2>
+<ol>
+<li><strong>先確認閥門真的送氣。</strong> 這是唯一真正重要的一條。光譜不能當成閥門的佐證 (這次就是這樣失敗的)。獨立佐證可以是:關閥/開閥時的腔體壓力變化、 RGA、或是在<strong>沒有電漿</strong>的狀態下開到 index 200 後量 rate-of-rise。
+</li>
+<li><strong>先安裝站點設定(§7.2)。</strong> 否則 app 當天的輸出再次不可讀,而且會再次產生一個 與實驗無關的 Alarm 污染判讀。順便重建 Golden Run —— §6.1 已經證明這一天的資料品質足夠。
+</li>
+<li><strong>劑量順序不要單調遞增。</strong> 這次靠 16:45 的長清洗意外解開共線(§2.2),不能指望第二次。 最小的修正是 <strong>0 → 200 → 0 → 100 → 0 …</strong>,讓每個劑量都有一個時間上相鄰的零點。
+</li>
+<li><strong>每個劑量至少等 2τ。</strong> 計畫 §15.2 算出 400 L / 500 sccm 的時間常數是 19–126 s(視壓力), 而這次每個閥位只跑了一支 79 s 的 C。如果閥門其實有送氣但只送了一點, 單支 step 可能還沒到穩態 —— 這是讀法 A 之外唯一沒被完全排除的可能, 雖然 §4.3 的 ±1 % 讓它很難成立。
+</li>
+</ol>
+<blockquote><p>另外建議:<strong>重測時把 B 跑在與生產相同的操作點</strong>,而不是 3.8 torr 的清潔條件。 §6.2 的數字只對這次的 B 成立,而計畫要判的是生產時的 B。</p></blockquote>
+<hr>
+<h2 id="9-這次分析不能回答的">9. 這次分析不能回答的</h2>
+<ul>
+<li><strong>GO/NO-GO。</strong> 見 §5。
+</li>
+<li><strong>TEOS 對 k 的折損(計畫 §15.4 風險 1)。</strong> 仍然未量化,仍然是那 8.3 倍餘裕的唯一用途。
+</li>
+<li><strong>ArUV 橋樑搬不過來。</strong> 2026-09-04 用 415–436 nm 的 Ar I 多重線當跨機台橋樑(該分析 §4.1), 這次無法重現:製程 C 在 405–445 nm 全段都是密集發射, 側窗 411.5–413.5 壓在一條 6300 counts 的結構上,band mean 4119 減側窗基線後<strong>是負值</strong>。 <strong>在 TEOS 電漿裡這個區段沒有乾淨連續光。</strong> 這不影響本次結論(沒有劑量可量), 但下次要做跨機台外推時必須另尋橋樑。
+</li>
+<li><strong><code>R_N2CO_C</code> 是不是又一個「假贏家」。</strong> §6.1 證明它<strong>穩定</strong>, 但計畫 §3.1 的教訓正是「穩定不等於有用 —— CV 低得異常本身就是壞掉的證據」。 它對漏氣有沒有反應,這一天沒有測到。在 §8 的重測完成之前,這個問題是開著的。
+</li>
+</ul>
+<hr>
+<h2 id="附錄重現">附錄:重現</h2>
+<pre><code>cd tools/analysis/20260920
+python3 01_extract.py     # out/cache.json,約 4 s
+python3 02_dose.py        # §3
+python3 03_search.py      # §4
+python3 04_stats.py       # §6 §7.1 §2</code></pre>
+<p>錄檔預設從 <code>/mnt/c/DualOES</code> 讀,用 <code>OES_DATA_ROOT</code> 覆寫。<code>out/</code> 不進 git。 抽取幾何在 <code>../202609/common.py</code>,<strong>必須與 app 的 <code>LineIntensityExtractor</code> 保持一致</strong>, 否則這裡的數字無法移轉到 <code>settings.json</code>。</p>
+</main>
+</div>
+</body>
+</html>
