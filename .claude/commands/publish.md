@@ -11,7 +11,7 @@ Steps:
 1. Check that the versions pinned in `OES_Leak_Monitor.csproj` exist in
    `/mnt/c/Users/infor/source/repos/Ray1962/LocalPackages` (`ls` the folder) —
    at the time of writing `Aqst.OesApp.Core` **0.1.10**, `Aqst.OesApp.Wpf`
-   **0.1.16**, `Aqst.OesSpectrometer` **0.5.0**, `Aqusen.Secs` **0.6.0**. Read
+   **0.1.16**, `Aqst.OesSpectrometer` **0.6.2**, `Aqusen.Secs` **0.6.0**. Read
    the csproj rather than trusting these numbers; they move. If an
    `Aqst.OesApp.*` package is missing, STOP and tell the user to `dotnet pack`
    it from the sibling repo `Ray1962/DualOes_PlasmaMonitor` first — do not
