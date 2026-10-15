@@ -320,6 +320,10 @@
       <li><span class="box"></span><span class="what">記下分頁中段的 <code>Traffic log:</code> 路徑，填進上方欄位</span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">備妥一段<b>含洩漏事件</b>的全譜錄檔 CSV
         <span class="expect">例：<code>C:\DualOES\202608\14\P_OES1_0814220358.csv</code></span></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what">比值組要<b>能偵測這段錄檔</b>：上例須用<b>出廠比值組</b>（<code>R_N2Ar</code>／<code>R_NOAr</code>／<code>R_N2357Ar</code>，皆除以 Ar 750.4），且<b>製程分類器關閉</b>
+        <span class="expect">先備份 <code>settings.json</code>，收尾時還原。現場比值組（例如除以 CO 330、或分 A/B/C 製程的）對 8/14 的氬電漿量不到參考線、拿不到 baseline，引擎不會轉態，Host 也就收不到任何 ALID</span></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what">Leak Monitor 分頁確認至少<b>兩條 Role = Alarm</b> 的比值啟用中
+        <span class="expect"><code>requireTwoForAlarm</code> 開著時，只有一條能判定就永遠到不了 <span class="id">1cc27002</span>；Guard／TrendOnly 只觀察、不計入警報</span></span><span class="time na"></span></li>
     </ul>
   </section>
 
@@ -335,24 +339,32 @@
       <li><span class="box"></span><span class="what">Replay 分頁 → <b>Choose CSV…</b> 選錄檔，勾 <b>Raise leak alarms during replay</b></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what"><b>Connect</b>（會落到 test mode）→ <b>Start</b>
         <span class="expect">Host 收到 CEID <span class="id">1cc27508</span></span></span><span class="time"></span></li>
-      <li><span class="box"></span><span class="what"><b>Play</b>（可用 5× 加速），等洩漏出現
+      <li><span class="box"></span><span class="what"><b>Play</b> 後<b>立刻</b>到 Leak Monitor 分頁擷取 Golden Run（<b>60 秒</b>）
+        <span class="expect">擷取結果須為接受，且上述三條比值都有 baseline；被拒或缺比值就從 Restart 重來。洩漏在錄檔約第 7 分鐘才出現，第一分鐘是乾淨的</span></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what">等洩漏出現（可用 5× 加速）
         <span class="expect">Host 收到 ALID <span class="id">1cc27001</span> set</span></span><span class="time"></span></li>
       <li><span class="box"></span><span class="what">洩漏升級
         <span class="expect">Host 收到 <span class="id">1cc27001</span> clear ＋ <span class="id">1cc27002</span> set</span></span><span class="time"></span></li>
-      <li><span class="box"></span><span class="what">Leak Monitor 分頁 → <b>Acknowledge</b>
-        <span class="expect">Host 收到 <span class="id">1cc27002</span> clear 與 CEID <span class="id">1cc27502</span></span></span><span class="time"></span></li>
-      <li><span class="box"></span><span class="what"><b>Stop</b>
-        <span class="expect">Host 收到 CEID <span class="id">1cc27509</span></span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">收到 <span class="id">1cc27002</span> set 後<b>立刻</b>在 Replay 分頁按 <b>Pause</b>
+        <span class="expect">重播播到檔尾時 App 會自動解除警報（不帶進即時監測），那筆 clear 不是 Acknowledge 送的，也不會有 CEID <span class="id">1cc27502</span>。5× 下從 Alarm 到檔尾只剩約 25 秒</span></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what">Leak Monitor 分頁 → <b>Acknowledge</b>（只按一次）
+        <span class="expect">Host 立刻收到 CEID <span class="id">1cc27502</span>；<b>這時還不會有 <span class="id">1cc27002</span> clear</b>——Ack 只解除鎖存，綜合狀態要等下一幀才重判，暫停中沒有下一幀</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">Replay 分頁按 <b>Play</b> 繼續播放
+        <span class="expect">Host 收到 <span class="id">1cc27002</span> clear。若反而又收到 <span class="id">1cc27002</span> set（比值仍在 Alarm 門檻以上、重新鎖存），再按一次 Acknowledge。之後再收到一組 <span class="id">1cc27001</span> set／clear 屬正常</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">Monitor 分頁 <b>DevicePanel</b> 標題列的 <b>Stop</b>（停止擷取）
+        <span class="expect">Host 收到 CEID <span class="id">1cc27509</span>。<b>不是 Replay 分頁的 Stop</b>——那顆只結束重播，擷取改接合成光譜繼續跑，不會送 509</span></span><span class="time"></span></li>
       <li><span class="box"></span><span class="what">確認本次產生的檔名帶 <b>SIM</b> 前綴
         <span class="expect"><code>SIMP_OES1_*</code>、<code>SIMP_Ratio_*</code> — 重放資料不得與量測混淆</span></span><span class="time na"></span></li>
     </ul>
     <p class="warn">
       <b>反向驗證（§13.4-2 的現場那半）：</b>取消 <b>Report test / replay data too</b> → Save &amp; apply → 重播同一段。
-      不應再收到任何 S5F1／S6F11，但 Host 送 S1F3 仍讀得到值且 <span class="id">VID 016 = 1</span>。
+      除了設備故障警報（<span class="id">1cc27012</span>／<span class="id">013</span>／<span class="id">014</span>，刻意不受這個開關管）之外，不應再收到任何 S5F1／S6F11；但 Host 送 S1F3 仍讀得到值且 <span class="id">VID 016 = 1</span>。
     </p>
     <ul class="checks">
-      <li><span class="box"></span><span class="what">重播期間確實沒有任何 S5F1／S6F11</span><span class="time"></span></li>
-      <li><span class="box"></span><span class="what">S1F3 仍回得到值，VID 016 = 1</span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">重播期間確實沒有任何 S5F1／S6F11
+        <span class="expect">期間若按過 Disconnect／Connect，會收到 <span class="id">1cc27012</span> set／clear，這是設備故障警報，屬正常</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">S1F3 查 <span class="id">1cc2700016</span>，回 <b>1</b>
+        <span class="expect">用 Test_SECS 時 Device profile 選 <b>OES Leak Monitor acceptance (chamber 02)</b> 再按 <b>Request VID 016</b>。內建 Request Status 查的是 Demo 的 SVID 1～4，只會回空清單</span></span><span class="time"></span></li>
     </ul>
   </section>
 
@@ -400,6 +412,8 @@
       <li><span class="box"></span><span class="what">SECS 分頁取消 <b>Report test / replay data too</b> → <b>Save &amp; apply</b>
         <span class="expect">留著的話，日後任何測試模式資料都會當成真的送進 MES</span></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">Replay 分頁取消 <b>Raise leak alarms during replay</b></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what"><b>關閉 App</b> 後把事前備份的 <code>settings.json</code> 還原，再重開
+        <span class="expect">還原現場比值組、製程分類器與原本的 Golden Run；App 開著時還原會被它下次存檔蓋掉</span></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">確認狀態列回到 <code>alarms on, events on, test/replay data is not reported</code></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">確認光譜儀已接回、擷取正常、狀態燈為 COMMUNICATING</span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">回填 <code>docs/secs-integration.md</code> §13.4：跑過的 ⬜ 改成 <code>✅ YYYY-MM-DD（執行者）</code></span><span class="time na"></span></li>

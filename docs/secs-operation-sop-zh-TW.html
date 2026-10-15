@@ -274,22 +274,22 @@ td code{white-space:nowrap;}
 <tbody>
 <tr><td><code>DISABLED</code></td><td>灰</td><td>總開關沒開，沒有開 port</td><td>要用就去勾 <code>Enable SECS</code></td></tr>
 <tr><td><code>LISTENING</code></td><td>藍</td><td><strong>設備端正常</strong>，port 已開，正在等 Host 連進來</td><td>這是 Host 還沒連時的正常狀態</td></tr>
-<tr><td><code>SELECTED</code></td><td>橘</td><td>TCP 連上、HSMS 已 select，但還沒建立通訊</td><td>通常一兩秒就會跳成綠色；卡住看 8.3</td></tr>
+<tr><td><code>SELECTED</code></td><td>橘</td><td>TCP 連上、HSMS 已 select，但還沒建立通訊</td><td><strong>Host 端已啟用通訊時</strong>通常一兩秒就會跳成綠色；卡住看 8.3</td></tr>
 <tr><td><code>COMMUNICATING</code></td><td>綠</td><td><strong>完全正常</strong>，S1F13/S1F14 已完成，可以收送訊息</td><td>這是上線後該長期停留的狀態</td></tr>
 <tr><td><code>FAILED</code></td><td>紅</td><td>起不來</td><td>旁邊那行字就是原因，看 8.1</td></tr>
 </tbody></table></div>
 <p>色塊右邊那行字補充細節，例如 <code>listening on 0.0.0.0:5000, device id 0</code>；<code>FAILED</code> 時顯示的是失敗原因。</p>
 <p>下面一行 <strong><code>Control state</code></strong> 是 SEMI E30 的控制狀態（<code>OnlineRemote</code> 等）。本設備<strong>不接受任何遠端命令</strong>，所以這個狀態只影響 Host 送 S1F17 時的回應，不影響資料查詢。</p>
 <h3 id="42-看-traffic收送日誌">4.2 看 Traffic（收送日誌）</h3>
-<p>分頁下半部逐行列出每一則進出的訊息，最新的在最下面。啟動時應該看到這三行（或類似）：</p>
+<p>分頁下半部逐行列出每一則進出的訊息，最新的在最下面。啟動時應該看到這兩行（或類似）：</p>
 <pre><code>[CFG] profile template C:\Users\&lt;user&gt;\AppData\Roaming\OES_Leak_Monitor\profiles\oes-leak-monitor.json
-[CFG] chamber 02 (Ch_2) -&gt; ...\profiles\.effective\oes-leak-monitor.json
-[EQP] listening on 0.0.0.0:5000</code></pre>
+[CFG] chamber 02 (Ch_2) -&gt; ...\profiles\.effective\oes-leak-monitor.json</code></pre>
+<p>監聽的位址與 port（例如 <code>listening on 0.0.0.0:5000, device id 0</code>）<strong>不在 Traffic 裡</strong>，而是顯示在上方狀態色塊右邊那行字。</p>
 <p>Host 連進來之後，會看到 S1F13/S1F14、以及 Host 每次查詢的 S1F3/S1F4。</p>
 <p><strong><code>[CFG] not saved — …</code></strong> 這種行表示你按了 Save 但設定不合法（腔體代號不在規格表內、port 超出範圍、T 值超出 1–3600 等），<strong>設定沒有被套用</strong>。把該行講的問題改掉再存一次。</p>
 <h3 id="43-三個要點">4.3 三個要點</h3>
 <ul>
-<li><strong>兩邊各送一次 S1F13 是正常的。</strong> 設備與 Host 都會主動建立通訊，日誌裡看到兩次不是重複或錯誤。
+<li><strong>兩邊各送一次 S1F13 是正常的。</strong> 設備與 Host 都會主動建立通訊，日誌裡看到兩次不是重複或錯誤。 但若 Host 端<strong>尚未啟用通訊</strong>，就只會看到設備端每 10 秒送一次 S1F13、每次都收到 <code>COMMACK=1</code>（見 8.3），Host 端一次都不會送。
 </li>
 <li><strong><code>COMMUNICATING</code> 不代表有在上報。</strong> 狀態區的 <code>ReportingSummary</code> 那行才是答案，例如 <code>alarms OFF, events on, test/replay data is not reported. Status queries always answer.</code> <strong>看到 <code>OFF</code> 就表示那類訊息不會主動送出去</strong>，即使一切都連得好好的。
 </li>
@@ -375,7 +375,14 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 </li>
 </ol>
 <h3 id="83-卡在橘色-selected-不變綠">8.3 卡在橘色 <code>SELECTED</code> 不變綠</h3>
-<p>TCP 通了，但通訊建立（S1F13/S1F14）沒完成。多半是 <strong>Device ID 不一致</strong>或 Host 端尚未送出建立通訊的請求。核對第 2 節表格的第 3 項，並看 Traffic 有沒有出現 S1F13。</p>
+<p>TCP 通了，但通訊建立（S1F13/S1F14）沒完成。先看 Traffic 裡設備端送出 S1F13 之後的那一行：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Traffic 裡看到</th><th>意思</th><th>處置</th></tr></thead>
+<tbody>
+<tr><td><code>[EQP] sent S1F13 -&gt; S1F14 COMMACK=1 (host not ready), will retry</code>，每 10 秒重複</td><td><strong>Host 端的通訊尚未啟用</strong>，Host 收到了請求但拒絕。這是最常見的原因</td><td>請 Host 端啟用通訊（<code>Test_SECS</code> 是按 <strong>Enable Comm</strong>）。<strong>不必重連、也不必動 App</strong>，設備下一次重試就會自動轉綠</td></tr>
+<tr><td>S1F13 送出後沒有 S1F14，或收到 S9F1</td><td><strong>Device ID 不一致</strong>（HSMS 交握不檢查 Device ID，要到資料訊息才被拒）</td><td>核對第 2 節表格的第 3 項</td></tr>
+<tr><td>連 S1F13 都沒有出現</td><td>設備端尚未進入建立通訊</td><td><code>Restart interface</code>；仍無則附上 SECS 日誌檔回報</td></tr>
+</tbody></table></div>
 <h3 id="84-綠燈但-host-讀不到值收到-s9f1">8.4 綠燈，但 Host 讀不到值／收到 S9F1</h3>
 <p><strong>九成是 Device ID 或腔體代號不一致。</strong> HSMS 交握不檢查 Device ID，所以不一致要到資料訊息階段才會被拒。</p>
 <ol>
@@ -409,11 +416,11 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 <ol>
 <li>App 設 <code>Address = 127.0.0.1</code>、<code>Port = 5000</code>、<code>Device ID = 0</code>、腔體 = 實際要用的代號，<code>Save &amp; apply</code>。
 </li>
-<li>啟動 <code>Test_SECS</code> 的 Host 端，連到 <code>127.0.0.1:5000</code>。
+<li>啟動 <code>Test_SECS</code> 的 Host 端，連到 <code>127.0.0.1:5000</code>，並按 <strong>Enable Comm</strong>（Connect 之前或之後按都可以）。 <strong>沒按這一步，App 會一直停在橘色 <code>SELECTED</code></strong>，Traffic 每 10 秒出現一次 <code>COMMACK=1 (host not ready), will retry</code>。
 </li>
 <li>確認兩邊都到 <strong><code>COMMUNICATING</code></strong>。
 </li>
-<li>Host 送 <strong>S1F3</strong>（查狀態）→ 應回 <strong>S1F4，29 個 SV</strong>，SVID 為 <code>1{cc}2700001</code>…<code>1{cc}2700029</code>。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
+<li>Host 送 <strong>S1F3</strong>（查狀態）→ 應回 <strong>S1F4，29 個 SV</strong>，SVID 為 <code>1{cc}2700001</code>…<code>1{cc}2700029</code>。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。 用 <code>Test_SECS</code> 時，Device profile 要選 <strong>OES Leak Monitor acceptance (chamber 02)</strong>（選單只能在未連線時改），再按 <strong>Request All SV</strong> 或 <strong>Request VID 001/007/016/024/025</strong>。內建 <code>Satellite OES</code>／<code>Demo</code> 的 <strong>Request Status</strong> 查的是 Demo 的 SVID 1～4，本設備沒有這些號碼，S1F4 會回四個空清單——不是設備沒回值。腔體不是 02 時，複製該 profile 並把編號裡的 <code>02</code> 換掉。
 </li>
 <li>Host 送 <strong>S1F17</strong> → 回 <code>ONLACK</code>（已在 online 時為 2）。
 </li>
@@ -430,9 +437,14 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 <ol>
 <li>SECS 分頁勾 <strong><code>Report test / replay data too</code></strong>，確認 <code>Report alarms</code> 與 <code>Report events</code> 也勾著，<code>Save &amp; apply</code>。
 </li>
-<li>Replay 分頁勾 <strong><code>Raise leak alarms during replay</code></strong>，選一段<strong>含洩漏事件</strong>的錄檔。
+<li>Replay 分頁勾 <strong><code>Raise leak alarms during replay</code></strong>，選一段<strong>含洩漏事件</strong>的錄檔。 <strong>比值組必須量得到這段錄檔</strong>，否則引擎不會轉態，Host 也收不到任何 ALID，看起來就像 SECS 沒送：
+<ul>
+<li>以 <code>P_OES1_0814220358.csv</code>（8/14 氬電漿）為例，須用<strong>出廠比值組</strong>（<code>R_N2Ar</code>／<code>R_NOAr</code>／<code>R_N2357Ar</code>，皆除以 Ar 750.4），並<strong>關閉製程分類器</strong>。現場比值組若除以 CO 330 或依 A/B/C 製程分組，這段錄檔裡沒有參考線，拿不到 baseline。</li>
+<li>至少要有<strong>兩條 Role = Alarm</strong> 的比值能判定。<code>requireTwoForAlarm</code> 開著時只有一條就到不了 ALID 002；Guard／TrendOnly 只觀察，不計入警報。</li>
+<li>App 沒有「還原出廠比值組」的按鈕：先<strong>關閉 App、備份 <code>settings.json</code></strong>，再換成出廠比值組；測完關閉 App 還原。</li>
+</ul>
 </li>
-<li>Connect（test mode）→ Start → Play。
+<li>Connect（test mode）→ Start → Play，<strong>立刻</strong>到 Leak Monitor 分頁擷取 Golden Run（60 秒）。擷取須被接受、且上述三條比值都有 baseline，否則從 Restart 重來。
 </li>
 <li>Host 端應依序收到：
 <ul>
@@ -441,13 +453,23 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 <li>ALID <code>1{cc}27001</code> <strong>clear</strong> + ALID <code>1{cc}27002</code> <strong>set</strong>（升到 Alarm）</li>
 </ul>
 </li>
-<li>在 Leak Monitor 分頁按 <strong>Acknowledge</strong> → Host 收到 ALID <code>1{cc}27002</code> <strong>clear</strong> 與 CEID <code>1{cc}27502</code>。
+<li>收到 ALID <code>1{cc}27002</code> set 後<strong>立刻在 Replay 分頁按 Pause</strong>，再到 Leak Monitor 分頁按 <strong>Acknowledge</strong>（按一次）→ Host 立刻收到 CEID <code>1{cc}27502</code>。
+<ul>
+<li><strong>不先 Pause 會驗不到 CEID 502</strong>：重播播到檔尾時，App 會自動解除對錄檔判出的警報（不帶進即時監測），Host 一樣收到 002 clear，但那不是 Acknowledge 送的、也沒有 CEID 502。5× 下從 Alarm 到檔尾只剩約 25 秒。</li>
+<li><strong>這時還不會有 002 clear，不要連按 Ack。</strong> Acknowledge 只解除各比值的鎖存，綜合狀態要等下一幀進來才重判；暫停中沒有下一幀，所以會停在 Alarm（日誌寫 <code>Alarm -&gt; Alarm</code>）。即時量測約每秒一幀，平常看不出這段延遲。</li>
+</ul>
 </li>
-<li>停止擷取 → CEID <code>1{cc}27509</code>。
+<li>Replay 分頁按 <strong>Play</strong> 繼續 → Host 收到 ALID <code>1{cc}27002</code> <strong>clear</strong>。
+<ul>
+<li>若反而又收到 <code>1{cc}27002</code> set，是比值仍在 Alarm 門檻以上、重新鎖存，再按一次 Acknowledge 即可。</li>
+<li>之後再收到一組 <code>1{cc}27001</code> set／clear 屬正常：比值當下仍偏高，會重新判一次 Warning。</li>
+</ul>
 </li>
-<li><strong>反向驗證</strong>：取消 <code>Report test / replay data too</code>，重播同一段 → <strong>不應再收到任何 S5F1／S6F11</strong>，但 Host 送 S1F3 仍讀得到值，且 <strong>VID 016 = 1</strong>。
+<li>在 <strong>Monitor 分頁 DevicePanel 標題列按 Stop</strong>（停止擷取）→ CEID <code>1{cc}27509</code>。 <strong>不是 Replay 分頁的 Stop</strong>——那顆只結束重播，擷取會改接合成光譜繼續跑，不會送 509。
 </li>
-<li><strong>測完把 <code>Report test / replay data too</code> 取消勾選並 <code>Save &amp; apply</code>。</strong>
+<li><strong>反向驗證</strong>：取消 <code>Report test / replay data too</code>，重播同一段 → 除了設備故障警報（ALID <code>1{cc}27012</code>／<code>013</code>／<code>014</code>，見 6.3）之外，<strong>不應再收到任何 S5F1／S6F11</strong>；但 Host 送 S1F3 查 <code>1{cc}2700016</code> 仍讀得到值，且 <strong>VID 016 = 1</strong>（Test_SECS 的查法見 9.1 步驟 4）。
+</li>
+<li><strong>測完把 <code>Report test / replay data too</code> 取消勾選並 <code>Save &amp; apply</code></strong>；若第 2 步換過比值組，關閉 App 後還原備份的 <code>settings.json</code>。
 </li>
 </ol>
 <h3 id="94-收尾">9.4 收尾</h3>
