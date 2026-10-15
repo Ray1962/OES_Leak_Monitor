@@ -74,6 +74,7 @@ public sealed class SecsBridge : IDisposable
 
     private SecsSettings _settings = new();
     private EquipmentSimulator? _equipment;
+    private Task _stopping = Task.CompletedTask;      // disposal of the instance Stop() let go of
     private SecsLogFile? _logFile;
 
     // The only shared measurement state. Immutable object, single reference — see the class note.
@@ -145,6 +146,10 @@ public sealed class SecsBridge : IDisposable
         Stop();
         if (_settings.Enabled)
         {
+            // The new instance binds the same port, so the old listener must be closed first.
+            // Starting straight after Stop() raced its disposal, and with a host connected the
+            // race was usually lost: WSAEADDRINUSE, a red tab, and a second Save that "fixed" it.
+            WaitForPreviousStop();
             Start();
         }
         else
@@ -251,8 +256,9 @@ public sealed class SecsBridge : IDisposable
         _equipment = null;
         if (equipment is not null)
         {
-            // Disposal talks to the socket, so it is not something to block the UI thread on.
-            _ = Task.Run(async () =>
+            // Disposal talks to the socket, so it runs off the calling thread; only a restart
+            // (Configure) waits for it, because only a restart needs the port back.
+            _stopping = Task.Run(async () =>
             {
                 try { await equipment.DisposeAsync(); }
                 catch (Exception ex) { _log?.LogError("Secs_Stop_Failed", ex, ""); }
@@ -265,6 +271,29 @@ public sealed class SecsBridge : IDisposable
         lock (_activeFaults) { _activeFaults.Clear(); }
         _leakWarningSet = _leakAlarmSet = false;
     }
+
+    /// <summary>
+    /// Blocks until the instance the last <see cref="Stop"/> released has closed its sockets.
+    /// Called on the UI thread from Save &amp; apply; safe there because nothing on the disposal
+    /// path marshals back synchronously (state and traffic reach the tab by BeginInvoke).
+    /// Bounded, so a disposal that hangs costs a red tab with the reason, not a frozen window.
+    /// </summary>
+    private void WaitForPreviousStop()
+    {
+        var stopping = _stopping;
+        if (stopping.IsCompleted)
+        {
+            return;
+        }
+        if (!stopping.Wait(StopTimeout))
+        {
+            _log?.LogSystemEvent(LogSeverity.Warning, "SecsStopSlow",
+                $"The previous SECS connection did not close within {StopTimeout.TotalSeconds:0} s; " +
+                "starting anyway, which fails if the port is still held.");
+        }
+    }
+
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
 
     // ---- inputs ------------------------------------------------------------
 

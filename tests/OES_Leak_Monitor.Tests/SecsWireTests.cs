@@ -20,6 +20,7 @@ public class SecsWireTests : IAsyncLifetime
         Path.GetTempPath(), "oes-secs-wire-" + Guid.NewGuid().ToString("N"));
 
     private SecsBridge _bridge = null!;
+    private SecsSettings _settings = null!;
     private GemHost _host = null!;
 
     public async Task InitializeAsync()
@@ -29,7 +30,7 @@ public class SecsWireTests : IAsyncLifetime
 
         _bridge = new SecsBridge(null, _folder, _folder,
             () => new SecsBridge.AcquisitionInfo(120f, 4u));
-        _bridge.Configure(new SecsSettings
+        _settings = new SecsSettings
         {
             Enabled = true,
             ChamberCode = Chamber,
@@ -38,7 +39,8 @@ public class SecsWireTests : IAsyncLifetime
             // Replayed and synthetic frames are the only ones a test has, and the point here is
             // the wire format rather than the test-mode policy (which SecsEventTests covers).
             ReportInTestMode = true,
-        });
+        };
+        _bridge.Configure(_settings);
 
         _host = new GemHost(
             new SecsGemOptions { IsActive = true, IpAddress = "127.0.0.1", Port = port },
@@ -56,6 +58,36 @@ public class SecsWireTests : IAsyncLifetime
         await _host.DisposeAsync();
         _bridge.Dispose();
         try { Directory.Delete(_folder, recursive: true); } catch { /* best effort */ }
+    }
+
+    /// <summary>
+    /// Save &amp; apply rebuilds the interface on the same port. The old listener has to be gone
+    /// before the new one binds; on 2026-10-15 it was not, with a host connected, and the tab
+    /// went red with WSAEADDRINUSE until someone pressed Save a second time.
+    /// </summary>
+    [Fact]
+    public async Task Reapplying_settings_with_a_host_connected_restarts_on_the_same_port()
+    {
+        var failures = new List<string>();
+        _bridge.StateChanged += (_, _) =>
+        {
+            if (_bridge.State == SecsRunState.Failed)
+            {
+                lock (failures) failures.Add(_bridge.LastError);
+            }
+        };
+
+        for (var i = 0; i < 3; i++)
+        {
+            _bridge.Configure(_settings);
+            Assert.True(await SecsTestPort.WaitAsync(
+                () => _host.CommunicationState == CommunicationState.Communicating
+                      && _bridge.State == SecsRunState.Communicating, 20),
+                $"restart {i + 1}: never got back to Communicating (state {_bridge.State}, " +
+                $"error \"{_bridge.LastError}\")");
+        }
+
+        lock (failures) Assert.Empty(failures);
     }
 
     [Fact]
