@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor Species Ratio SVID 範例說明</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#1-編碼規則">1. 編碼規則</a>
+<a class="l2" href="#2-範例設定出廠比值組">2. 範例設定：出廠比值組</a>
+<a class="l2" href="#3-身分與門檻類-svid位移-1624">3. 身分與門檻類 SVID（位移 16～24）</a>
+<a class="l2" href="#4-即時量-svid以-ratio-2-為例">4. 即時量 SVID：以 Ratio 2 為例</a>
+<a class="l2" href="#5-s1f3-查詢範例">5. S1F3 查詢範例</a>
+<a class="l2" href="#6-host-端建議的讀法">6. Host 端建議的讀法</a>
+<a class="l2" href="#7-規格與程式碼不一致之處v22-處理情形">7. 規格與程式碼不一致之處（v2.2 處理情形）</a>
+<a class="l2" href="#附錄-a位移總表">附錄 A：位移總表</a>
+<a class="l2" href="#附錄-b列舉值對照">附錄 B：列舉值對照</a>
+</nav>
+<main>
+<h1 id="species-ratio-槽位-svid-範例說明">Species Ratio 槽位 SVID 範例說明</h1>
+<blockquote><p>本文以設備出廠比值組為例，說明 Ratio Setup 中每一組 Species Ratio 對應的 SVID 怎麼算、讀到的值代表什麼。 依據：<code>docs/Satellite_SECS_Specification_v2.md</code> §1.4(b)～(d)、§6.2。</p></blockquote>
+<blockquote><p>⚠️ <strong>實作狀態：</strong> 規格 v2.1 寫明，<strong>比值槽位 VID 101～400 還沒實作</strong>，設備端目前只提供全域 VID 001～029。 本文是依規格「應該長成什麼樣子」的範例，現行版本用 S1F3 查不到這些 SVID。</p></blockquote>
+<h2 id="目錄">目錄</h2>
+<ul>
+<li><a href="#1-編碼規則">1. 編碼規則</a>
+</li>
+<li><a href="#2-範例設定出廠比值組">2. 範例設定：出廠比值組</a>
+</li>
+<li><a href="#3-身分與門檻類-svid位移-1624">3. 身分與門檻類 SVID（位移 16～24）</a>
+</li>
+<li><a href="#4-即時量-svid以-ratio-2-為例">4. 即時量 SVID：以 Ratio 2 為例</a>
+</li>
+<li><a href="#5-s1f3-查詢範例">5. S1F3 查詢範例</a>
+</li>
+<li><a href="#6-host-端建議的讀法">6. Host 端建議的讀法</a>
+</li>
+<li><a href="#7-規格與程式碼不一致之處v22-處理情形">7. 規格與程式碼不一致之處（v2.2 處理情形）</a>
+</li>
+<li><a href="#附錄-a位移總表">附錄 A：位移總表</a>
+</li>
+<li><a href="#附錄-b列舉值對照">附錄 B：列舉值對照</a>
+</li>
+</ul>
+<h2 id="1-編碼規則">1. 編碼規則</h2>
+<p>SVID 為 10 位數 <code>1ccssaavvv</code>。OES Leak Monitor 的 <code>ss</code> 固定為 <code>27</code>，<code>aa</code> 固定為 <code>00</code>（OES 不經 slit valve），<code>cc</code> 為腔體代號。比值槽位的 <code>vvv</code> 由下式決定：</p>
+<pre><code>SVID = 1 + cc + 27 + 00 + vvv
+vvv  = 100 + (N − 1) × 30 + 位移        （N = Ratio Setup 的第 N 列，1～10）</code></pre>
+<p>每個槽位佔 30 個號碼，號碼範圍為 <code>[100+(N−1)×30+1, 100+N×30]</code>：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>槽位</th><th>起算值（位移 0）</th><th>VID 區段</th><th>槽位</th><th>起算值（位移 0）</th><th>VID 區段</th></tr></thead>
+<tbody>
+<tr><td>Ratio 1</td><td>100</td><td>101～130</td><td>Ratio 6</td><td>250</td><td>251～280</td></tr>
+<tr><td>Ratio 2</td><td>130</td><td>131～160</td><td>Ratio 7</td><td>280</td><td>281～310</td></tr>
+<tr><td>Ratio 3</td><td>160</td><td>161～190</td><td>Ratio 8</td><td>310</td><td>311～340</td></tr>
+<tr><td>Ratio 4</td><td>190</td><td>191～220</td><td>Ratio 9</td><td>340</td><td>341～370</td></tr>
+<tr><td>Ratio 5</td><td>220</td><td>221～250</td><td>Ratio 10</td><td>370</td><td>371～400</td></tr>
+</tbody></table></div>
+<blockquote><p><strong>算一次：</strong> Ch_2 的 Ratio 2「基準百分比／σ 分數」（位移 03） = <code>100 + (2 − 1) × 30 + 03</code> = VID <code>133</code> → SVID = <code>1</code> + <code>02</code> + <code>27</code> + <code>00</code> + <code>133</code> = <strong><code>1022700133</code></strong></p></blockquote>
+<p>本文以下範例一律假設設備裝在 <strong>Ch_2（<code>cc = 02</code>）</strong>。</p>
+<h2 id="2-範例設定出廠比值組">2. 範例設定：出廠比值組</h2>
+<p>Ratio Setup 分頁的出廠內容（<code>LeakMonitorSettings.CreateDefault()</code>）共四列。槽位號就是畫面上的列號：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>槽位</th><th>Key</th><th>訊號線</th><th>參考線</th><th>監測方式</th><th>擷取方式</th><th>啟用</th></tr></thead>
+<tbody>
+<tr><td>Ratio 1</td><td><code>R_N2Ar</code></td><td>N₂ 337.1 nm</td><td>Ar 750.4 nm</td><td>比值</td><td>RawMean</td><td>✔</td></tr>
+<tr><td>Ratio 2</td><td><code>R_NOAr</code></td><td>NO 237.0 nm</td><td>Ar 750.4 nm</td><td>比值</td><td>RawMean</td><td>✔</td></tr>
+<tr><td>Ratio 3</td><td><code>R_N2357Ar</code></td><td>N₂ 357.7 nm</td><td>Ar 750.4 nm</td><td>比值</td><td>PeakHeight</td><td>✔</td></tr>
+<tr><td>Ratio 4</td><td><code>R_N2357Abs</code></td><td>N₂ 357.7 nm</td><td>—（不使用）</td><td>絕對強度</td><td>RawMean</td><td>✘</td></tr>
+</tbody></table></div>
+<p>Ratio 5～10 沒有設定，其 VID 不對應任何比值。</p>
+<h2 id="3-身分與門檻類-svid位移-1624">3. 身分與門檻類 SVID（位移 16～24）</h2>
+<p>這一組 SVID 描述「這個槽位在監測什麼」，只在設定變更時改變。Host 讀這一組就能知道每個槽位對應哪條譜線，不需要取得設備的設定檔。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>位移</th><th>項目</th><th>Ratio 1</th><th>Ratio 2</th><th>Ratio 3</th><th>Ratio 4</th></tr></thead>
+<tbody>
+<tr><td>16</td><td>Slot enabled</td><td><code>1022700116</code> = <strong>1</strong></td><td><code>1022700146</code> = <strong>1</strong></td><td><code>1022700176</code> = <strong>1</strong></td><td><code>1022700206</code> = <strong>0</strong></td></tr>
+<tr><td>17</td><td>Monitor mode</td><td><code>1022700117</code> = <strong>0</strong>（比值）</td><td><code>1022700147</code> = <strong>0</strong></td><td><code>1022700177</code> = <strong>0</strong></td><td><code>1022700207</code> = <strong>1</strong>（絕對強度）</td></tr>
+<tr><td>18</td><td>Value semantics</td><td><code>1022700118</code> = <strong>1</strong>（σ 分數）※</td><td><code>1022700148</code> = <strong>1</strong> ※</td><td><code>1022700178</code> = <strong>0</strong>（基準百分比）</td><td><code>1022700208</code> = <strong>1</strong></td></tr>
+<tr><td>19</td><td>Extraction mode</td><td><code>1022700119</code> = <strong>2</strong>（RawMean）</td><td><code>1022700149</code> = <strong>2</strong></td><td><code>1022700179</code> = <strong>0</strong>（PeakHeight）</td><td><code>1022700209</code> = <strong>2</strong></td></tr>
+<tr><td>20</td><td>Signal wavelength</td><td><code>1022700120</code> = <strong>337.1</strong></td><td><code>1022700150</code> = <strong>237.0</strong></td><td><code>1022700180</code> = <strong>357.7</strong></td><td><code>1022700210</code> = <strong>357.7</strong></td></tr>
+<tr><td>21</td><td>Reference wavelength</td><td><code>1022700121</code> = <strong>750.4</strong></td><td><code>1022700151</code> = <strong>750.4</strong></td><td><code>1022700181</code> = <strong>750.4</strong></td><td><code>1022700211</code> = <strong>0</strong></td></tr>
+<tr><td>22</td><td>Slot display name</td><td><code>1022700122</code> = <code>R_N2Ar</code></td><td><code>1022700152</code> = <code>R_NOAr</code></td><td><code>1022700182</code> = <code>R_N2357Ar</code></td><td><code>1022700212</code> = <code>R_N2357Abs</code></td></tr>
+<tr><td>23</td><td>Signal species</td><td><code>1022700123</code> = <code>N2</code></td><td><code>1022700153</code> = <code>NO</code></td><td><code>1022700183</code> = <code>N2</code></td><td><code>1022700213</code> = <code>N2</code></td></tr>
+<tr><td>24</td><td>Reference species</td><td><code>1022700124</code> = <code>Ar</code></td><td><code>1022700154</code> = <code>Ar</code></td><td><code>1022700184</code> = <code>Ar</code></td><td><code>1022700214</code> = <code>""</code></td></tr>
+</tbody></table></div>
+<p>說明：</p>
+<ul>
+<li><strong>※ 位移 18</strong>：分子為 RawMean 即為 σ 分數，比值模式也算。這是規格 v2.2 修正後的寫法，v2.1 原文與此不同，見 <a href="#7-規格與程式碼不一致之處v22-處理情形">§7</a>。
+</li>
+<li><strong>位移 20</strong> 是<strong>套用波長校正後</strong>的實際取值。例如在 Wavelength Calibration 分頁對 N₂ 337.1 加 +0.10 nm，<code>1022700120</code> 讀到的就是 <strong>337.2</strong>。
+</li>
+<li><strong>絕對強度模式</strong>（Ratio 4）不使用參考線：位移 21 = 0、位移 24 = 空字串，位移 07／09（參考線 SNR／強度）也固定為 0。
+</li>
+<li><strong>停用的槽位</strong>（Ratio 4，位移 16 = 0）身分類 VID 照樣可以讀，即時量的狀態為 6（Disabled）。
+</li>
+<li>自訂譜線的物種一律以 <code>u</code> 開頭（如 <code>uN2</code>），由此可分辨現場自訂譜線與內建譜線。
+</li>
+</ul>
+<h2 id="4-即時量-svid以-ratio-2-為例">4. 即時量 SVID：以 Ratio 2 為例</h2>
+<p>位移 01～15 每幀更新。下表以 Ratio 2（NO 237 / Ar 750.4）為例，VID = <code>130 + 位移</code>。範例值是虛構的，用來說明怎麼解讀：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>位移</th><th>項目</th><th>SVID</th><th>範例值</th><th>解讀</th></tr></thead>
+<tbody>
+<tr><td>01</td><td>Monitored value</td><td><code>1022700131</code></td><td>0.0412</td><td>本幀 NO 237 ÷ Ar 750.4 的原始比值</td></tr>
+<tr><td>02</td><td>Smoothed value</td><td><code>1022700132</code></td><td>0.0409</td><td>EMA 平滑值，狀態機以此判定</td></tr>
+<tr><td>03</td><td>Percent / σ score</td><td><code>1022700133</code></td><td>126.0</td><td>先讀 <code>1022700148</code>：= 1，所以這是 <strong>σ 分數</strong>，不是 126 %，代表比基準高約 1.3 個警告 σ</td></tr>
+<tr><td>04</td><td>Slope</td><td><code>1022700134</code></td><td>4.2</td><td>近兩分鐘斜率；位移 18 = 1，單位為 σ/min</td></tr>
+<tr><td>05</td><td>Ratio state</td><td><code>1022700135</code></td><td>1</td><td>Warning</td></tr>
+<tr><td>06</td><td>Signal SNR</td><td><code>1022700136</code></td><td>（未定）</td><td>RawMean 讀值不帶雜訊估計，SNR 是「未知」而非「很高」；實作時須約定以何值表示</td></tr>
+<tr><td>07</td><td>Reference SNR</td><td><code>1022700137</code></td><td>48.5</td><td>Ar 750.4 的訊噪比</td></tr>
+<tr><td>08</td><td>Signal intensity</td><td><code>1022700138</code></td><td>3745</td><td>NO 237 視窗平均強度（counts，含連續光基座）</td></tr>
+<tr><td>09</td><td>Reference intensity</td><td><code>1022700139</code></td><td>90 900</td><td>Ar 750.4 峰高（counts）</td></tr>
+<tr><td>10</td><td>Baseline mean</td><td><code>1022700140</code></td><td>0.0398</td><td>Golden Run 基準平均值</td></tr>
+<tr><td>11</td><td>Baseline sigma</td><td><code>1022700141</code></td><td>0.00026</td><td>Golden Run 基準標準差</td></tr>
+<tr><td>12</td><td>Warn threshold</td><td><code>1022700142</code></td><td>0.0406</td><td>現行警告門檻（含依實測雜訊加寬），與位移 02 同單位</td></tr>
+<tr><td>13</td><td>Alarm threshold</td><td><code>1022700143</code></td><td>0.0414</td><td>現行警報門檻</td></tr>
+<tr><td>14</td><td>Ratio leak rate</td><td><code>1022700144</code></td><td>3.1E-3</td><td>只由本槽位推得的洩漏率 Qᵢ（mbar·L/s）</td></tr>
+<tr><td>15</td><td>Used in fusion</td><td><code>1022700145</code></td><td>1</td><td>本幀有納入 VID 001 的融合估計</td></tr>
+</tbody></table></div>
+<p>同一個項目在四個槽位的 SVID（以位移 03 為例）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>槽位</th><th>位移 03 SVID</th><th>單位（看位移 18）</th></tr></thead>
+<tbody>
+<tr><td>Ratio 1</td><td><code>1022700103</code></td><td>σ 分數（<code>1022700118</code> = 1）</td></tr>
+<tr><td>Ratio 2</td><td><code>1022700133</code></td><td>σ 分數（<code>1022700148</code> = 1）</td></tr>
+<tr><td>Ratio 3</td><td><code>1022700163</code></td><td>基準百分比（<code>1022700178</code> = 0）</td></tr>
+<tr><td>Ratio 4</td><td><code>1022700193</code></td><td>σ 分數（<code>1022700208</code> = 1），但本槽位停用</td></tr>
+</tbody></table></div>
+<h2 id="5-s1f3-查詢範例">5. S1F3 查詢範例</h2>
+<p>Host 一次查 Ratio 3 的身分與目前狀態：</p>
+<pre><code>S1F3 W                             # Selected Equipment Status Request
+&lt;L[6]
+  &lt;U4[1] 1022700176&gt;               # Ratio3 slot enabled
+  &lt;U4[1] 1022700177&gt;               # Ratio3 monitor mode
+  &lt;U4[1] 1022700178&gt;               # Ratio3 value semantics
+  &lt;U4[1] 1022700182&gt;               # Ratio3 display name
+  &lt;U4[1] 1022700163&gt;               # Ratio3 percent of baseline
+  &lt;U4[1] 1022700165&gt;               # Ratio3 state
+&gt;
+
+S1F4                               # 設備回覆
+&lt;L[6]
+  &lt;U4[1] 1&gt;                        # 啟用
+  &lt;U4[1] 0&gt;                        # 比值模式
+  &lt;U4[1] 0&gt;                        # 位移 03 為基準百分比
+  &lt;A[32] "R_N2357Ar"&gt;
+  &lt;F4[1] 103.8&gt;                    # 基準的 103.8 %
+  &lt;U4[1] 0&gt;                        # Normal
+&gt;</code></pre>
+<h2 id="6-host-端建議的讀法">6. Host 端建議的讀法</h2>
+<ol>
+<li><strong>建立對照表：</strong> 連線後，或收到 CEID <code>10227507</code>（比值設定重載）時，讀每個槽位的位移 16～24，記下「槽位 → 訊號線／參考線／單位」。設定重載後槽位對應可能已改變，必須重讀。
+</li>
+<li><strong>追趨勢：</strong> 平常用 S2F23 Trace 追各槽位的位移 03（<code>1022700103</code>、<code>1022700133</code>、<code>1022700163</code>…），不要用事件報告逐幀推送。
+</li>
+<li><strong>先看單位再判讀：</strong> 每次讀位移 03／04 之前先看位移 18。0 是基準百分比、1 是 σ 分數；兩者共用 100／120／150 的刻度（基準／警告／警報），但物理意義不同，不可混算。
+</li>
+<li><strong>停判不等於正常：</strong> 位移 05 為 3（NoPlasma）或 4（LowSignal）的槽位不納入複合警報，Host 不應把它們當成 Normal。
+</li>
+<li><strong>洩漏率要看校正狀態：</strong> 位移 14 只有在 VID 006（Calibration status）= 1 時才有意義。
+</li>
+</ol>
+<h2 id="7-規格與程式碼不一致之處v22-處理情形">7. 規格與程式碼不一致之處（v2.2 處理情形）</h2>
+<p>以下三點是比對規格 v2.1 與設備端程式時發現的。前兩點已在規格 v2.2 修正，第三點仍待決。</p>
+<ol>
+<li><strong>位移 18 的判定條件——已修正。</strong> v2.1 §1.4(d) 寫「原始平均 <strong>+ 絕對強度模式</strong>」才改用 σ 分數；程式碼的判定是 <code>RatioDefinition.ValueHasPedestal</code>——分子是 RawMean 就算，<strong>比值模式也算</strong>，因為除以參考線只會等比縮放連續光基座，不會消掉它。照 v2.1 字面，出廠的 Ratio 1、2 會被標成「百分比」，Host 會讀錯。v2.2 改為只看位移 19。
+</li>
+<li><strong>位移 05 的狀態碼——已修正。</strong> v2.1 只列 0～6；程式碼另外還有 <code>Observing</code>（7，TrendOnly／Guard 角色）與 <code>NotApplicable</code>（8，不屬於目前的製程類別）。v2.2 已增列，附加在尾端，0～6 不變。
+</li>
+<li><strong>位移 22 填哪個名稱——待決。</strong> 規格範例填 <code>R_N2Ar</code>，那是 Key。程式碼中 Key 一旦設定就永不改變（改名後基準與校正才不會失效），新增比值時 Key 是隨機 GUID 片段；畫面上顯示的是 <code>DisplayName</code>（如 <code>N₂ 337 / Ar 750</code>）。Host 需要的是哪一個，須先與 Host 端約定；另一個可放進保留位移 25。
+</li>
+</ol>
+<h2 id="附錄-a位移總表">附錄 A：位移總表</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>位移</th><th>項目</th><th>單位</th><th>型別</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>01</td><td>Monitored value</td><td>—</td><td>F4</td><td>比值模式 = 訊號線／參考線的原始比值；絕對強度模式 = 訊號線強度</td></tr>
+<tr><td>02</td><td>Smoothed value</td><td>—</td><td>F4</td><td>監測值的 EMA，狀態機以此判定</td></tr>
+<tr><td>03</td><td>Percent of baseline / sigma score</td><td>% 或 σ</td><td>F4</td><td>位移 18 = 0 為基準百分比；= 1 為 σ 分數</td></tr>
+<tr><td>04</td><td>Slope</td><td>%/min 或 σ/min</td><td>F4</td><td>近兩分鐘線性迴歸斜率，單位隨位移 18</td></tr>
+<tr><td>05</td><td>Ratio state</td><td>—</td><td>U4</td><td>見附錄 B</td></tr>
+<tr><td>06</td><td>Signal SNR</td><td>—</td><td>F4</td><td>訊號譜線訊噪比</td></tr>
+<tr><td>07</td><td>Reference SNR</td><td>—</td><td>F4</td><td>參考譜線訊噪比；絕對強度模式固定 0</td></tr>
+<tr><td>08</td><td>Signal intensity</td><td>counts 或 counts·nm</td><td>F4</td><td>單位隨位移 19</td></tr>
+<tr><td>09</td><td>Reference intensity</td><td>counts 或 counts·nm</td><td>F4</td><td>絕對強度模式固定 0</td></tr>
+<tr><td>10</td><td>Baseline mean</td><td>—</td><td>F4</td><td>Golden Run 基準平均值</td></tr>
+<tr><td>11</td><td>Baseline sigma</td><td>—</td><td>F4</td><td>Golden Run 基準標準差</td></tr>
+<tr><td>12</td><td>Warn threshold</td><td>—</td><td>F4</td><td>現行警告門檻，與位移 02 同單位</td></tr>
+<tr><td>13</td><td>Alarm threshold</td><td>—</td><td>F4</td><td>現行警報門檻</td></tr>
+<tr><td>14</td><td>Ratio leak rate</td><td>mbar·L/s</td><td>F4</td><td>僅由本槽位推得的洩漏率 Qᵢ</td></tr>
+<tr><td>15</td><td>Used in fusion</td><td>—</td><td>U4</td><td>1 = 本幀納入 VID 001 的融合估計</td></tr>
+<tr><td>16</td><td>Slot enabled</td><td>—</td><td>U4</td><td>1 = 啟用</td></tr>
+<tr><td>17</td><td>Monitor mode</td><td>—</td><td>U4</td><td>0 = 比值、1 = 絕對強度</td></tr>
+<tr><td>18</td><td>Value semantics</td><td>—</td><td>U4</td><td>0 = 基準百分比、1 = σ 分數</td></tr>
+<tr><td>19</td><td>Extraction mode</td><td>—</td><td>U4</td><td>0 = 峰高、1 = 積分、2 = 原始平均</td></tr>
+<tr><td>20</td><td>Signal wavelength</td><td>nm</td><td>F4</td><td>含波長校正偏移後的實際取值</td></tr>
+<tr><td>21</td><td>Reference wavelength</td><td>nm</td><td>F4</td><td>絕對強度模式固定 0</td></tr>
+<tr><td>22</td><td>Slot display name</td><td>—</td><td>A[32]</td><td>槽位名稱</td></tr>
+<tr><td>23</td><td>Signal species</td><td>—</td><td>A[16]</td><td>如 <code>N2</code>、<code>NO</code>；<code>u</code> 開頭為現場自訂譜線</td></tr>
+<tr><td>24</td><td>Reference species</td><td>—</td><td>A[16]</td><td>如 <code>Ar</code>；絕對強度模式為空字串</td></tr>
+<tr><td>25～30</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
+</tbody></table></div>
+<h2 id="附錄-b列舉值對照">附錄 B：列舉值對照</h2>
+<p><strong>Ratio state（位移 05）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th><th>是否納入複合警報</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>Normal</td><td>是</td></tr>
+<tr><td>1</td><td>Warning</td><td>是</td></tr>
+<tr><td>2</td><td>Alarm（鎖存，需操作者確認）</td><td>是</td></tr>
+<tr><td>3</td><td>NoPlasma（電漿未開／參考線過弱）</td><td>否</td></tr>
+<tr><td>4</td><td>LowSignal（訊噪比不足，停判）</td><td>否</td></tr>
+<tr><td>5</td><td>NoBaseline（本槽位無可用基準）</td><td>否</td></tr>
+<tr><td>6</td><td>Disabled（操作者停用）</td><td>否</td></tr>
+<tr><td>7</td><td>Observing（只記錄不判定：TrendOnly／Guard 角色）— v2.2 增列</td><td>否</td></tr>
+<tr><td>8</td><td>NotApplicable（目前的製程步驟不屬於本槽位的製程類別，已鎖存的警報保留）— v2.2 增列</td><td>否</td></tr>
+</tbody></table></div>
+<p><strong>Extraction mode（位移 19）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>峰高（Peak height）— 扣除兩側連續光內插背景，單位 counts</td></tr>
+<tr><td>1</td><td>積分（Integral）— 扣背景後的譜線面積，單位 counts·nm</td></tr>
+<tr><td>2</td><td>原始平均（Raw mean）— 不扣背景、不搜尋峰位，讀值含連續光基座</td></tr>
+</tbody></table></div>
+</main>
+</div>
+</body>
+</html>

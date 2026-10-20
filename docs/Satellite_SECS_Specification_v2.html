@@ -142,6 +142,15 @@ td code{white-space:nowrap;}
 <blockquote><p>本文件為 AQUSEN Satellite 感測器系統的 SECS/GEM 通訊協定規格整理。 內容涵蓋 SVID 編碼規則、SECS 連線參數、支援的 SECS 訊息功能，以及實際訊息範例與解讀。</p></blockquote>
 <blockquote><p><strong>v2 增補：</strong> 新增 <code>ss=27</code> OES Leak Monitor（電漿發光光譜洩漏監測器）的 SVID 定義（§1.2、§1.4）、警報定義（§5）與事件／報告定義（§6）。</p></blockquote>
 <blockquote><p><strong>v2.1（實作狀態）：</strong> <code>ss=27</code> 的設備端 SECS/HSMS 介面<strong>已實作一部分</strong>： <strong>全域量測項目 VID 001 ~ 026</strong>（§1.4(a)）、<strong>警報 ALID 001／002／012 ~ 014</strong>（§5.1）、 <strong>事件 CEID 502／508／509</strong>（§6.1），加上 S1F3 狀態查詢與 S2F23／S6F1 追蹤。 <strong>比值槽位 VID 101 ~ 400（§1.4(b)）、其餘 ALID 與 CEID、遠端命令 S2F41 尚未實作。</strong> §5.1 的 ALID 012 ~ 014（設備故障）為實作時新增。</p></blockquote>
+<blockquote><p><strong>v2.2（比值槽位定義修訂，2026-10-20）：</strong> 比對設備端程式後修正 §1.4(b)～(d) 三處，均在槽位 VID 實作之前：</p>
+<ol>
+<li><strong>位移 18 的判定條件</strong>改為「訊號線以原始平均擷取（位移 19 = 2）」，<strong>比值與絕對強度模式皆適用</strong>；原文只寫絕對強度模式（見 (d)）。
+</li>
+<li><strong>Ratio state（位移 05）增列 7 = Observing、8 = NotApplicable</strong>，與設備端列舉一致（見 (c)-3）。
+</li>
+<li><strong>位移 22 應填不變的 Key 還是顯示名稱，列為待決</strong>（見 (d)）。
+</li>
+</ol></blockquote>
 <hr>
 <h2 id="0-導讀協定重點解讀">0. 導讀（協定重點解讀）</h2>
 <p>SECS（SEMI Equipment Communications Standard）是半導體設備與主機（Host / MES）之間的標準通訊協定，本規格採用 <strong>SECS-II 訊息格式</strong> 搭配 <strong>HSMS（High-Speed SECS Message Services，走 TCP/IP）</strong> 傳輸。整份規格可拆成四個部分：</p>
@@ -530,7 +539,7 @@ td code{white-space:nowrap;}
 <tbody>
 <tr><td>01</td><td>Monitored value</td><td>—</td><td>F4</td><td>本幀監測值。比值模式 = 訊號線／參考線的原始比值；絕對強度模式 = 訊號線強度本身</td></tr>
 <tr><td>02</td><td>Smoothed value</td><td>—</td><td>F4</td><td>監測值的指數平滑（EMA）結果，狀態機以此判定</td></tr>
-<tr><td>03</td><td>Percent of baseline / sigma score</td><td>% 或 σ</td><td>F4</td><td>位移 18 = 0 時為基準的百分比（100 = 基準）；= 1 時為 σ 分數（100 = 基準、120 = 高於基準一個警告 σ）</td></tr>
+<tr><td>03</td><td>Percent of baseline / sigma score</td><td>% 或 σ</td><td>F4</td><td>位移 18 = 0 時為基準的百分比（100 = 基準）；= 1 時為 σ 分數（100 = 基準、120 = 高於基準一個警告 σ）。<strong>讀值前必須先讀位移 18</strong></td></tr>
 <tr><td>04</td><td>Slope</td><td>%/min 或 σ/min</td><td>F4</td><td>近兩分鐘的線性迴歸斜率，單位隨位移 18</td></tr>
 <tr><td>05</td><td>Ratio state</td><td>—</td><td>U4</td><td>0 ~ 6，見 (c)-3</td></tr>
 <tr><td>06</td><td>Signal SNR</td><td>—</td><td>F4</td><td>訊號譜線訊噪比</td></tr>
@@ -545,11 +554,11 @@ td code{white-space:nowrap;}
 <tr><td>15</td><td>Used in fusion</td><td>—</td><td>U4</td><td>1 = 本幀有納入 VID 001 的融合估計</td></tr>
 <tr><td>16</td><td>Slot enabled</td><td>—</td><td>U4</td><td>1 = 本槽位啟用監測</td></tr>
 <tr><td>17</td><td>Monitor mode</td><td>—</td><td>U4</td><td>0 = 比值、1 = 絕對強度，見 (c)-4</td></tr>
-<tr><td>18</td><td>Value semantics</td><td>—</td><td>U4</td><td>0 = 位移 03 為基準百分比、1 = σ 分數</td></tr>
+<tr><td>18</td><td>Value semantics</td><td>—</td><td>U4</td><td>0 = 位移 03／04 為基準百分比、1 = σ 分數。訊號線以原始平均擷取（位移 19 = 2）時為 1，<strong>不論位移 17 是比值或絕對強度</strong>，見 (d)</td></tr>
 <tr><td>19</td><td>Extraction mode</td><td>—</td><td>U4</td><td>0 = 峰高、1 = 積分、2 = 原始平均，見 (c)-5</td></tr>
 <tr><td>20</td><td>Signal wavelength</td><td>nm</td><td>F4</td><td>訊號譜線波長（含波長校正偏移後的實際取值）</td></tr>
 <tr><td>21</td><td>Reference wavelength</td><td>nm</td><td>F4</td><td>參考譜線波長；絕對強度模式固定 0</td></tr>
-<tr><td>22</td><td>Slot display name</td><td>—</td><td>A[32]</td><td>槽位顯示名稱，例如 <code>R_N2Ar</code></td></tr>
+<tr><td>22</td><td>Slot display name</td><td>—</td><td>A[32]</td><td>槽位名稱，例如 <code>R_N2Ar</code>。<strong>填 Key 或顯示名稱待決</strong>，見 (d)</td></tr>
 <tr><td>23</td><td>Signal species</td><td>—</td><td>A[16]</td><td>訊號譜線物種，例如 <code>N2</code>、<code>NO</code>（<code>u</code> 開頭表示現場自訂譜線）</td></tr>
 <tr><td>24</td><td>Reference species</td><td>—</td><td>A[16]</td><td>參考譜線物種，例如 <code>Ar</code>；絕對強度模式為空字串</td></tr>
 <tr><td>25 ~ 30</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
@@ -580,8 +589,10 @@ td code{white-space:nowrap;}
 <tr><td>0</td><td>Normal</td><td>1</td><td>Warning</td></tr>
 <tr><td>2</td><td>Alarm（鎖存）</td><td>3</td><td>NoPlasma（電漿未開／參考線過弱）</td></tr>
 <tr><td>4</td><td>LowSignal（訊噪比不足，停判）</td><td>5</td><td>NoBaseline（本槽位無可用基準）</td></tr>
-<tr><td>6</td><td>Disabled（操作者停用）</td><td></td><td></td></tr>
+<tr><td>6</td><td>Disabled（操作者停用）</td><td>7</td><td>Observing（只記錄不判定：TrendOnly／Guard 角色）</td></tr>
+<tr><td>8</td><td>NotApplicable（目前的製程步驟不屬於本槽位的製程類別）</td><td></td><td></td></tr>
 </tbody></table></div>
+<blockquote><p>7、8 為 v2.2 增列，附加在尾端，0～6 的數值不變。兩者都表示「本幀沒有判定」，但原因不同： 7 是設定上就不判定（趨勢指標或對照用的 guard 量），沒有基準是預期狀態； 8 是設備的製程分類器判定目前步驟不屬於本槽位（見 VID 027／028），本槽位已鎖存的警報會保留。</p></blockquote>
 <p><strong>(c)-4 Monitor mode（位移 17）</strong></p>
 <div class="tablewrap"><table>
 <thead><tr><th>值</th><th>意義</th></tr></thead>
@@ -599,9 +610,11 @@ td code{white-space:nowrap;}
 </tbody></table></div>
 <h5 id="d-判讀注意事項">(d) 判讀注意事項</h5>
 <ul>
-<li><strong>位移 03 的單位不固定，必須先讀位移 18。</strong> 讀值含連續光基座時（原始平均 + 絕對強度模式），任何「值 ÷ 基準」都會被壓縮到不到 1 %，因此該槽位改以 σ 分數表示。兩者共用 100 / 120 / 150 的刻度（100 = 基準、120 = 警告、150 = 警報），可套用同一組參考線，但物理意義不同，不可混算。
+<li><strong>位移 03 的單位不固定，必須先讀位移 18。</strong> 訊號線以原始平均擷取（位移 19 = 2）時，讀值含連續光基座，任何「值 ÷ 基準」都會被壓縮到不到 1 %，因此該槽位改以 σ 分數表示。<strong>比值模式也一樣</strong>：除以參考線只是把基座等比縮放，並不會把它消掉，所以判定條件只看位移 19，不看位移 17。兩者共用 100 / 120 / 150 的刻度（100 = 基準、120 = 警告、150 = 警報），可套用同一組參考線，但物理意義不同，不可混算。（v2.1 寫成「原始平均 + 絕對強度模式」才用 σ 分數，與設備端不符：照該寫法，出廠的 <code>R_N2Ar</code>（N₂ 337.1 原始平均 ÷ Ar 750.4）與 <code>R_NOAr</code> 會被標成百分比，實際送出的卻是 σ 分數。）
 </li>
-<li><strong>狀態 3（NoPlasma）與 4（LowSignal）的槽位不納入複合警報。</strong> 訊號接近雜訊時比值沒有意義，設備選擇停判而非誤報；Host 不應把這兩種狀態視為「正常」。
+<li><strong>狀態 3（NoPlasma）、4（LowSignal）、5（NoBaseline）、6（Disabled）、7（Observing）、8（NotApplicable）的槽位都不納入複合警報。</strong> 訊號接近雜訊時比值沒有意義，設備選擇停判而非誤報；Host 不應把這些狀態視為「正常」。
+</li>
+<li><strong>位移 22 待決：填 Key 還是顯示名稱。</strong> 設備端每組比值有兩個名稱：Key 一經建立永不改變（基準與校正靠它對應，改名後才不會失效），出廠比值的 Key 為 <code>R_N2Ar</code> 這類可讀名稱，現場新增的比值則是隨機 GUID 片段；顯示名稱（如 <code>N₂ 337 / Ar 750</code>）可隨時修改。Host 若要以名稱做長期對應應取 Key，若要顯示給人看應取顯示名稱。實作槽位 VID 前須與 Host 端約定，必要時把另一個放進保留位移 25。
 </li>
 <li><strong>複合警報為鎖存式。</strong> 進入 Alarm 後需操作者在設備端確認（見 §6 CEID <code>502</code>）才會解除；本規格未提供由 Host 遠端解除的命令。
 </li>
@@ -875,7 +888,7 @@ S6F12
 </li>
 <li>ALTX 建議帶入腔體、槽位、譜線與當下數值，讓 Host 端的警報紀錄本身即可讀：
 <ul>
-<li><code>CH2 OES Ratio2 (NO 237.0 / Ar 750.4) ALARM 158% of baseline</code></li>
+<li><code>CH2 OES Ratio2 (NO 237.0 / Ar 750.4) ALARM sigma score 158</code>（原始平均擷取的槽位帶 σ 分數，其餘帶 <code>158% of baseline</code>，與位移 18 一致）</li>
 <li><code>CH2 OES leak rate 1.8e-004 mbar-L/s +/-3.0e-005 (conf 0.72)</code></li>
 <li><code>CH2 OES Ratio4 LOW SIGNAL snr 3.1 &lt; 5.0</code></li>
 </ul>
@@ -886,7 +899,7 @@ S6F12
 &lt;L[3]
   &lt;B[1] 0x80&gt;                # ALCD：bit7=1，警報發生
   &lt;A[16] "10227112 "&gt;        # ALID：Ch_2 / ss=27 / nnn=112 → Ratio 2 alarm
-  &lt;A[480] "CH2 OES Ratio2 (NO 237.0 / Ar 750.4) ALARM 158% of baseline "&gt;
+  &lt;A[480] "CH2 OES Ratio2 (NO 237.0 / Ar 750.4) ALARM sigma score 158 "&gt;
 &gt;
 .
 S5F2
@@ -1044,7 +1057,7 @@ S2F24
 <li>§1.4 的 <code>ss=27</code> 全域量（VID 001 ~ 026）、§5.1 的 ALID 001／002／012 ~ 014、§6.1 的 CEID 502／508／509 已由設備端實作；比值槽位 VID 101 ~ 400、其餘 ALID／CEID 與遠端命令 S2F41 仍為規格定義草案。
 </li>
 </ul>
-<p>*本文件由原始 Word 規格書「Satellite SECS Specification」整理轉換而成；v2 增補 OES Leak Monitor（<code>ss=27</code>）章節，v2.1 標註其實作狀態並增訂 ALID 012 ~ 014。*</p>
+<p>*本文件由原始 Word 規格書「Satellite SECS Specification」整理轉換而成；v2 增補 OES Leak Monitor（<code>ss=27</code>）章節，v2.1 標註其實作狀態並增訂 ALID 012 ~ 014；v2.2 依設備端程式修訂比值槽位的位移 18 判定、Ratio state 7／8，並將位移 22 列為待決。*</p>
 </main>
 </div>
 </body>
