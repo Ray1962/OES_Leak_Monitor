@@ -318,6 +318,14 @@ public sealed class LeakMonitorEngine : IDisposable
     // frame clock, like every other duration here, not on the tool's or the EAP's.
     private DateTime? _toolWindowOpenedAt;
     private double _toolMaxWindowSeconds = ToolEventSettings.DefaultMaxWindowSeconds;
+    // Whether the tool's window applies to the frames now arriving. A replay plays the past
+    // against a window that is the present, so it never does; the test-mode generator's
+    // synthetic spectra do only when ApplyInTestMode says so. Events keep moving the window
+    // underneath either way, so it is current the moment the frames are the chamber's again.
+    private volatile bool _replayActive;
+    private bool _toolApplyInTestMode;
+    private bool _lastFrameSimulated;
+    private bool _toolSuppressed;
     // The stretch of plasma outside any window now in progress — see TrackUnmappedPlasma.
     private DateTime? _unmappedSince, _unmappedLast;
     private readonly List<float> _unmappedMetrics = new();
@@ -517,7 +525,7 @@ public sealed class LeakMonitorEngine : IDisposable
         // only to be checked against it. Disagreement is either a clock skew between the EAP and
         // this PC, or rules that no longer fit the chamber — both found here first or not at
         // all, since the window, not the verdict, decides what is judged.
-        if (_toolContext == ToolEventContext.InWindow &&
+        if (ToolContextInForce == ToolEventContext.InWindow &&
             !string.Equals(_stepClass, _toolWindowClass, StringComparison.OrdinalIgnoreCase))
             _log?.LogSystemEvent(LogSeverity.Warning, "ToolEventClassMismatch",
                 $"The spectrum classified this step as {_stepClass}, inside the tool's " +
@@ -539,7 +547,7 @@ public sealed class LeakMonitorEngine : IDisposable
     /// </summary>
     private void TrackUnmappedPlasma(float? metric, DateTime ts)
     {
-        bool inStretch = _toolContext == ToolEventContext.OutsideWindow && _stepOpen;
+        bool inStretch = ToolContextInForce == ToolEventContext.OutsideWindow && _stepOpen;
         if (inStretch)
         {
             // A frame inside the step's dropout tolerance (gate shut, step not yet over) neither
@@ -583,7 +591,7 @@ public sealed class LeakMonitorEngine : IDisposable
     /// is running. <c>Scoped</c> false means no classes exist and every entry applies. Today
     /// the spectral classifier's locked per-step verdict is the only source.</para>
     /// </summary>
-    private (string? Class, bool Scoped) CurrentFrameClass() => _toolContext switch
+    private (string? Class, bool Scoped) CurrentFrameClass() => ToolContextInForce switch
     {
         // The tool's own event is the authority on which process is running, and it marks the
         // boundary exactly, so it applies frame by frame rather than being locked per step the
@@ -612,7 +620,7 @@ public sealed class LeakMonitorEngine : IDisposable
     private double PlasmaThresholdFor(string? className, double baseThreshold)
     {
         if (className is null) return baseThreshold;
-        if (_toolContext == ToolEventContext.InWindow && _toolTable?.ThresholdFor(className) is { } t)
+        if (ToolContextInForce == ToolEventContext.InWindow && _toolTable?.ThresholdFor(className) is { } t)
             return t;
         if (_classifier is not null) return _classifier.PlasmaThresholdFor(className, baseThreshold);
         var defined = _settings.ProcessClassifier?.Classes?.FirstOrDefault(c =>
@@ -666,8 +674,58 @@ public sealed class LeakMonitorEngine : IDisposable
     public void ConfigureToolEventsLive(ToolEventSettings? settings)
     {
         double max = settings?.MaxWindowSeconds is > 0 and var v ? v : ToolEventSettings.DefaultMaxWindowSeconds;
-        lock (_gate) _toolMaxWindowSeconds = max;
+        lock (_gate)
+        {
+            _toolMaxWindowSeconds = max;
+            _toolApplyInTestMode = settings?.ApplyInTestMode == true;
+            UpdateToolSuppression();
+        }
     }
+
+    /// <summary>
+    /// Whether a recorded-spectrum replay is running. Told explicitly by the host rather than
+    /// inferred from the frames, because a replayed frame and a synthetic one look the same from
+    /// here, and only one of them may ever have the window applied (with <c>ApplyInTestMode</c>).
+    /// </summary>
+    public void SetReplayActive(bool active)
+    {
+        lock (_gate)
+        {
+            _replayActive = active;
+            UpdateToolSuppression();
+        }
+    }
+
+    /// <summary>
+    /// Re-decides whether the tool's window applies to the frames now arriving, from the last
+    /// frame's kind and the two switches, and logs and publishes a change. Caller holds
+    /// <c>_gate</c>.
+    /// </summary>
+    private void UpdateToolSuppression()
+    {
+        bool suppressed = _replayActive || (_lastFrameSimulated && !_toolApplyInTestMode);
+        if (suppressed == _toolSuppressed) return;
+        _toolSuppressed = suppressed;
+        if (_toolTable is not null)
+            _log?.LogSystemEvent(LogSeverity.Information,
+                suppressed ? "ToolEventsSuppressed" : "ToolEventsResumed",
+                suppressed
+                    ? (_replayActive
+                        ? "Tool events are not applied during a replay — the recording is not the chamber now; judged as without them"
+                        : "Tool events are not applied to synthetic test-mode spectra (ApplyInTestMode is off); judged as without them")
+                    : "Tool events apply again: the frames are the chamber's" +
+                      (_lastFrameSimulated ? " (synthetic, with ApplyInTestMode on)" : ""));
+        PublishToolStatus();
+    }
+
+    /// <summary>
+    /// The window as far as judging is concerned: what the events say, or Unknown while they are
+    /// suppressed for the frames now arriving (a replay, or synthetic spectra) — the same
+    /// fail-open as before the first edge, because "these frames are not the chamber" is not
+    /// "nothing is running".
+    /// </summary>
+    private ToolEventContext ToolContextInForce =>
+        _toolSuppressed && _toolContext != ToolEventContext.Disabled ? ToolEventContext.Unknown : _toolContext;
 
     /// <summary>
     /// Rebuilds <see cref="ToolStatus"/> from the fields and raises the change if there is one.
@@ -684,7 +742,7 @@ public sealed class LeakMonitorEngine : IDisposable
             lastCeid = _lastToolCeid;
             lastTime = _lastToolEventTime;
         }
-        var context = _toolContext;
+        var context = ToolContextInForce;
         var status = new ToolEventStatus(
             context,
             context == ToolEventContext.InWindow ? _toolWindowClass ?? "" : "",
@@ -828,7 +886,7 @@ public sealed class LeakMonitorEngine : IDisposable
             // inside a window (before the plasma lights as much as after), and outside one the
             // only question left is whether anything is lit. The step machine's "deciding" stage
             // belongs to a verdict read off the spectrum, which is not what is in force here.
-            switch (_toolContext)
+            switch (ToolContextInForce)
             {
                 case ToolEventContext.InWindow:
                     return ProcessClassState.Classified;
@@ -998,6 +1056,8 @@ public sealed class LeakMonitorEngine : IDisposable
             // Before anything else, so the window this frame is judged in includes every event
             // that arrived before it — even on a frame the disabled monitor then drops.
             ApplyQueuedToolEvents(sample.Timestamp);
+            _lastFrameSimulated = sample.IsSimulated;
+            UpdateToolSuppression();
             if (!_settings.Enabled) return;
 
             // Whether this frame was judged during a capture — read before FinalizeCapture can
@@ -2147,8 +2207,8 @@ public sealed class LeakMonitorEngine : IDisposable
             ProcessClassState = CurrentProcessClassState,
             ProcessStepIndex = _stepIndex,
             ProcessDiscriminants = _stepDiscriminants,
-            ToolEventState = _toolContext,
-            ToolWindowClass = _toolContext == ToolEventContext.InWindow ? _toolWindowClass ?? "" : "",
+            ToolEventState = ToolContextInForce,
+            ToolWindowClass = ToolContextInForce == ToolEventContext.InWindow ? _toolWindowClass ?? "" : "",
             LastToolCeid = lastCeid,
             LastToolEventTime = lastTime,
         };
