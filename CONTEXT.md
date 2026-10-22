@@ -219,6 +219,32 @@ if the result would claim ids belonging to another kind of sensor.
 The stamped copy that is actually served to the host, kept apart from the site-editable
 original so that the file a person edits is never the file the host is answered from.
 
+**Tool event**:
+One of the main tool's own process events (its CEID, e.g. PM3 ProcessStart), forwarded by
+the fab's EAP as S2F41 `TOOL_EVENT`. Information, not a command: it tells the monitor which
+process is running and changes nothing else. A CEID the table does not map is acknowledged
+and ignored.
+_Avoid_: remote command (for the idea) — it is the only one, and it controls nothing.
+
+**Process window**:
+The stretch between a mapped Start and its End, naming the process class the tool is
+running. Inside one, a ratio scoped to that class judges and every other class-scoped ratio
+stands down; a ratio with no class judges regardless. It is the authority on which process
+is running — the spectral classifier is only checked against it.
+_Avoid_: step (a plasma step is the stretch the plasma is lit, decided from the spectrum;
+a window is what the tool said, and the two need not line up).
+
+**Tool-event context**:
+Where the tool events have put the monitor: not in use, unknown, in a window, or outside
+any window. Unknown — before the first edge, after a window outlives its time limit, or
+while suppressed — means judging exactly as without tool events, never judging nothing.
+Outside any window says no window is open; whether plasma is lit is a separate fact.
+
+**Suppressed**:
+Of tool events: received and tracked, but not applied to the frames now arriving, because
+those frames are not the chamber now — always during a replay, and on synthetic test-mode
+spectra unless asked. The context reads unknown while it lasts.
+
 ## Applying a change
 
 **Staged**:

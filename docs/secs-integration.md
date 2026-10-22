@@ -13,6 +13,7 @@
 **狀態：** 已實作，並有自動化測試（§13.2–13.3，38 個）。連線、S1F3、S5F5 已在真機驗證；
 洩漏警報 S5F1 已用 2026-08-14 的實機錄檔重放驗證，S6F11 的三個事件已由 `SecsEventTests`
 走 loopback 驗證。**尚待人工驗收的只剩 UI 到 bridge 的接線**（按鈕、Replay 分頁），逐項狀態見 §13.4。
+2026-10-23 起另有**主機台製程事件**：S2F41 `TOOL_EVENT` 與 VID 030–032，見 §15。
 
 ---
 
@@ -33,7 +34,7 @@
 | 項目 | 理由 |
 |---|---|
 | 比值槽位 VID 101–400（規格 §1.4(b)） | 10 槽 × 30 位移 = 300 個 SVID，且需 slot↔ratio 的穩定對應。先讓機台級結論通到 Host。 |
-| 遠端命令 S2F41 | 需求方明確不要。profile 的 `remoteCommands` 留空，Host 下命令一律 `HCACK=1`。 |
+| ~~遠端命令 S2F41~~ | **已推翻（2026-10-22）**：原本需求方不要任何遠端命令。後來確認洩漏判定必須知道主機台此刻在跑哪個製程，而這只有主機台知道；廠內 EAP 已經收得到主機台的 CEID，最省事的路就是由 EAP 透過既有的 OES 連線轉送。所以只做**一個**命令 `TOOL_EVENT`，而且是資訊轉送、不是控制。見 §15。其他 RCMD 仍一律 `HCACK=1`。 |
 | Spooling（S2F43／S6F23） | `Aqusen.Secs` 預設不留。斷線期間送出的警報會失敗並記在日誌。客戶要求時再由 Host 送 S2F43 開啟。 |
 | 製程程式 S7、終端訊息 S10 | `Aqusen.Secs 0.6.0` 尚未支援。 |
 
@@ -190,7 +191,7 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 
 ---
 
-## 5. 狀態變數（VID 001–029）
+## 5. 狀態變數（VID 001–032）
 
 單位、型別、語意以規格 §1.4 `ss=27`(a) 為準。下表補上**本 App 的資料來源**。
 
@@ -222,9 +223,12 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 | 024 | `oes.integrationTime` | F4 | `DeviceSettings` 的積分時間（ms） |
 | 025 | `oes.averageCount` | U4 | `DeviceSettings` 的平均次數 |
 | 026 | `oes.frameRate` | F4 | `MainViewModel` 量測的實際幀率 |
-| 027 | `oes.processClass` | A | `Snapshot.ProcessClass` |
-| 028 | `oes.processClassState` | U4 | `Snapshot.ProcessClassState`，直接轉 `int` |
+| 027 | `oes.processClass` | A | `Snapshot.ProcessClass`，即引擎單一入口 `CurrentFrameClass()` 的類別。製程事件生效時（視窗內／視窗外）由事件決定，見 §15.3 |
+| 028 | `oes.processClassState` | U4 | `Snapshot.ProcessClassState`，直接轉 `int`。製程事件生效時：視窗內 3、視窗外有電漿 4、無電漿 1 |
 | 029 | `oes.processStepIndex` | U4 | `Snapshot.ProcessStepIndex` |
+| 030 | `oes.toolEventState` | U4 | `ToolEventStatus.State`（`ToolEventContext`，直接轉 `int`）。**不是快照欄位**，見 §15.4 |
+| 031 | `oes.toolWindowClass` | A | `ToolEventStatus.WindowClass` |
+| 032 | `oes.lastToolCeid` | U4 | `ToolEventStatus.LastCeid` |
 
 ### 5.1 列舉值對照——程式列舉順序即規格數值
 
@@ -236,6 +240,7 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 | `CalibrationStatus` | NotCalibrated, Active, BaselineMismatch | (c)-2 的 0/1/2 ✔ |
 | `RatioState` | Normal, Warning, Alarm, NoPlasma, LowSignal, NoBaseline, Disabled, Observing, NotApplicable | (c)-3 的 0～6 ✔;7–8 為本專案追加,附加在尾端 |
 | `ProcessClassState` | NotConfigured, NoStep, Deciding, Classified, Unclassified | (a) VID 028 的 0～4 ✔ |
+| `ToolEventContext` | Disabled, Unknown, InWindow, OutsideWindow | (a) VID 030 的 0～3 ✔ |
 
 > ⚠️ 這是**隱性契約**。日後在這三個列舉中間插入成員，會靜默改變送給 Host 的數值。
 > 三處宣告都應加註解指回本節；`RatioState` 雖然本期只用來統計數量，將來做槽位 VID 就會直接上報。
@@ -257,7 +262,7 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 
 ### 5.3 尚未實作但已保留
 
-VID 030–099 保留(027–029 已用於製程分類,見上表)。比值槽位 VID = `100 + (N−1)×30 + 位移`（N = 1…10，對應 `RatioSetupViewModel.MaxRatios`），
+VID 033–099 保留（027–029 已用於製程分類、030–032 已用於主機台製程事件，見上表）。比值槽位 VID = `100 + (N−1)×30 + 位移`（N = 1…10，對應 `RatioSetupViewModel.MaxRatios`），
 定義見規格 §1.4(b)。做這一段時要一併處理槽位↔ratio 的對應穩定性：ratio 的 key 是隨機 GUID stub，
 槽位號則是設定畫面的第 N 列，設定重載後可能改變——這正是規格保留 CEID 507 的原因。
 
@@ -443,6 +448,7 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `SecsLogFile.cs` | 獨立日誌檔，依日輪替、保留 `logRetentionDays` 天 |
 | `SecsViewModel.cs` | 分頁的 VM：連線／通訊／控制狀態、設定、日誌 ring buffer |
 | `SecsPanel.xaml(.cs)` | 分頁 UI |
+| `ToolEventSettings.cs` | §15：`ToolEventSettings`／`ToolEventMapping`／`ToolEventEdge`、`ToolEventContext`（VID 030 的編碼）、`ToolEventStatus`、`ToolEventAck`、引擎用的不可變對照表 `ToolEventTable` |
 
 ### 11.2 修改
 
@@ -454,7 +460,10 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `LeakMonitorEngine.cs` | §8 的三個快照欄位，以及 `Acknowledged` 事件 + `LeakAcknowledgedEventArgs`（§7） |
 | `OES_Leak_Monitor.csproj` | `PackageReference`：`Aqusen.Secs 0.6.0`、`Secs4Net 2.4.4`；profile 範本不隨 exe 出貨（首次啟動寫到 `ConfigDirectory`） |
 | `nuget.config` | 加 `aqusen` 來源（**不要動既有的 `<clear />`**，它是本專案刻意保留的） |
-| `docs/Satellite_SECS_Specification_v2.md` | §5.1 補 ALID 012–014；v2.2 修訂 §1.4(b)～(d) 的位移 18 判定、Ratio state 7／8、位移 22 待決（§5.3） |
+| `docs/Satellite_SECS_Specification_v2.md` | §5.1 補 ALID 012–014；v2.2 修訂 §1.4(b)～(d) 的位移 18 判定、Ratio state 7／8、位移 22 待決（§5.3）；v2.3 增訂 §7 S2F41 `TOOL_EVENT` 與 VID 030–032（§15） |
+| `LeakMonitorEngine.cs`（§15） | `ConfigureToolEvents`（staged）、`ConfigureToolEventsLive`（hot）、`SetReplayActive`、`ReceiveToolEvent`、`ToolStatus`／`ToolStatusChanged`；`CurrentFrameClass()` 與每類別電漿門檻改看視窗 |
+| `SecsBridge.cs`／`SecsViewModel.cs`／`SecsPanel.xaml`（§15） | `RemoteCommandHandler`、VID 030–032 binding、`ToolEventIgnored`；分頁的製程事件設定、狀態列、唯讀 CEID 表 |
+| `BatchTracker.cs`／`BatchCsvLogger.cs`／`RatioCsvLogger.cs`／`AcquisitionSidecar.cs`／`LeakMonitorViewModel.cs`（§15） | 批次步驟類別、CSV 與 sidecar 欄位、Leak Monitor 提示條 |
 | `CLAUDE.md` | 補 SECS 段落 |
 
 > 註：`整合指南` §一.1 說「不要加 `<clear />`」，那是針對全新專案的建議。本專案的
@@ -495,17 +504,23 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 ### 13.2 自動化測試（`tests/OES_Leak_Monitor.Tests`）
 
 `dotnet test tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug` —
-38 個測試，在有實機錄檔的機器上全過（沒有錄檔時 35 過、3 略過）：
+SECS 部分當初是 38 個測試。整個測試專案（含洩漏引擎、批次、Baseline Builder 等）到 2026-10-23
+為 **216 過、7 略過**（略過的是需要不在 repo 裡的錄檔的那些）。下表列 SECS 與製程事件相關的：
 
 | 檔案 | 涵蓋 |
 |---|---|
 | `SecsChamberCodingTests` | 編號運算對照規格範例、腔體表、戳記的冪等與可重戳、錯誤 `ss`／`aa`／腔體被拒、非本系統的 id 不被動到 |
-| `SecsProfileTests` | 範本可載入、26 個 binding 全被 App 供應、既有 profile 永不被覆寫 |
-| `SecsWireTests` | 真的 `SecsBridge` 對真的 `GemHost` 走 loopback：S1F3 回 26 個 SV、S5F5 的 ALID 是 ASCII 且 category 正確、Warning→Alarm→Normal 送出正確的 set/clear 順序、故障警報去抖動 |
+| `SecsProfileTests` | 範本可載入、範本與 App 供應的 binding 雙向一致（現為 32 個）、`remoteCommands` 只有 `TOOL_EVENT`、既有 profile 永不被覆寫 |
+| `SecsWireTests` | 真的 `SecsBridge` 對真的 `GemHost` 走 loopback：S1F3 回 32 個 SV、S5F5 的 ALID 是 ASCII 且 category 正確、Warning→Alarm→Normal 送出正確的 set/clear 順序、故障警報去抖動 |
 | `SecsEventTests` | 同樣走 loopback 的 **S6F11 事件路徑**：三個 CEID 各自送達且編號正確、`Enqueue` 的順序保證（連續六則）、`reportEvents = false` 只擋事件不擋警報、測試模式閘門預設擋住事件與洩漏警報但**不擋設備故障**、介面關閉時呼叫不拋例外 |
 | `AppSettingsDefaultsTests` | 全新 `settings.json` 的三個覆寫預設（觸發波長 337.1、記錄器預設啟用、`ForceTestMode` 為假），以及「已存檔的決定要被尊重」那半個契約 |
 | `SecsTraceTests` | **S2F23／S6F1 trace**：取樣依 SVID 順序回傳綁定值、`SMPLN` 連號不重複；以及「上報全關時 trace 仍回得到真值」（composite 仍是 Alarm、VID 016 仍是 1，且確實沒送出任何 S5F1／S6F11） |
 | `RecordedRunTests` | **實機錄檔重放**，見下 |
+| `ToolEventWindowTests` | 製程事件在**引擎接縫**：視窗內才判定、視窗外 NotApplicable、未指定類別的比值不受影響、電漿閘門照舊、鎖存保留、未知時沿用舊行為、每類別電漿門檻、Golden Run 只從所屬視窗學習、事件不成對與逾時、視窗外電漿、分類器交叉驗證、測試模式與回放不套用、狀態在幀與幀之間即時發布、事件計數、「(not applied …)」日誌 |
+| `ToolEventWireTests` | 製程事件在**線路接縫**：S2F41 的 HCACK 0／2／3 與 CPACK、對照表外的 CEID 回 0、`TIME` 格式、CEID 解析、VID 030–032 |
+| `ToolEventOutputTests` | Ratio CSV 的 `ToolContext,ToolWindowClass` 欄（只在使用製程事件時出現）、舊檔照讀、sidecar 的視窗欄位、`ToolEventIgnored` 每個 CEID 只記一次 |
+| `ToolEventUiTests` | SECS 分頁設定的存取（staged 與立即生效的欄位、`MaxWindowSeconds` 範圍檢查、CEID 表帶過存檔）、「尚未生效」提示、狀態列文字、Leak Monitor 提示條 |
+| `BatchToolClassTests` | 批次步驟的類別取自取樣區間：區間內出現兩種類別時不取樣也不起批、`Unknown` 不取樣、功能關閉時與以前相同 |
 
 ### 13.3 實機錄檔重放（`RecordedRunTests`）
 
@@ -588,3 +603,83 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 | 4 | 比值槽位 VID | 本期不做。做之前要先解決槽位↔ratio key 的對應穩定性，以及位移 22 填 Key 或 `DisplayName`（§5.3） |
 | 5 | 設備故障的來源 | 已定案：綁在 `IsConnected`／`Status`／`ErrorOccurred` 三個明確轉態上（§6.1），不依賴框架未公開的事件。012 是轉態非狀態，刻意如此 |
 | 6 | 多腔體 | 一個 App 執行個體對一個 `cc`。同一台 PC 跑兩套監測不同腔體時，port 必須分開 |
+| 7 | 舊 profile 沒有 `TOOL_EVENT` | profile 永不被覆寫（§5.2），所以升級前就啟用過 SECS 的機台，profile 裡沒有 `TOOL_EVENT` 這個 RCMD、也沒有 VID 030–032：函式庫會對 `TOOL_EVENT` 回 **HCACK 1**，啟動時記 `SecsProfileMissingBinds`。處理：在 `profiles\*.json` 補上 `"remoteCommands": { "TOOL_EVENT": [ "CEID", "TIME" ] }` 與 030–032 三列，或備份後刪掉該檔讓程式依新範本重寫（站點修改會一併消失），再 Restart interface |
+| 8 | 製程事件的時間基準 | 視窗逾時以光譜幀的時間戳計算；`TIME` 只用於日誌與狀態。OES PC 與 EAP 的時鐘若差很多，`ToolEventClassMismatch` 是第一個看得到的徵兆 |
+
+---
+
+## 15. 主機台製程事件（S2F41 `TOOL_EVENT`，2026-10-23）
+
+設計與取捨見 GitHub issue #25（spec）與子 ticket #26–#35；給 EAP 平台方看的介面在
+[`eap-integration-spec-zh-TW.md`](eap-integration-spec-zh-TW.md)，Host 端欄位語意在規格 §7。
+
+### 15.1 為什麼要有
+
+PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）與尚未歸屬的製程 C。用同一套判定看三種電漿沒有意義。
+光譜分類器只能推論，主機台本身確切知道，而廠內 EAP 已經收得到主機台的 PM3 ProcessStart／ProcessEnd CEID。
+所以由 EAP 經既有的 OES 連線原樣轉送，OES 依對照表開關「製程視窗」，**事件是製程的權威來源**，分類器只做交叉驗證。
+
+### 15.2 設定（`settings.json` → `secs.toolEvents`）
+
+| 欄位 | 預設 | 生效時機 | 說明 |
+|---|---|---|---|
+| `enabled` | false | **staged**（下一次採集 Stop→Start） | 總開關 |
+| `mappings[]` | 空 | **staged** | `{ ceid, className, edge: "Start"/"End", name, plasmaThreshold }`；`className` 空 = 只記錄；`plasmaThreshold` ≤ 0 = 沿用 |
+| `maxWindowSeconds` | 600 | **存檔即生效**（`ConfigureToolEventsLive`） | 視窗最長存活時間；SECS 分頁限 10–86400 |
+| `applyInTestMode` | false | **存檔即生效** | 測試模式的合成光譜是否套用視窗；回放一律不套用 |
+
+staged 的理由和 Ratio Setup 相同：對照表產生的類別名稱就是比值 `ProcessClass` 所指的，兩者是同一份設定，只套用一半會讓兩邊在整段運行中對不上。
+MainViewModel 在啟動時與每次 Stop→Start（和 `ReloadRatios` 同時）呼叫 `ConfigureToolEvents`；**同一份表重新套用會保留目前視窗**，表變了才回到 Unknown。
+`ToolEventSettings.SameStaged` 比對「已存檔」與「生效中」，SECS 分頁據此顯示橘色的「尚未生效」提示。
+
+### 15.3 引擎
+
+- **收事件（SECS 接收執行緒）**：`ReceiveToolEvent(ceid, time)` 只查表、記下最後一筆（032、計數）、排進佇列（上限 1000），立刻回 `Accepted`／`Ignored`／`Disabled`，所以 HCACK 不等光譜。
+- **套用（下一幀開頭，`_gate` 內）**：Start 開窗、對應 End 關窗；`className` 空的只記 `ToolEventRecorded`。同一幀的所有比值看到同一個視窗。
+- **不成對**：視窗開著又來 Start → 關舊開新，`ToolEventWindowUnclosed`；End 對不上開著的視窗（含 Unknown／視窗外時）→ 忽略，`ToolEventOrphanEnd`；開窗超過 `maxWindowSeconds`（從套用該視窗的那一幀起，以幀時間計）→ 視窗作廢、回到 Unknown，`ToolEventWindowTimedOut`。
+- **`CurrentFrameClass()` 的判定順序**：視窗內 → 視窗類別（逐幀，不鎖步驟）；視窗外 → 有電漿（步驟開啟中）為 `Unknown`、無電漿為無類別，兩者都「有分類」，所以指定類別的比值 NotApplicable、未指定的照常判定；Unknown 或未使用 → 與沒有製程事件時完全相同（分類器有開用分類器，否則不分類）。
+- **每類別電漿門檻**：視窗內先取對照表該類別的 `plasmaThreshold` → 分類器（有開時）的門檻 → 分類器設定裡同名類別的 `PlasmaThreshold`（分類器關著也用）→ 基本門檻。
+- **027／028**：視窗內 028 = 3（點火前亦然）、027 = 視窗類別；視窗外有電漿 4／`Unknown`；無電漿 1／空字串；Unknown 或未使用時照分類器。
+- **視窗外電漿**：每段結束時記一筆 `ToolEventUnmappedPlasma`（開始時間、長度、觸發量的中位數與最大值）——對照表沒有的製程（目前是 C）或 EAP 漏轉的 Start 就是從這裡看出來。
+- **交叉驗證**：分類器有開、且步驟判定時在視窗內，結果與視窗類別不同就記一筆 `ToolEventClassMismatch`；不影響判定。
+- **暫不套用（suppressed）**：回放期間（`SetReplayActive`，由 `BeginReplayOutput`／`EndReplayOutput` 告知）一律不套用；測試模式的合成光譜除非 `applyInTestMode`。依「上一幀是否為合成光譜」決定。此時事件照收、032 照更新、背後的視窗照常追蹤（下一個實機幀直接回到正確的視窗），但判定用的狀態是 Unknown（fail-open），並記 `ToolEventsSuppressed`／`ToolEventsResumed`；期間的 `ToolEventWindowOpened`／`Closed` 日誌結尾加上 `(not applied: synthetic test-mode spectra)` 或 `(not applied: a replay is running)`，事件名稱不變。
+
+### 15.4 狀態發布（VID 030–032 為什麼不是快照欄位）
+
+第一版從最後一幀的快照讀 030–032，結果沒有光譜流動時（剛啟動、採集停止）已套用的表顯示「not in use」、030 = 0，EAP 轉送的事件也不會反映在 032——直到碰巧開始採集。這是 2026-10-23 實際執行 App 才發現的，引擎與線路測試都沒抓到。
+現在引擎持有一份 `ToolEventStatus`（State、WindowClass、LastCeid、LastTime、ReceivedCount），在套用設定、收到事件、視窗變動、暫不套用狀態改變時立即重新發布（`ToolStatusChanged`），`SecsBridge.OnToolStatus` 存下這份不可變物件，binding 只讀它——仍然是「只讀、不計算」。快照仍保留 `ToolEventState`／`ToolWindowClass` 給逐幀的使用者（CSV、Leak Monitor 提示條）。
+
+### 15.5 SECS
+
+- `SecsBridge` 設定 `EquipmentSimulator.RemoteCommandHandler`（`Aqusen.Secs` 0.7.0）。函式庫先檢查：不在 REMOTE → 2、RCMD 不在 profile → 1、參數名稱不在 profile → 3／CPACK 1，通過才呼叫。
+- App 的判定：RCMD 不是 `TOOL_EVENT` → 1；缺 `CEID` → 3；`CEID` 無法解讀 → 3／CPACK 2（接受 ASCII 數字或 U1／U2／U4／U8）；`TIME` 格式錯誤（`YYYYMMDDhhmmsscc` 或 `YYYYMMDDhhmmss`）→ 3／CPACK 2，事件不採用；未啟用 → 2；對照表外 → 0，系統日誌記 `ToolEventIgnored`（**每個 CEID 每次執行只記一次**，traffic log 每筆都有）；對照表內 → 0。
+- 範本 profile 登記 `"remoteCommands": { "TOOL_EVENT": [ "CEID", "TIME" ] }` 與 VID 030–032。既有 profile 不會自動補上，見 §14 #7。
+
+### 15.6 輸出與批次層
+
+- **Ratio CSV**：使用製程事件時（以開檔當下判定，規則同分類器欄位）尾端加 `ToolContext,ToolWindowClass`（`Unknown`／`InWindow`／`OutsideWindow`、類別）。檔案中途不會換欄位：對照表只在採集重啟時套用，而停止採集會關檔。
+- **`.acq.json`**：錄檔開啟時記 `toolEventContext`、`toolWindowClass`，放在採集指紋**之外**，避免被當成採集參數不符。
+- **批次層**：步驟的類別取自取樣區間（開閘後 10–30 s）內各幀的類別；只有一種就是該類，兩種以上（視窗邊界落在區間內）就不取樣、不能起批，記 `BatchStepClassAmbiguous`；區間內完全沒有類別（步驟太短）時沿用「最後一個非空類別」。
+
+### 15.7 畫面
+
+- **SECS 分頁狀態列**（不需登入）：`Tool events: …`（not in use／in window X／outside any window／window unknown — …）、`Last tool event: CEID n at hh:mm:ss`、`Tool events received this run: n`。
+- **SECS 分頁設定**（Engineer+、Save & apply）：`Use tool events — takes effect at next acquisition start`、`Max window (s) — applies on save`、`Apply tool events in test mode — applies on save`。
+- **唯讀 CEID 表**（不需登入）與橘色的「Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.」
+- **Leak Monitor 提示條**：使用中且狀態 Unknown 時顯示 `PROCESS CONTEXT UNKNOWN — …`；測試模式提示已寫「tool events are not applied」時不重複顯示。
+
+### 15.8 日誌事件一覽
+
+| 名稱 | 等級 | 何時 |
+|---|---|---|
+| `ToolEventsApplied`／`ToolEventsOff` | Information | 採用／停用對照表 |
+| `ToolEventWindowOpened`／`ToolEventWindowClosed` | Information | 視窗開／關（暫不套用時結尾加 `(not applied: …)`） |
+| `ToolEventRecorded` | Information | 只記錄的事件（`className` 空） |
+| `ToolEventIgnored` | Information | 對照表外的 CEID，每個 CEID 每次執行一次 |
+| `ToolEventWindowUnclosed` | Warning | 視窗未收到 End 就來了新的 Start |
+| `ToolEventOrphanEnd` | Warning | 對不上的 End |
+| `ToolEventWindowTimedOut` | Warning | 視窗超過 `maxWindowSeconds` |
+| `ToolEventUnmappedPlasma` | Information | 視窗外的一段電漿結束 |
+| `ToolEventClassMismatch` | Warning | 分類器判定與視窗類別不同 |
+| `ToolEventsSuppressed`／`ToolEventsResumed` | Information | 開始／結束暫不套用 |
+| `BatchStepClassAmbiguous` | Information | 批次步驟的取樣區間出現兩種以上類別 |

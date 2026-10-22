@@ -26,6 +26,7 @@
 - [9. 對測／驗收程序](#9-對測驗收程序)
 - [10. 交給 Host 端的對照表](#10-交給-host-端的對照表)
 - [11. 檢核表（可列印）](#11-檢核表可列印)
+- [12. 主機台製程事件（TOOL_EVENT）](#12-主機台製程事件tool_event)
 - [附錄 A：檔案位置](#附錄-a檔案位置)
 - [附錄 B：settings.json 的 secs 區塊](#附錄-bsettingsjson-的-secs-區塊)
 
@@ -223,6 +224,9 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 > 系統記錄裡對應的是 `SecsProfileMissingBinds`。**升級後請看一次這行**。要補的話兩種做法：
 > 照 [`secs-integration.md`](secs-integration.md) §4 把缺的幾列貼進 profile，
 > 或把 profile 檔刪掉讓它重新產生（**你改過的內容會一起不見**，所以先看清楚 log 列出的名字）。
+>
+> **遠端命令也一樣。** 支援主機台製程事件（§12）之前產生的 profile，`remoteCommands` 是空的，
+> EAP 送 `TOOL_EVENT` 會收到 **HCACK 1**（命令不存在）。補法見 §12.5。
 
 ---
 
@@ -375,7 +379,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | 508 | 開始擷取 |
 | 509 | 停止擷取 |
 
-### 10.4 狀態變數重點（完整 29 項見 [`secs-integration.md`](secs-integration.md) §5）
+### 10.4 狀態變數重點（完整 32 項見 [`secs-integration.md`](secs-integration.md) §5）
 
 | VID | 意義 | 備註 |
 |---|---|---|
@@ -388,7 +392,8 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | **016** | **測試／Replay 模式** | **1 = 這批數據不是量測值，不可用於製程判定** |
 | 021–023 | 電漿是否存在、閘門是否可用、累計掉幀數 | 023 為**本次執行**累計，請以差值判讀 |
 | 024–026 | 積分時間、平均次數、實際幀率 | |
-| **027–029** | **製程類別、類別狀態、步驟序號** | **028 才是能讀的那一個**：027 在「沒設分類器」「沒有電漿步驟」「還沒判定」三種情況下都是空字串。028 = 0/1/2/3/4 分別對應這三種、已分類、判定為無法分類 |
+| **027–029** | **製程類別、類別狀態、步驟序號** | **028 才是能讀的那一個**：027 在「沒設分類器」「沒有電漿步驟」「還沒判定」三種情況下都是空字串。028 = 0/1/2/3/4 分別對應這三種、已分類、判定為無法分類。使用主機台製程事件時改由事件決定（§12） |
+| **030–032** | **主機台製程事件：狀態、視窗類別、最後收到的 CEID** | 030 = 0 未使用 / 1 狀態不明 / 2 在視窗內 / 3 不在任何視窗內（與電漿有無無關，電漿看 021）。032 用來確認 EAP 的轉送有到 |
 
 ---
 
@@ -418,6 +423,81 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 - [ ] SECS 分頁的截圖（狀態燈 + `ReportingSummary` + 編號範例那三行）
 - [ ] 當天的 `secs_YYYYMMDD.log`
 - [ ] 當天的系統稽核 CSV（`Logs\` 底下）
+
+---
+
+## 12. 主機台製程事件（TOOL_EVENT）
+
+**目的：** 讓洩漏判定只在正確的製程裡運作。PM3 交替跑 Chamber Process／precoat（製程 A）與 Chamber Clean（製程 B）等不同電漿；OES 只看光譜，主機台才確切知道此刻是哪一個。廠內 EAP 把主機台的 PM3 ProcessStart／ProcessEnd CEID 以 S2F41 `TOOL_EVENT` 轉送給 OES，OES 依對照表開關「製程視窗」，指定了製程類別的比值只在該類別的視窗內判定。
+
+**誰做：** Engineer／設備工程師。Operator 只看 SECS 分頁的狀態列（§12.4）。
+
+**先跟 EAP 平台確認：** 平台會轉送 PM3 的 CEID（給平台方的介面規格在 `eap-integration-spec-zh-TW`）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。
+
+### 12.1 確認比值已指定製程類別
+
+到 **Ratio Setup**，要在製程 A 判定的比值，把 **Process class** 填 `A`（Clean 用 `B`）。**沒填類別的比值不受製程事件影響，每一段電漿都判定。** 存檔後要重新開始採集才生效。
+
+### 12.2 填 CEID 對照表
+
+對照表目前沒有編輯畫面，要改 `settings.json`。**先關閉 App**（App 開著時改檔，下次在 App 裡存檔會被蓋掉），**先備份**，再在 `secs` 區塊裡加：
+
+```jsonc
+"toolEvents": {
+  "enabled": true,
+  "mappings": [
+    { "ceid": 3100439529, "className": "A", "edge": "Start", "name": "PM3 Chamber Process/precoat start", "plasmaThreshold": 0 },
+    { "ceid": 3100439530, "className": "A", "edge": "End",   "name": "PM3 Chamber Process/precoat end",   "plasmaThreshold": 0 },
+    { "ceid": 3099591660, "className": "B", "edge": "Start", "name": "PM3 Chamber Clean start",           "plasmaThreshold": 0 },
+    { "ceid": 3099591661, "className": "B", "edge": "End",   "name": "PM3 Chamber Clean end",             "plasmaThreshold": 0 }
+  ],
+  "maxWindowSeconds": 600,
+  "applyInTestMode": false
+}
+```
+
+- `className` 要和 Ratio Setup 的 Process class 拼法一致。留空表示只記錄、不開關視窗（例如 Auto Leak check 若想留紀錄）。
+- `plasmaThreshold` ≤ 0 表示沿用（製程分類器設定裡同名類別的門檻，否則用記錄器的觸發門檻）。
+- CEID 以主機台的事件表（`EAP ceid-events.md`）為準；上面是 PM3 的值。
+
+### 12.3 套用
+
+1. 開啟 App，SECS 分頁的 **CEID 表**應顯示剛填的四列。
+2. 到 Monitor 分頁 **Stop → Start**（重新開始採集）。對照表與 `Use tool events` 都是在這時才套用；套用前 SECS 分頁會有橘色字「…not yet in force — restart acquisition…」。
+3. 系統日誌出現 `ToolEventsApplied`。
+
+`Max window (s)` 與 `Apply tool events in test mode` 可以直接在 SECS 分頁改，按 **Save & apply** 即生效。
+
+### 12.4 確認有在運作
+
+看 SECS 分頁的狀態列，或請 Host 讀 VID 030～032：
+
+| 情況 | 狀態列 | VID 030 ／ 031 |
+|---|---|---|
+| 剛套用、還沒收到事件 | `Tool events: window unknown — …`、`Last tool event: none received yet` | 1 ／ 空 |
+| 主機台在跑 Chamber Process | `Tool events: in window A` | 2 ／ `A` |
+| 製程結束 | `Tool events: outside any window` | 3 ／ 空 |
+
+- `Tool events received this run` 一直是 0 → EAP 沒有轉送。
+- 有收到事件、但一直是 `window unknown` → 收到的 CEID 不在對照表裡（看 `Last tool event` 的 CEID），或正在回放／測試模式（事件不套用到這些光譜）。
+- Leak Monitor 分頁的 `PROCESS CONTEXT UNKNOWN` 提示條意思相同；處理見操作手冊 §9.13。
+
+### 12.5 升級後補 profile（`TOOL_EVENT` 收到 HCACK 1）
+
+舊 profile 不會被覆寫，所以沒有 `TOOL_EVENT`、也沒有 VID 030～032（Traffic 會出現 `[CFG] … not in the profile: oes.toolEventState, …`）。二擇一：
+
+- **補三處**到 `Profile (edit this)` 那份（§7.2）：`statusVariables` 加 030～032 三列（從 [`secs-integration.md`](secs-integration.md) §4 的範本複製，編號維持 `cc=00`），並把 `"remoteCommands": {}` 改成 `"remoteCommands": { "TOOL_EVENT": [ "CEID", "TIME" ] }`。
+- **或重新產生**：關閉 App，備份並刪除該 profile，重開 App 會依新範本寫一份（Traffic 出現 `[CFG] wrote the default profile to …`）。**你改過的內容會一起不見。**
+
+改完按 **Restart interface**。用 Host 再送一次 `TOOL_EVENT`，應回 HCACK 0。
+
+### 12.6 檢核
+
+- [ ] Ratio Setup：要在製程 A 判定的比值，Process class = `A`
+- [ ] `settings.json` 的 `secs.toolEvents` 已填，且 `enabled` = true
+- [ ] 已 Stop → Start，SECS 分頁沒有橘色字
+- [ ] Profile 有 `TOOL_EVENT`（Host 送一次，HCACK = 0）
+- [ ] 主機台跑一次 Chamber Process：狀態列顯示 `in window A`，結束後 `outside any window`
 
 ---
 
@@ -456,7 +536,13 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
   "softwareRevision": "1.0.0",   // SOFTREV
   "t3": 45, "t5": 10, "t6": 10, "t7": 10, "t8": 10,   // 逾時（秒）
   "profileFileName": "oes-leak-monitor.json",
-  "logRetentionDays": 30
+  "logRetentionDays": 30,
+  "toolEvents": {                // 主機台製程事件，見 §12
+    "enabled": false,            // 下一次開始採集才生效
+    "mappings": [],              // CEID 對照表，下一次開始採集才生效
+    "maxWindowSeconds": 600,     // 存檔即生效
+    "applyInTestMode": false     // 存檔即生效
+  }
 }
 ```
 
