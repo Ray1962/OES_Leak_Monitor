@@ -439,8 +439,9 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | `WARNING — leak signal rising` | 橘 | 有比值持續超過警告門檻 |
 | `ALARM — leak signal confirmed` | 紅 | 達警報條件（**鎖存**，必須人工 Acknowledge） |
 
-橫幅下方可能出現兩行小字：
-- **測試模式註記** —— 提醒現在是模擬資料。
+橫幅下方可能出現幾行小字：
+- **測試模式註記** —— 提醒現在是模擬資料，並說明警報是否有效。啟用主機台製程事件（§6.13.3）時，結尾會再寫明事件有沒有套用到這些光譜：`tool events are applied to these spectra.`（已套用）或 `tool events are not applied — judged as without them.`（未套用，照沒有製程事件時的方式判定）。
+- **`PROCESS CONTEXT UNKNOWN — …`** —— 已啟用主機台製程事件，但目前沒有任何製程視窗生效：還沒收到第一個視窗邊界，或上一個視窗逾時。此時比值照沒有製程事件時的方式判定，指定了製程類別的比值**不會**停判。收到下一個 Start 事件後這行就會消失。測試模式註記已經寫了「not applied」時不會重複顯示。見 §9.13。
 - **LOW SIGNAL 警示** —— 有啟用中的比值低於它的 SNR 下限（見 §6.3.4）。
 
 **複合判定規則**：預設 `RequireTwoForAlarm = true`，也就是**要有兩個以上比值同時進入 Alarm**，整體狀態才會變 ALARM。這是為了避免單一譜線受干擾就跳警報。
@@ -1064,6 +1065,47 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 > 追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 `Description` 欄會直接寫出原因。
 
+### 6.13 SECS（與 MES／EAP 連線）
+
+這個分頁**不需要登入就看得到**：被問到「OES 有沒有接上 MES」時，Operator 不必等工程師。設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 `secs-operation-sop-zh-TW.html`（與本手冊同一個資料夾）；這裡只說明畫面。
+
+#### 6.13.1 上方：連線狀態
+
+色塊顯示連線狀態（`DISABLED`／`LISTENING`／`COMMUNICATING`／`FAILED` 等），下面依序是控制狀態與機台號、目前的報告開關摘要，以及主機台製程事件的狀態列（§6.13.3）。
+
+#### 6.13.2 設定區與 Traffic
+
+連線參數、三個報告開關、Save & apply／Restart interface、profile 檔路徑，以及所有收送訊息的 Traffic 清單。設定不合法時 Save 不會生效，Traffic 會出現一行 `[CFG] not saved — …` 寫明原因。
+
+#### 6.13.3 主機台製程事件（Tool events）
+
+PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）以 SECS 命令 `TOOL_EVENT` 轉送過來，OES 依對照表開關「**製程視窗**」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
+
+**狀態列**（不需登入）：
+
+| 顯示 | 意思 |
+|---|---|
+| `Tool events: not in use` | 沒有啟用 |
+| `Tool events: in window A` | 在製程 A 的視窗內 |
+| `Tool events: outside any window` | 視窗已關閉、目前沒有任何視窗（與有沒有電漿無關） |
+| `Tool events: window unknown — …` | 已啟用，但目前沒有視窗生效：還沒收到事件、視窗逾時，或事件不套用到目前的光譜（回放、測試模式）。照沒有製程事件時的方式判定 |
+| `Last tool event: CEID … at hh:mm:ss` | 最後一筆收到的事件（不論是否在對照表內）；`none received yet` 表示還沒收到 |
+| `Tool events received this run: n` | 這次啟動後收到的事件數。一直是 0，就是 EAP 沒有在轉送 |
+
+**設定**（Engineer 以上，Save & apply）：
+
+| 項目 | 何時生效 | 說明 |
+|---|---|---|
+| `Use tool events — takes effect at next acquisition start` | **下一次開始採集**（Monitor 分頁 Stop → Start） | 總開關。和 Ratio Setup 一樣要重新開始採集才生效，因為對照表產生的類別名稱就是比值所指的類別，兩者要同時套用 |
+| `Max window (s) — applies on save` | 存檔即生效 | 視窗最長存活時間（預設 600 秒，可設 10～86400）。超過仍未收到 End，視窗作廢、回到「window unknown」 |
+| `Apply tool events in test mode — applies on save` | 存檔即生效 | 測試模式的合成光譜是否套用視窗（預設不套用）。只在沒有光譜儀的電腦上驗證用。**回放錄檔時一律不套用** |
+
+**CEID 對照表**（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 `(record only)`，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（`inherit` 表示沿用製程分類器設定或記錄器的門檻）。對照表要在 `settings.json` 的 `secs.toolEvents.mappings` 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。
+
+已存檔的開關或對照表和目前生效的不同時，表格上方會出現橘色字：`Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.` 到 Monitor 分頁按 Stop 再按 Start 就會套用、橘色字消失。
+
+**日誌**：視窗的開與關記成 `ToolEventWindowOpened`／`ToolEventWindowClosed`。事件不套用時（回放、測試模式），這兩行的結尾會加上 `(not applied: …)`，表示當時的判定沒有依這個視窗。其他相關訊息：`ToolEventIgnored`（對照表沒有的 CEID，每個只記一次）、`ToolEventWindowUnclosed`／`ToolEventOrphanEnd`／`ToolEventWindowTimedOut`（事件不成對或逾時，Warning）、`ToolEventUnmappedPlasma`（不在任何視窗內的一段電漿——通常是對照表還沒有的製程）。
+
 ---
 
 ## 7. 檔案與資料夾
@@ -1405,6 +1447,20 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 
 完整的比對程序見 §8.5。
 
+### 9.13 Leak Monitor 一直顯示 `PROCESS CONTEXT UNKNOWN`
+
+已啟用主機台製程事件，但 OES 不知道目前是哪個製程視窗。照沒有製程事件時的方式判定，所以**不會漏判**，但指定類別的比值沒有依製程篩選。依序檢查 SECS 分頁的狀態列（§6.13.3）：
+
+1. **`Tool events received this run: 0`** —— EAP 沒有在轉送事件。確認 SECS 已連線（`COMMUNICATING`），請 EAP 平台確認轉送已開啟。
+2. **有收到事件，但 `Last tool event` 的 CEID 不在對照表裡** —— 對照表沒有這個主機台的 Start／End CEID。比對主機台的 CEID 表，修改 `settings.json` 後重新開始採集。
+3. **剛重新開始採集或剛啟動** —— 要等主機台的下一個 Start 事件。這是正常的。
+4. **日誌有 `ToolEventWindowTimedOut`** —— 視窗開太久沒收到 End，代表 EAP 漏轉了 ProcessEnd，或 `Max window (s)` 設得比製程還短。
+5. **正在回放或測試模式** —— 事件不套用到這些光譜（測試模式註記會寫 `not applied`），這是設計如此。
+
+### 9.14 EAP 送 `TOOL_EVENT` 收到 HCACK 1
+
+OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆寫**既有的 profile（裡面可能有現場的修改），所以舊 profile 沒有 `TOOL_EVENT` 這個命令、也沒有 VID 030～032；啟動時系統日誌會有一筆 `SecsProfileMissingBinds`。處理方式見 SECS SOP 的「升級後補 profile」：在 profile 補上那幾列，或備份後刪掉 profile 讓程式重新產生，再按 **Restart interface**。
+
 ---
 
 ## 10. 附錄：參數預設值
@@ -1553,7 +1609,7 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 └──────── 固定 1
 ```
 
-- **VID 001～029 已實作**：洩漏率、複合狀態、電漿有無、積分時間、製程類別等。
+- **VID 001～032 已實作**：洩漏率、複合狀態、電漿有無、積分時間、製程類別、主機台製程事件的狀態等。
 - **比值槽位 VID 101～400 尚未實作**（規格已定義，每組比值佔 30 個號碼）。
 - **SVID 的值永遠如實回報**，不受任何報告開關影響。資料來自測試模式或回放時，VID 016 也照實回 1，Host 據此就能判斷這批數據不可用於製程判定。
 
@@ -1566,6 +1622,9 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 | 006 | Calibration status | 0 未校正／1 有效／2 基準不符（估計暫停） |
 | 007 | Composite leak level | 0 Idle／1 Normal／2 Warning／3 Alarm（鎖存） |
 | 016 | Test / replay mode | 1 = 資料不是實機量測 |
+| 030 | Tool event context state | 0 未使用／1 狀態不明／2 在製程視窗內／3 不在任何視窗內（與有沒有電漿無關） |
+| 031 | Tool event window class | 目前視窗的類別，例如 `A` |
+| 032 | Last tool CEID | 最後收到的主機台 CEID，用來確認 EAP 的轉送有到 |
 
 ### 11.2 ALID：警報
 
@@ -1607,7 +1666,15 @@ ALID 與 CEID 格式相同，但屬於不同的命名空間（ALID 用 001～130
 3. Host 以 S1F3 讀 **SVID 001／004／007**，得知漏率多少、估計是否有效、目前等級。
 4. 漏點處理完，操作者按 Acknowledge → 送 **ALID 002 clear**，再送 **CEID 502**，告訴 Host 是人解除的，不是自己消失的。
 
-逐項的數值範例：比值槽位見 `secs-ratio-svid-example-zh-TW.html`（與本手冊同一個資料夾）；全域 VID 001～009 見原始碼庫的 `docs/secs-global-vid-example-zh-TW.html`。完整定義在 `docs/Satellite_SECS_Specification_v2.md` §1.4、§5、§6。
+### 11.5 遠端命令：`TOOL_EVENT`
+
+除了上面三種，OES 只接受**一個**遠端命令（S2F41）：`TOOL_EVENT`。它由廠內 EAP 送來，內容是主機台自己的製程事件 CEID（必填 `CEID`，選填 `TIME`），用途見 §6.13.3。
+
+- **它是資訊轉送，不是控制命令**：不會啟停採集、不會解除警報、不改任何設定。
+- **回覆碼 HCACK**：0 = 收下（對照表沒有的 CEID 也回 0，只記錄）；1 = 命令不存在（舊版 profile，見 §9.14）；2 = 未啟用製程事件，或不在 ONLINE／REMOTE；3 = 參數錯誤（缺 `CEID`、`CEID` 讀不出來、`TIME` 格式錯）。
+- 收下後 VID 032 立即更新；視窗（030／031）在下一幀光譜才更新。
+
+逐項的數值範例：比值槽位見 `secs-ratio-svid-example-zh-TW.html`（與本手冊同一個資料夾）；全域 VID 001～009 見原始碼庫的 `docs/secs-global-vid-example-zh-TW.html`。完整定義在 `docs/Satellite_SECS_Specification_v2.md` §1.4、§5、§6、§7。
 
 ---
 
@@ -1626,3 +1693,5 @@ ALID 與 CEID 格式相同，但屬於不同的命名空間（ALID 用 001～130
 | 狀態變數識別碼 | SVID (Status Variable ID) | Host 可隨時查詢的數值，見 §11.1 |
 | 警報識別碼 | ALID (Alarm ID) | 設備主動送出的警報，成對 set／clear，見 §11.2 |
 | 事件識別碼 | CEID (Collection Event ID) | 設備主動送出的事件通知，見 §11.3 |
+| 主機台製程事件 | Tool event（S2F41 `TOOL_EVENT`） | EAP 轉送過來的主機台製程事件 CEID，見 §6.13.3 |
+| 製程視窗 | Process window | 主機台某個製程的 Start 到 End；指定類別的比值只在該類別的視窗內判定 |

@@ -137,6 +137,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#610-ratio-review比值回放">6.10 Ratio Review（比值回放）</a>
 <a class="l3" href="#611-batch-trend批次趨勢">6.11 Batch Trend（批次趨勢）</a>
 <a class="l3" href="#612-logs系統日誌">6.12 Logs（系統日誌）</a>
+<a class="l3" href="#613-secs與-meseap-連線">6.13 SECS（與 MES／EAP 連線）</a>
 <a class="l2" href="#7-檔案與資料夾">7. 檔案與資料夾</a>
 <a class="l3" href="#71-位置">7.1 位置</a>
 <a class="l3" href="#72-檔名規則">7.2 檔名規則</a>
@@ -162,6 +163,8 @@ td code{white-space:nowrap;}
 <a class="l3" href="#910-測試模式下警報不會跳">9.10 測試模式下警報不會跳</a>
 <a class="l3" href="#911-guest-關不掉程式">9.11 Guest 關不掉程式</a>
 <a class="l3" href="#912-重播的結果和實機當時不一樣">9.12 重播的結果和實機當時不一樣</a>
+<a class="l3" href="#913-leak-monitor-一直顯示-process-context-unknown">9.13 Leak Monitor 一直顯示 PROCESS CONTEXT UNKNOWN</a>
+<a class="l3" href="#914-eap-送-tool_event-收到-hcack-1">9.14 EAP 送 TOOL_EVENT 收到 HCACK 1</a>
 <a class="l2" href="#10-附錄參數預設值">10. 附錄：參數預設值</a>
 <a class="l3" href="#101-硬體參數">10.1 硬體參數</a>
 <a class="l3" href="#102-記錄器觸發建議值">10.2 記錄器觸發（建議值）</a>
@@ -176,6 +179,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#112-alid警報">11.2 ALID：警報</a>
 <a class="l3" href="#113-ceid事件">11.3 CEID：事件</a>
 <a class="l3" href="#114-三者如何配合以一次漏氣為例">11.4 三者如何配合：以一次漏氣為例</a>
+<a class="l3" href="#115-遠端命令tool_event">11.5 遠端命令：TOOL_EVENT</a>
 <a class="l2" href="#名詞對照">名詞對照</a>
 </nav>
 <main>
@@ -603,9 +607,11 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td><code>WARNING — leak signal rising</code></td><td>橘</td><td>有比值持續超過警告門檻</td></tr>
 <tr><td><code>ALARM — leak signal confirmed</code></td><td>紅</td><td>達警報條件（<strong>鎖存</strong>，必須人工 Acknowledge）</td></tr>
 </tbody></table></div>
-<p>橫幅下方可能出現兩行小字：</p>
+<p>橫幅下方可能出現幾行小字：</p>
 <ul>
-<li><strong>測試模式註記</strong> —— 提醒現在是模擬資料。
+<li><strong>測試模式註記</strong> —— 提醒現在是模擬資料，並說明警報是否有效。啟用主機台製程事件（§6.13.3）時，結尾會再寫明事件有沒有套用到這些光譜：<code>tool events are applied to these spectra.</code>（已套用）或 <code>tool events are not applied — judged as without them.</code>（未套用，照沒有製程事件時的方式判定）。
+</li>
+<li><strong><code>PROCESS CONTEXT UNKNOWN — …</code></strong> —— 已啟用主機台製程事件，但目前沒有任何製程視窗生效：還沒收到第一個視窗邊界，或上一個視窗逾時。此時比值照沒有製程事件時的方式判定，指定了製程類別的比值<strong>不會</strong>停判。收到下一個 Start 事件後這行就會消失。測試模式註記已經寫了「not applied」時不會重複顯示。見 §9.13。
 </li>
 <li><strong>LOW SIGNAL 警示</strong> —— 有啟用中的比值低於它的 SNR 下限（見 §6.3.4）。
 </li>
@@ -1126,6 +1132,36 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <p>一份沒有「缺漏」段落的清單，讀起來就像什麼都齊了。</p></blockquote>
 <p><strong>密碼不會離開機台</strong>：所有設定檔（含備份）的存取控制區段與 <code>passwordHash</code> 都會被移除。 <strong>使用者名稱會保留</strong> —— 稽核日誌的價值就在於知道是誰做的。</p>
 <blockquote><p>追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 <code>Description</code> 欄會直接寫出原因。</p></blockquote>
+<h3 id="613-secs與-meseap-連線">6.13 SECS（與 MES／EAP 連線）</h3>
+<p>這個分頁<strong>不需要登入就看得到</strong>：被問到「OES 有沒有接上 MES」時，Operator 不必等工程師。設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 <code>secs-operation-sop-zh-TW.html</code>（與本手冊同一個資料夾）；這裡只說明畫面。</p>
+<h4 id="6131-上方連線狀態">6.13.1 上方：連線狀態</h4>
+<p>色塊顯示連線狀態（<code>DISABLED</code>／<code>LISTENING</code>／<code>COMMUNICATING</code>／<code>FAILED</code> 等），下面依序是控制狀態與機台號、目前的報告開關摘要，以及主機台製程事件的狀態列（§6.13.3）。</p>
+<h4 id="6132-設定區與-traffic">6.13.2 設定區與 Traffic</h4>
+<p>連線參數、三個報告開關、Save &amp; apply／Restart interface、profile 檔路徑，以及所有收送訊息的 Traffic 清單。設定不合法時 Save 不會生效，Traffic 會出現一行 <code>[CFG] not saved — …</code> 寫明原因。</p>
+<h4 id="6133-主機台製程事件tool-events">6.13.3 主機台製程事件（Tool events）</h4>
+<p>PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；<strong>主機台知道</strong>。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）以 SECS 命令 <code>TOOL_EVENT</code> 轉送過來，OES 依對照表開關「<strong>製程視窗</strong>」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 <code>Not this process</code>。沒有指定類別的比值不受影響，每一段電漿都判定。</p>
+<p><strong>狀態列</strong>（不需登入）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>顯示</th><th>意思</th></tr></thead>
+<tbody>
+<tr><td><code>Tool events: not in use</code></td><td>沒有啟用</td></tr>
+<tr><td><code>Tool events: in window A</code></td><td>在製程 A 的視窗內</td></tr>
+<tr><td><code>Tool events: outside any window</code></td><td>視窗已關閉、目前沒有任何視窗（與有沒有電漿無關）</td></tr>
+<tr><td><code>Tool events: window unknown — …</code></td><td>已啟用，但目前沒有視窗生效：還沒收到事件、視窗逾時，或事件不套用到目前的光譜（回放、測試模式）。照沒有製程事件時的方式判定</td></tr>
+<tr><td><code>Last tool event: CEID … at hh:mm:ss</code></td><td>最後一筆收到的事件（不論是否在對照表內）；<code>none received yet</code> 表示還沒收到</td></tr>
+<tr><td><code>Tool events received this run: n</code></td><td>這次啟動後收到的事件數。一直是 0，就是 EAP 沒有在轉送</td></tr>
+</tbody></table></div>
+<p><strong>設定</strong>（Engineer 以上，Save &amp; apply）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>何時生效</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><code>Use tool events — takes effect at next acquisition start</code></td><td><strong>下一次開始採集</strong>（Monitor 分頁 Stop → Start）</td><td>總開關。和 Ratio Setup 一樣要重新開始採集才生效，因為對照表產生的類別名稱就是比值所指的類別，兩者要同時套用</td></tr>
+<tr><td><code>Max window (s) — applies on save</code></td><td>存檔即生效</td><td>視窗最長存活時間（預設 600 秒，可設 10～86400）。超過仍未收到 End，視窗作廢、回到「window unknown」</td></tr>
+<tr><td><code>Apply tool events in test mode — applies on save</code></td><td>存檔即生效</td><td>測試模式的合成光譜是否套用視窗（預設不套用）。只在沒有光譜儀的電腦上驗證用。<strong>回放錄檔時一律不套用</strong></td></tr>
+</tbody></table></div>
+<p><strong>CEID 對照表</strong>（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 <code>(record only)</code>，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（<code>inherit</code> 表示沿用製程分類器設定或記錄器的門檻）。對照表要在 <code>settings.json</code> 的 <code>secs.toolEvents.mappings</code> 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。</p>
+<p>已存檔的開關或對照表和目前生效的不同時，表格上方會出現橘色字：<code>Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.</code> 到 Monitor 分頁按 Stop 再按 Start 就會套用、橘色字消失。</p>
+<p><strong>日誌</strong>：視窗的開與關記成 <code>ToolEventWindowOpened</code>／<code>ToolEventWindowClosed</code>。事件不套用時（回放、測試模式），這兩行的結尾會加上 <code>(not applied: …)</code>，表示當時的判定沒有依這個視窗。其他相關訊息：<code>ToolEventIgnored</code>（對照表沒有的 CEID，每個只記一次）、<code>ToolEventWindowUnclosed</code>／<code>ToolEventOrphanEnd</code>／<code>ToolEventWindowTimedOut</code>（事件不成對或逾時，Warning）、<code>ToolEventUnmappedPlasma</code>（不在任何視窗內的一段電漿——通常是對照表還沒有的製程）。</p>
 <hr>
 <h2 id="7-檔案與資料夾">7. 檔案與資料夾</h2>
 <h3 id="71-位置">7.1 位置</h3>
@@ -1452,6 +1488,22 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </li>
 </ol>
 <p>完整的比對程序見 §8.5。</p>
+<h3 id="913-leak-monitor-一直顯示-process-context-unknown">9.13 Leak Monitor 一直顯示 <code>PROCESS CONTEXT UNKNOWN</code></h3>
+<p>已啟用主機台製程事件，但 OES 不知道目前是哪個製程視窗。照沒有製程事件時的方式判定，所以<strong>不會漏判</strong>，但指定類別的比值沒有依製程篩選。依序檢查 SECS 分頁的狀態列（§6.13.3）：</p>
+<ol>
+<li><strong><code>Tool events received this run: 0</code></strong> —— EAP 沒有在轉送事件。確認 SECS 已連線（<code>COMMUNICATING</code>），請 EAP 平台確認轉送已開啟。
+</li>
+<li><strong>有收到事件，但 <code>Last tool event</code> 的 CEID 不在對照表裡</strong> —— 對照表沒有這個主機台的 Start／End CEID。比對主機台的 CEID 表，修改 <code>settings.json</code> 後重新開始採集。
+</li>
+<li><strong>剛重新開始採集或剛啟動</strong> —— 要等主機台的下一個 Start 事件。這是正常的。
+</li>
+<li><strong>日誌有 <code>ToolEventWindowTimedOut</code></strong> —— 視窗開太久沒收到 End，代表 EAP 漏轉了 ProcessEnd，或 <code>Max window (s)</code> 設得比製程還短。
+</li>
+<li><strong>正在回放或測試模式</strong> —— 事件不套用到這些光譜（測試模式註記會寫 <code>not applied</code>），這是設計如此。
+</li>
+</ol>
+<h3 id="914-eap-送-tool_event-收到-hcack-1">9.14 EAP 送 <code>TOOL_EVENT</code> 收到 HCACK 1</h3>
+<p>OES 的 SECS profile 是在支援製程事件之前產生的。程式<strong>不會覆寫</strong>既有的 profile（裡面可能有現場的修改），所以舊 profile 沒有 <code>TOOL_EVENT</code> 這個命令、也沒有 VID 030～032；啟動時系統日誌會有一筆 <code>SecsProfileMissingBinds</code>。處理方式見 SECS SOP 的「升級後補 profile」：在 profile 補上那幾列，或備份後刪掉 profile 讓程式重新產生，再按 <strong>Restart interface</strong>。</p>
 <hr>
 <h2 id="10-附錄參數預設值">10. 附錄：參數預設值</h2>
 <h3 id="101-硬體參數">10.1 硬體參數</h3>
@@ -1580,7 +1632,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 │└┴────── cc  = 02   腔體：Ch_2（SECS 分頁設定的機台號）
 └──────── 固定 1</code></pre>
 <ul>
-<li><strong>VID 001～029 已實作</strong>：洩漏率、複合狀態、電漿有無、積分時間、製程類別等。
+<li><strong>VID 001～032 已實作</strong>：洩漏率、複合狀態、電漿有無、積分時間、製程類別、主機台製程事件的狀態等。
 </li>
 <li><strong>比值槽位 VID 101～400 尚未實作</strong>（規格已定義，每組比值佔 30 個號碼）。
 </li>
@@ -1596,6 +1648,9 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>006</td><td>Calibration status</td><td>0 未校正／1 有效／2 基準不符（估計暫停）</td></tr>
 <tr><td>007</td><td>Composite leak level</td><td>0 Idle／1 Normal／2 Warning／3 Alarm（鎖存）</td></tr>
 <tr><td>016</td><td>Test / replay mode</td><td>1 = 資料不是實機量測</td></tr>
+<tr><td>030</td><td>Tool event context state</td><td>0 未使用／1 狀態不明／2 在製程視窗內／3 不在任何視窗內（與有沒有電漿無關）</td></tr>
+<tr><td>031</td><td>Tool event window class</td><td>目前視窗的類別，例如 <code>A</code></td></tr>
+<tr><td>032</td><td>Last tool CEID</td><td>最後收到的主機台 CEID，用來確認 EAP 的轉送有到</td></tr>
 </tbody></table></div>
 <h3 id="112-alid警報">11.2 ALID：警報</h3>
 <p>設備在異常<strong>發生</strong>時送一次 S5F1（ALCD bit7 = 1），<strong>解除</strong>時再送一次（bit7 = 0），Host 回 S5F2 表示收到。所以警報是成對的：Host 警報清單上掛著的，就是還沒解除的那些。</p>
@@ -1638,7 +1693,17 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <li>漏點處理完，操作者按 Acknowledge → 送 <strong>ALID 002 clear</strong>，再送 <strong>CEID 502</strong>，告訴 Host 是人解除的，不是自己消失的。
 </li>
 </ol>
-<p>逐項的數值範例：比值槽位見 <code>secs-ratio-svid-example-zh-TW.html</code>（與本手冊同一個資料夾）；全域 VID 001～009 見原始碼庫的 <code>docs/secs-global-vid-example-zh-TW.html</code>。完整定義在 <code>docs/Satellite_SECS_Specification_v2.md</code> §1.4、§5、§6。</p>
+<h3 id="115-遠端命令tool_event">11.5 遠端命令：<code>TOOL_EVENT</code></h3>
+<p>除了上面三種，OES 只接受<strong>一個</strong>遠端命令（S2F41）：<code>TOOL_EVENT</code>。它由廠內 EAP 送來，內容是主機台自己的製程事件 CEID（必填 <code>CEID</code>，選填 <code>TIME</code>），用途見 §6.13.3。</p>
+<ul>
+<li><strong>它是資訊轉送，不是控制命令</strong>：不會啟停採集、不會解除警報、不改任何設定。
+</li>
+<li><strong>回覆碼 HCACK</strong>：0 = 收下（對照表沒有的 CEID 也回 0，只記錄）；1 = 命令不存在（舊版 profile，見 §9.14）；2 = 未啟用製程事件，或不在 ONLINE／REMOTE；3 = 參數錯誤（缺 <code>CEID</code>、<code>CEID</code> 讀不出來、<code>TIME</code> 格式錯）。
+</li>
+<li>收下後 VID 032 立即更新；視窗（030／031）在下一幀光譜才更新。
+</li>
+</ul>
+<p>逐項的數值範例：比值槽位見 <code>secs-ratio-svid-example-zh-TW.html</code>（與本手冊同一個資料夾）；全域 VID 001～009 見原始碼庫的 <code>docs/secs-global-vid-example-zh-TW.html</code>。完整定義在 <code>docs/Satellite_SECS_Specification_v2.md</code> §1.4、§5、§6、§7。</p>
 <hr>
 <h2 id="名詞對照">名詞對照</h2>
 <div class="tablewrap"><table>
@@ -1655,6 +1720,8 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>狀態變數識別碼</td><td>SVID (Status Variable ID)</td><td>Host 可隨時查詢的數值，見 §11.1</td></tr>
 <tr><td>警報識別碼</td><td>ALID (Alarm ID)</td><td>設備主動送出的警報，成對 set／clear，見 §11.2</td></tr>
 <tr><td>事件識別碼</td><td>CEID (Collection Event ID)</td><td>設備主動送出的事件通知，見 §11.3</td></tr>
+<tr><td>主機台製程事件</td><td>Tool event（S2F41 <code>TOOL_EVENT</code>）</td><td>EAP 轉送過來的主機台製程事件 CEID，見 §6.13.3</td></tr>
+<tr><td>製程視窗</td><td>Process window</td><td>主機台某個製程的 Start 到 End；指定類別的比值只在該類別的視窗內判定</td></tr>
 </tbody></table></div>
 </main>
 </div>
