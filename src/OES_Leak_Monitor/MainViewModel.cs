@@ -339,6 +339,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
         // The hot-applied half (the window time limit): now, and again on every SECS-tab save.
         _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
+        UpdateTestModeContext();
         _secs.Configure(settings.Secs);
 
         // One-click diagnostic bundle, on the Logs tab and deliberately ungated. Constructed last
@@ -431,6 +432,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             _leakMonitorEngine.ReloadRatios();
             _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
+            UpdateTestModeContext();   // the banner names whether tool events are in use
             _systemLogger.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatiosApplied",
                 "Species-ratio configuration (re)applied on OES acquisition start");
         }
@@ -711,6 +713,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _ratioCsvLogger.Stop();
         StopBatchRecording();
         _replayOutputActive = true;
+        // A replay plays the past; the tool's window is the present — never applied to it.
+        _leakMonitorEngine.SetReplayActive(true);
         ConfigureRecorderOutput();
         UpdateTestModeContext();
 
@@ -776,6 +780,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _ratioCsvLogger.Stop();
         StopBatchRecording();
         _replayOutputActive = false;
+        _leakMonitorEngine.SetReplayActive(false);
         ConfigureRecorderOutput();
         // Close again: the acquisition thread can deliver a frame between the two calls above,
         // which would open a session that then sits there — with whichever prefix was current
@@ -829,7 +834,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _replayOutputActive
                 ? $"replaying {Path.GetFileName(_replay.FilePath) ?? "a recording"}"
                 : "synthetic spectra",
-            _leakMonitorEngine.Settings.SuppressAlarmsInTestMode);
+            _leakMonitorEngine.Settings.SuppressAlarmsInTestMode,
+            // Null when tool events are not in use as applied; a replay never has them applied,
+            // synthetic spectra only with ApplyInTestMode — the engine's own rule, said here.
+            _leakMonitorEngine.ToolStatus.State == ToolEventContext.Disabled
+                ? null
+                : !_replayOutputActive && _savedToolEvents.ApplyInTestMode);
 
     /// <summary>
     /// Persists the replay selection (file + speed) immediately — re-reads on-disk settings and
@@ -871,6 +881,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             // hot-applied half takes effect at once: it names no class.
             _savedToolEvents = secs.ToolEvents?.Clone() ?? new ToolEventSettings();
             _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
+            UpdateTestModeContext();
             _systemLogger.LogSystemEvent(LogSeverity.Information, "SecsSettingsSaved",
                 "SECS interface settings saved",
                 related: $"User={AccessControl.CurrentUsername ?? "(guest)"},Enabled={secs.Enabled}," +

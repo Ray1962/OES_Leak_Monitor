@@ -28,8 +28,12 @@ public class ToolEventWindowTests
 
     private const double O777 = 777.4, Sig337 = 337.1;
 
-    /// <summary>A flat continuum with the two lines the tests read placed on it.</summary>
-    private static SpectrumSample Frame(double seconds, double o777, double sig337)
+    /// <summary>
+    /// A flat continuum with the two lines the tests read placed on it. A hardware frame unless
+    /// <paramref name="simulated"/>: tool events are not applied to synthetic spectra by default,
+    /// so a test about windows has to be measuring the chamber, as production does.
+    /// </summary>
+    private static SpectrumSample Frame(double seconds, double o777, double sig337, bool simulated = false)
     {
         const int n = 1100;
         var wl = new float[n];
@@ -50,12 +54,15 @@ public class ToolEventWindowTests
             IntegrationTime = 0,
             AverageCount = 0,
             SerialNumber = "TEST",
-            IsSimulated = true,
+            IsSimulated = simulated,
         };
     }
 
     /// <summary>Plasma on: the trigger line (777 nm) at 800 against a save threshold of 500.</summary>
     private static SpectrumSample On(double t, double signal = 500) => Frame(t, o777: 800, sig337: signal);
+
+    /// <summary>Plasma on, from the test-mode generator rather than the spectrometer.</summary>
+    private static SpectrumSample SimOn(double t) => Frame(t, o777: 800, sig337: 500, simulated: true);
 
     /// <summary>Plasma off: the trigger line at the continuum.</summary>
     private static SpectrumSample Off(double t) => Frame(t, o777: 10, sig337: 10);
@@ -815,5 +822,93 @@ public class ToolEventWindowTests
 
         h.Engine.Dispose();
         Assert.DoesNotContain(log.Lines(), l => l.Contains("ToolEventClassMismatch"));
+    }
+
+    // ---------------------------------------------------------------- test mode and replay (#31)
+
+    /// <summary>
+    /// Synthetic spectra are not the chamber, so by default the tool's window is not applied to
+    /// them: the engine judges them as it would without tool events and says Unknown. The event
+    /// is still taken and recorded — the host is answered and reads it back in 032.
+    /// </summary>
+    [Fact]
+    public void OnSyntheticSpectra_EventsAreRecordedButNotApplied_ByDefault()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"), Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        Assert.Equal(ToolEventAck.Accepted, h.Event(CleanStart, 0));
+        for (double t = 0; t <= 2.0; t += 0.5) h.Engine.ProcessSample(SimOn(t));
+
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+        Assert.Equal(ToolEventContext.Unknown, h.Engine.ToolStatus.State);
+        Assert.Equal(CleanStart, h.Engine.ToolStatus.LastCeid);
+        Assert.NotEqual(RatioState.NotApplicable, h.Ratio("R_A").State);   // judged as without them
+    }
+
+    /// <summary>
+    /// <c>ApplyInTestMode</c> opens the window to synthetic spectra — the only way to exercise it
+    /// on a machine with no spectrometer — and, like the window limit, it is hot-applied.
+    /// </summary>
+    [Fact]
+    public void ApplyInTestMode_AppliesTheWindowToSyntheticSpectra_FromTheNextFrame()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"), Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(CleanStart, 0);
+        h.Engine.ProcessSample(SimOn(0));
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+
+        h.Engine.ConfigureToolEventsLive(new ToolEventSettings { ApplyInTestMode = true });
+        h.Engine.ProcessSample(SimOn(0.5));
+        Assert.Equal(ToolEventContext.InWindow, h.Last.ToolEventState);
+        Assert.Equal("B", h.Last.ToolWindowClass);
+        Assert.Equal(RatioState.NotApplicable, h.Ratio("R_A").State);
+
+        h.Engine.ConfigureToolEventsLive(new ToolEventSettings { ApplyInTestMode = false });
+        h.Engine.ProcessSample(SimOn(1.0));
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+    }
+
+    /// <summary>
+    /// A replay plays the past; the tool's window is the present. Never applied during a replay,
+    /// whatever <c>ApplyInTestMode</c> says — and the window the tool reported meanwhile is still
+    /// known when the replay ends, so live judging picks it up on the next frame.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DuringAReplay_EventsAreNeverApplied(bool applyInTestMode)
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"), Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+        h.Engine.ConfigureToolEventsLive(new ToolEventSettings { ApplyInTestMode = applyInTestMode });
+
+        h.Engine.SetReplayActive(true);
+        Assert.Equal(ToolEventAck.Accepted, h.Event(CleanStart, 0));
+        for (double t = 0; t <= 2.0; t += 0.5) h.Engine.ProcessSample(SimOn(t));
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+        Assert.Equal(ToolEventContext.Unknown, h.Engine.ToolStatus.State);
+        Assert.NotEqual(RatioState.NotApplicable, h.Ratio("R_A").State);
+
+        h.Engine.SetReplayActive(false);
+        h.Engine.ProcessSample(On(2.5));                                    // the spectrometer again
+        Assert.Equal(ToolEventContext.InWindow, h.Last.ToolEventState);
+        Assert.Equal("B", h.Last.ToolWindowClass);
+    }
+
+    /// <summary>The Leak Monitor tab's test-mode banner says whether the window is applied.</summary>
+    [Fact]
+    public void TheTestModeBanner_SaysWhetherToolEventsAreApplied()
+    {
+        string applied = LeakMonitorViewModel.FormatTestModeNote("synthetic spectra", false, toolEventsApplied: true);
+        string notApplied = LeakMonitorViewModel.FormatTestModeNote("synthetic spectra", false, toolEventsApplied: false);
+        string notInUse = LeakMonitorViewModel.FormatTestModeNote("synthetic spectra", false, toolEventsApplied: null);
+
+        Assert.Contains("tool events are applied", applied);
+        Assert.Contains("tool events are not applied", notApplied);
+        Assert.DoesNotContain("tool events", notInUse);
+        Assert.NotEqual(applied, notApplied);
     }
 }

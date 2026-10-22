@@ -200,17 +200,33 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     /// a real recording, and the alarm gate is switchable from the Replay tab — a banner
     /// hard-coded to "synthetic spectra; alarms are suppressed" would then be wrong twice over,
     /// on the one screen an operator reads to decide whether an alarm means anything.
+    /// <para><paramref name="toolEventsApplied"/> is the third half since the tool's process
+    /// windows arrived: whether they decide which ratios judge these frames (null = tool events
+    /// are not in use, and the banner says nothing about them). A test-mode screen whose ratios
+    /// read "Not this process" with nothing to say why is the same trap.</para>
     /// </summary>
-    public void SetTestModeContext(string sourceNote, bool alarmsSuppressed)
+    public void SetTestModeContext(string sourceNote, bool alarmsSuppressed, bool? toolEventsApplied = null)
     {
         _testModeSourceNote = string.IsNullOrWhiteSpace(sourceNote) ? "synthetic spectra" : sourceNote;
         _testModeAlarmsSuppressed = alarmsSuppressed;
+        _testModeToolEventsApplied = toolEventsApplied;
         OnPropertyChanged(nameof(TestModeNote));
     }
 
+    private bool? _testModeToolEventsApplied;
+
+    /// <summary>The banner's sentence, as a function of what it reports.</summary>
+    public static string FormatTestModeNote(string sourceNote, bool alarmsSuppressed, bool? toolEventsApplied) =>
+        $"TEST MODE — {sourceNote}; alarms are " + (alarmsSuppressed ? "suppressed" : "active") +
+        toolEventsApplied switch
+        {
+            true => "; tool events are applied to these spectra.",
+            false => "; tool events are not applied — judged as without them.",
+            null => ".",
+        };
+
     public string TestModeNote => _testMode
-        ? $"TEST MODE — {_testModeSourceNote}; alarms are " +
-          (_testModeAlarmsSuppressed ? "suppressed." : "active.")
+        ? FormatTestModeNote(_testModeSourceNote, _testModeAlarmsSuppressed, _testModeToolEventsApplied)
         : "";
 
     private string _signalWarningNote = "";

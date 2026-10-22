@@ -41,11 +41,22 @@ public sealed class ToolEventSettings
     /// lost its End rather than run long.</summary>
     public const double DefaultMaxWindowSeconds = 600;
 
+    /// <summary>
+    /// Whether the tool's window is applied to the test-mode generator's synthetic spectra.
+    /// Off by default: a synthetic spectrum is not the chamber, and judging it as process A
+    /// because the tool happens to be running A says nothing. On, it is the only way to exercise
+    /// the windows on a machine with no spectrometer. Never applies during a replay, which plays
+    /// the past against a window that is the present. <b>Hot-applied</b>, like
+    /// <see cref="MaxWindowSeconds"/>.
+    /// </summary>
+    public bool ApplyInTestMode { get; set; }
+
     public ToolEventSettings Clone() => new()
     {
         Enabled = Enabled,
         Mappings = (Mappings ?? new()).Select(m => m.Clone()).ToList(),
         MaxWindowSeconds = MaxWindowSeconds,
+        ApplyInTestMode = ApplyInTestMode,
     };
 }
 
