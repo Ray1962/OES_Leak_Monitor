@@ -142,13 +142,15 @@ td code{white-space:nowrap;}
 <blockquote><p>本文件為 AQUSEN Satellite 感測器系統的 SECS/GEM 通訊協定規格整理。 內容涵蓋 SVID 編碼規則、SECS 連線參數、支援的 SECS 訊息功能，以及實際訊息範例與解讀。</p></blockquote>
 <blockquote><p><strong>v2 增補：</strong> 新增 <code>ss=27</code> OES Leak Monitor（電漿發光光譜洩漏監測器）的 SVID 定義（§1.2、§1.4）、警報定義（§5）與事件／報告定義（§6）。</p></blockquote>
 <blockquote><p><strong>v2.1（實作狀態）：</strong> <code>ss=27</code> 的設備端 SECS/HSMS 介面<strong>已實作一部分</strong>： <strong>全域量測項目 VID 001 ~ 026</strong>（§1.4(a)）、<strong>警報 ALID 001／002／012 ~ 014</strong>（§5.1）、 <strong>事件 CEID 502／508／509</strong>（§6.1），加上 S1F3 狀態查詢與 S2F23／S6F1 追蹤。 <strong>比值槽位 VID 101 ~ 400（§1.4(b)）、其餘 ALID 與 CEID、遠端命令 S2F41 尚未實作。</strong> §5.1 的 ALID 012 ~ 014（設備故障）為實作時新增。</p></blockquote>
-<blockquote><p><strong>v2.2（比值槽位定義修訂，2026-10-20）：</strong> 比對設備端程式後修正 §1.4(b)～(d) 三處，均在槽位 VID 實作之前：</p>
+<blockquote><p><strong>v2.2（比值槽位定義修訂，2026-10-20；第 4 項 2026-10-22）：</strong> 比對設備端程式後修正 §1.4(b)～(d) 三處（均在槽位 VID 實作之前），並更正一個範例：</p>
 <ol>
 <li><strong>位移 18 的判定條件</strong>改為「訊號線以原始平均擷取（位移 19 = 2）」，<strong>比值與絕對強度模式皆適用</strong>；原文只寫絕對強度模式（見 (d)）。
 </li>
 <li><strong>Ratio state（位移 05）增列 7 = Observing、8 = NotApplicable</strong>，與設備端列舉一致（見 (c)-3）。
 </li>
 <li><strong>位移 22 應填不變的 Key 還是顯示名稱，列為待決</strong>（見 (d)）。
+</li>
+<li><strong>§6.3 追蹤設定範例的 DSPER 更正為 <code>"000010"</code></strong>：原寫 <code>"001000"</code>，以 <code>hhmmss</code> 解讀是 10 分鐘，與範例說明的「每 10 秒」不符（格式見文末附註）。
 </li>
 </ol></blockquote>
 <hr>
@@ -699,7 +701,7 @@ S1F14
 <pre><code>S2F23 W
 &lt;L[5]
   &lt;U4[1] 12&gt;                 # TRID：Trace 請求 ID
-  &lt;A[6] "001000"&gt;            # DSPER：取樣週期（時間）
+  &lt;A[6] "001000"&gt;            # DSPER：取樣週期，hhmmss = 00:10:00，每 10 分鐘
   &lt;U4[1] 99&gt;                 # TOTSMP：總取樣次數
   &lt;U4[1] 1&gt;                  # REPGSZ：每次回報的取樣數
   &lt;L[4]                      # 要追蹤的 SVID 清單
@@ -1028,7 +1030,7 @@ S6F12
 <pre><code>S2F23 W
 &lt;L[5]
   &lt;U4[1] 27&gt;                 # TRID
-  &lt;A[6] "001000"&gt;            # DSPER：取樣週期
+  &lt;A[6] "000010"&gt;            # DSPER：取樣週期，hhmmss = 00:00:10，每 10 秒
   &lt;U4[1] 0&gt;                  # TOTSMP：0 = 持續
   &lt;U4[1] 1&gt;                  # REPGSZ
   &lt;L[4]
@@ -1050,6 +1052,8 @@ S2F24
 </li>
 <li>時間戳格式：<code>YYMMDDhhmmss</code>（12 碼）、<code>YYYYMMDDhhmmss</code>（14 碼）、<code>YYYYMMDDhhmmsscc</code>（16 碼，末兩碼為百分之一秒）。
 </li>
+<li>DSPER（S2F23 取樣週期）是<strong>時間長度</strong>，格式為 <code>hhmmss</code>（6 碼）或 <code>hhmmsscc</code>（8 碼，末兩碼為百分之一秒）：<code>"000010"</code> = 10 秒、<code>"001000"</code> = 10 分鐘、<code>"00000050"</code> = 0.5 秒。
+</li>
 <li>部分欄位解讀（如 S6F11 報告內各項目意義）依 S2F33 的報告定義而定，實際欄位順序以 Define Report 設定為準。
 </li>
 <li>ALID 與 CEID 雖同為 <code>1ccss</code> + 3 碼的形式，但屬不同命名空間；OES Leak Monitor 的 ALID 使用 001 ~ 130、CEID 自 501 起，兩者不會在人眼上混淆。
@@ -1057,7 +1061,7 @@ S2F24
 <li>§1.4 的 <code>ss=27</code> 全域量（VID 001 ~ 026）、§5.1 的 ALID 001／002／012 ~ 014、§6.1 的 CEID 502／508／509 已由設備端實作；比值槽位 VID 101 ~ 400、其餘 ALID／CEID 與遠端命令 S2F41 仍為規格定義草案。
 </li>
 </ul>
-<p>*本文件由原始 Word 規格書「Satellite SECS Specification」整理轉換而成；v2 增補 OES Leak Monitor（<code>ss=27</code>）章節，v2.1 標註其實作狀態並增訂 ALID 012 ~ 014；v2.2 依設備端程式修訂比值槽位的位移 18 判定、Ratio state 7／8，並將位移 22 列為待決。*</p>
+<p>*本文件由原始 Word 規格書「Satellite SECS Specification」整理轉換而成；v2 增補 OES Leak Monitor（<code>ss=27</code>）章節，v2.1 標註其實作狀態並增訂 ALID 012 ~ 014；v2.2 依設備端程式修訂比值槽位的位移 18 判定、Ratio state 7／8，並將位移 22 列為待決，更正 §6.3 追蹤範例的 DSPER。*</p>
 </main>
 </div>
 </body>
