@@ -462,14 +462,30 @@ public sealed class LeakMonitorEngine : IDisposable
     }
 
     /// <summary>
+    /// The process class this frame belongs to, and whether classes are in force at all — the
+    /// one answer every consumer reads: which entries judge (<see cref="AppliesToStep"/>),
+    /// which entries feed a capture (same check, same loop), the per-class plasma threshold,
+    /// and the snapshot the batch layer and the host read. One place on purpose: two consumers
+    /// asking "which process is this" of two sources is how a baseline ends up learning from
+    /// frames the judgement then refuses, with nothing to say they disagreed.
+    ///
+    /// <para><c>Class</c> is null while the running step's verdict has not been taken (treated
+    /// like <see cref="ProcessClassifier.Unknown"/>: nothing scoped is judged) and when no step
+    /// is running. <c>Scoped</c> false means no classes exist and every entry applies. Today
+    /// the spectral classifier's locked per-step verdict is the only source.</para>
+    /// </summary>
+    private (string? Class, bool Scoped) CurrentFrameClass() =>
+        (_stepClass, _classifier is not null);
+
+    /// <summary>
     /// Whether this entry measures the step now running. True for every entry while no
     /// classifier is configured, and for an entry with no class (it applies to every step) —
     /// which is what keeps an existing installation behaving exactly as before.
     /// <see cref="ProcessClassifier.Unknown"/> and an undecided step match nothing: an entry
     /// stands down rather than judging a step whose process is not known.
     /// </summary>
-    private bool AppliesToStep(RatioDefinition def) =>
-        ProcessClassifier.AppliesTo(def, _stepClass, _classifier is not null);
+    private static bool AppliesToStep(RatioDefinition def, (string? Class, bool Scoped) frame) =>
+        ProcessClassifier.AppliesTo(def, frame.Class, frame.Scoped);
 
     /// <summary>
     /// Which of <see cref="ProcessClassState"/>'s cases the step machine is in. Computed here
@@ -477,12 +493,18 @@ public sealed class LeakMonitorEngine : IDisposable
     /// <see cref="LeakMonitorSnapshot.ProcessClass"/> empty are only distinguishable from the
     /// engine's own fields, and <c>SecsBridge</c> reads the snapshot, it does not compute.
     /// </summary>
-    private ProcessClassState CurrentProcessClassState =>
-        _classifier is null ? ProcessClassState.NotConfigured
-        : !_stepOpen ? ProcessClassState.NoStep
-        : _stepClass is null ? ProcessClassState.Deciding
-        : _stepClass == ProcessClassifier.Unknown ? ProcessClassState.Unclassified
-        : ProcessClassState.Classified;
+    private ProcessClassState CurrentProcessClassState
+    {
+        get
+        {
+            var frame = CurrentFrameClass();
+            return !frame.Scoped ? ProcessClassState.NotConfigured
+                : !_stepOpen ? ProcessClassState.NoStep
+                : frame.Class is null ? ProcessClassState.Deciding
+                : frame.Class == ProcessClassifier.Unknown ? ProcessClassState.Unclassified
+                : ProcessClassState.Classified;
+        }
+    }
 
     /// <summary>
     /// Labels of the classifier's discriminants, in the order
@@ -509,7 +531,7 @@ public sealed class LeakMonitorEngine : IDisposable
     /// step is in progress.</summary>
     public string CurrentProcessClass
     {
-        get { lock (_gate) return _stepClass ?? ""; }
+        get { lock (_gate) return CurrentFrameClass().Class ?? ""; }
     }
 
     /// <summary>
@@ -660,12 +682,15 @@ public sealed class LeakMonitorEngine : IDisposable
             // exists to prevent.
             float? metric = _plasmaGate?.TriggerMetric(wl, inten);
             AdvanceStep(metric, wl, inten, sample.Timestamp);
+            // Asked once, after the step machine has moved, so every ratio on this frame is
+            // judged against the same answer.
+            var frameClass = CurrentFrameClass();
 
             bool? triggerPlasma = null;
             if (_plasmaGate is { IsUsable: true } && metric is { } m)
                 triggerPlasma = m > (_classifier is null
                     ? _plasmaGate.Threshold
-                    : _classifier.PlasmaThresholdFor(_stepClass, _plasmaGate.Threshold));
+                    : _classifier.PlasmaThresholdFor(frameClass.Class, _plasmaGate.Threshold));
             _lastGateOpen = triggerPlasma;
             if (triggerPlasma is { } g) TrackGateDropouts(g, sample.Timestamp);
 
@@ -688,7 +713,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 // nor feeds a baseline. It is not disabled and the tool is not idle, so it says
                 // so with a state of its own — and its latch survives, because a confirmed leak
                 // does not end when the tool moves to the next process step.
-                if (!AppliesToStep(def))
+                if (!AppliesToStep(def, frameClass))
                 {
                     mon.MarkNotApplicable();
                     if (_capturing) GetDiag(mon.Key).OutOfClass++;
@@ -1770,7 +1795,7 @@ public sealed class LeakMonitorEngine : IDisposable
             PlasmaPresent = _lastGateOpen ?? false,
             PlasmaGateAvailable = _lastGateOpen.HasValue,
             DropoutCount = _dropoutEvents,
-            ProcessClass = _stepClass ?? "",
+            ProcessClass = CurrentFrameClass().Class ?? "",
             ProcessClassState = CurrentProcessClassState,
             ProcessStepIndex = _stepIndex,
             ProcessDiscriminants = _stepDiscriminants,
