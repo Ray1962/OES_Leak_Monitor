@@ -658,4 +658,162 @@ public class ToolEventWindowTests
 
         Assert.Equal(stamped, h.Engine.ToolStatus.LastTime);
     }
+
+    // ---------------------------------------------------------------- plasma outside any window (#30)
+
+    /// <summary>A one-rule classifier that names every lit step A.</summary>
+    private static ProcessClassifierSettings EverythingIsA() => new()
+    {
+        Enabled = true,
+        DecideAfterFrames = 1,
+        Rules =
+        {
+            new ProcessClassRule
+            {
+                ClassName = "A", DisplayName = "O777/O777",
+                Numerator = Raw("O 777", O777), Denominator = Raw("O 777", O777),
+                Op = ComparisonOp.GreaterThan, Threshold = 0.5,
+            },
+        },
+    };
+
+    /// <summary>
+    /// Plasma between windows is a process the table does not map (process C, today). It is not
+    /// judged as any class — the class is Unknown, a class-scoped ratio reads NotApplicable — and
+    /// a ratio with no class carries on, since it made no claim about which process it measures.
+    /// The host reads the same thing: 028 = Unclassified with 027 = "Unknown".
+    /// </summary>
+    [Fact]
+    public void PlasmaOutsideAnyWindow_IsUnknown_AndOnlyUnscopedRatiosJudge()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"), Ratio("R_any", ""));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        double t = 0;
+        h.Event(ProcessStart, t);
+        for (; t <= 1.0; t += 0.5) h.Engine.ProcessSample(On(t));
+        h.Event(ProcessEnd, t);
+        for (; t <= 3.0; t += 0.5) h.Engine.ProcessSample(On(t));
+
+        Assert.Equal(ToolEventContext.OutsideWindow, h.Last.ToolEventState);
+        Assert.True(h.Last.PlasmaPresent);
+        Assert.Equal(ProcessClassifier.Unknown, h.Last.ProcessClass);
+        Assert.Equal(ProcessClassState.Unclassified, h.Last.ProcessClassState);
+        Assert.Equal(RatioState.NotApplicable, h.Ratio("R_A").State);
+        Assert.Equal(RatioState.NoBaseline, h.Ratio("R_any").State);       // judged; no baseline yet
+    }
+
+    /// <summary>
+    /// Between windows with the plasma off nothing is running: no class, and 028 says there is
+    /// no step rather than that one could not be classified.
+    /// </summary>
+    [Fact]
+    public void OutsideAnyWindow_WithThePlasmaOff_IsNoStep()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(ProcessStart, 0);
+        h.Engine.ProcessSample(On(0));
+        h.Event(ProcessEnd, 0.5);
+        for (double t = 0.5; t <= 3.0; t += 0.5) h.Engine.ProcessSample(Off(t));
+
+        Assert.Equal(ToolEventContext.OutsideWindow, h.Last.ToolEventState);
+        Assert.Equal("", h.Last.ProcessClass);
+        Assert.Equal(ProcessClassState.NoStep, h.Last.ProcessClassState);
+    }
+
+    /// <summary>
+    /// Inside a window the tool has named the class, so 028 reports it as classified even before
+    /// the plasma lights — the host asks "which process", and the tool has answered.
+    /// </summary>
+    [Fact]
+    public void InsideAWindow_TheClassIsReportedAsClassified()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(ProcessStart, 0);
+        h.Engine.ProcessSample(Off(0));
+        Assert.Equal("A", h.Last.ProcessClass);
+        Assert.Equal(ProcessClassState.Classified, h.Last.ProcessClassState);
+
+        h.Engine.ProcessSample(On(0.5));
+        Assert.Equal("A", h.Last.ProcessClass);
+        Assert.Equal(ProcessClassState.Classified, h.Last.ProcessClassState);
+    }
+
+    /// <summary>
+    /// Each stretch of plasma outside any window is written down when it ends — when it started,
+    /// how long it ran, how bright it was — so that once someone knows which process it was, the
+    /// fix is one row in the table and the evidence for it is already in the log.
+    /// </summary>
+    [Fact]
+    public void EachStretchOfUnmappedPlasma_IsLoggedWithStartDurationAndBrightness()
+    {
+        using var log = new LogCapture();
+        using var h = new Harness(log.Logger, classifier: null, Ratio("R_A", "A"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(ProcessStart, 0);
+        h.Engine.ProcessSample(On(0));
+        h.Event(ProcessEnd, 1);
+        double t = 1;
+        for (; t <= 6.0; t += 0.5) h.Engine.ProcessSample(On(t));          // 5 s lit, no window
+        for (; t <= 9.0; t += 0.5) h.Engine.ProcessSample(Off(t));         // goes out: stretch ends
+
+        h.Engine.Dispose();
+        var lines = log.Lines().Where(l => l.Contains("ToolEventUnmappedPlasma")).ToArray();
+        var line = Assert.Single(lines);
+        Assert.Contains("00:00:01", line);       // started at 1 s past the epoch
+        Assert.Contains("5 s", line);            // ran 5 s
+        Assert.Contains("800", line);            // the trigger line's level while lit
+    }
+
+    /// <summary>
+    /// With a classifier configured it keeps taking its per-step verdict, but only to be checked
+    /// against the tool: a verdict that disagrees with the window it was taken in is logged once
+    /// for the step, with both classes and the measured discriminants. It never changes which
+    /// ratios judge.
+    /// </summary>
+    [Fact]
+    public void AClassifierThatDisagreesWithTheWindow_IsLoggedOncePerStep_AndChangesNothing()
+    {
+        using var log = new LogCapture();
+        using var h = new Harness(log.Logger, EverythingIsA(), Ratio("R_A", "A"), Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        double t = 0;
+        h.Event(CleanStart, t);                                             // the tool says B
+        for (; t <= 3.0; t += 0.5) h.Engine.ProcessSample(On(t));          // the spectrum says A
+        Assert.Equal("B", h.Last.ProcessClass);
+        Assert.Equal(RatioState.NotApplicable, h.Ratio("R_A").State);
+        Assert.NotEqual(RatioState.NotApplicable, h.Ratio("R_B").State);
+
+        h.Event(CleanEnd, t);
+        for (; t <= 5.0; t += 0.5) h.Engine.ProcessSample(Off(t));
+        h.Event(ProcessStart, t);                                           // agreement: no line
+        for (; t <= 8.0; t += 0.5) h.Engine.ProcessSample(On(t));
+
+        h.Engine.Dispose();
+        var lines = log.Lines().Where(l => l.Contains("ToolEventClassMismatch")).ToArray();
+        var line = Assert.Single(lines);
+        Assert.Contains("warn", line);
+        Assert.Contains("O777/O777", line);                                 // the discriminant
+    }
+
+    /// <summary>With no classifier there is nothing to cross-check, and nothing is logged.</summary>
+    [Fact]
+    public void WithoutAClassifier_NothingIsCrossChecked()
+    {
+        using var log = new LogCapture();
+        using var h = new Harness(log.Logger, classifier: null, Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(CleanStart, 0);
+        for (double t = 0; t <= 3.0; t += 0.5) h.Engine.ProcessSample(On(t));
+
+        h.Engine.Dispose();
+        Assert.DoesNotContain(log.Lines(), l => l.Contains("ToolEventClassMismatch"));
+    }
 }
