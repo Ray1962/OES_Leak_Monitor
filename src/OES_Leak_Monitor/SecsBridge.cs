@@ -320,6 +320,9 @@ public sealed class SecsBridge : IDisposable
     // 030-032 must answer for that moment, not for the last frame (which may not exist yet).
     private volatile ToolEventStatus _toolStatus = ToolEventStatus.Disabled;
 
+    /// <summary>The engine's tool-event status as last published, for the tab to word.</summary>
+    public ToolEventStatus ToolStatus => _toolStatus;
+
     /// <summary>The engine's <see cref="LeakMonitorEngine.ToolStatusChanged"/>. Any thread; it
     /// stores the value and raises <see cref="ToolContextChanged"/>, nothing else.</summary>
     public void OnToolStatus(ToolEventStatus status)

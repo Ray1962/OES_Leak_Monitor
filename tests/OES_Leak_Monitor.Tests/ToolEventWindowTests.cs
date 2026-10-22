@@ -911,4 +911,58 @@ public class ToolEventWindowTests
         Assert.DoesNotContain("tool events", notInUse);
         Assert.NotEqual(applied, notApplied);
     }
+
+    // ---------------------------------------------------------------- #34: log wording, counter
+
+    /// <summary>
+    /// While events are suppressed (synthetic spectra without ApplyInTestMode, or a replay) the
+    /// engine still tracks the tool's window, and logs it opening and closing. Those entries must
+    /// say the window was not applied — read later, a bare "Process window A opened" claims the
+    /// ratios were scoped to A when they were judged as without tool events. The event names stay
+    /// the same so a filter on them still finds every edge. The very first suppressed frame counts
+    /// too: the frame's kind is known before its queued events are applied.
+    /// </summary>
+    [Fact]
+    public void WhileSuppressed_TheWindowLogLines_SayTheyWereNotApplied()
+    {
+        using var log = new LogCapture();
+        using var h = new Harness(log.Logger, classifier: null, Ratio("R_A", "A"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(ProcessStart, 0);
+        h.Engine.ProcessSample(SimOn(0));               // suppressed from this very frame
+        h.Event(ProcessEnd, 0.5);
+        h.Engine.ProcessSample(SimOn(0.5));
+        h.Event(ProcessStart, 1.0);
+        h.Engine.ProcessSample(On(1.0));                // hardware: applied
+
+        h.Engine.Dispose();
+        var lines = log.Lines();
+        var opened = lines.Where(l => l.Contains("ToolEventWindowOpened")).ToArray();
+        var closed = lines.Where(l => l.Contains("ToolEventWindowClosed")).ToArray();
+        Assert.Equal(2, opened.Length);
+        Assert.Contains("not applied", opened[0]);
+        Assert.DoesNotContain("not applied", opened[1]);
+        Assert.Contains("not applied", Assert.Single(closed));
+    }
+
+    /// <summary>
+    /// The SECS tab counts the events received this run, so "is the EAP forwarding anything?" has
+    /// a number for an answer. Every event the table took or ignored counts; one refused because
+    /// tool events are off does not, since nothing received it.
+    /// </summary>
+    [Fact]
+    public void TheStatus_CountsTheEventsReceived()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"));
+        Assert.Equal(ToolEventAck.Disabled, h.Event(ProcessStart, 0));
+        Assert.Equal(0, h.Engine.ToolStatus.ReceivedCount);
+
+        h.Engine.ConfigureToolEvents(Pm3());
+        h.Event(ProcessStart, 1);
+        h.Event(1234567, 2);                            // not in the table: ignored, still received
+        h.Event(ProcessEnd, 3);
+
+        Assert.Equal(3, h.Engine.ToolStatus.ReceivedCount);
+    }
 }

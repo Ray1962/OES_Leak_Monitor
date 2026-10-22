@@ -16,6 +16,11 @@
                            FontSize="18" FontWeight="Bold"/>
                 <TextBlock Text="{Binding TestModeNote}" Foreground="#FFEFC8"
                            FontSize="11" Margin="0,2,0,0"/>
+                <TextBlock Text="{Binding ToolContextNote}" Foreground="#FFEFC8"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,2,0,0"
+                           TextWrapping="Wrap" AutomationProperties.Name="Tool context note"
+                           Visibility="{Binding HasToolContextNote, Converter={StaticResource BoolToVis}}"
+                           ToolTip="Tool events (the main tool's process events, forwarded by the EAP) are in use, but no process window is in force. Until one is, class-scoped ratios are judged as they would be without tool events."/>
                 <TextBlock Text="{Binding SignalWarningNote}" Foreground="#FFE0B0"
                            FontSize="12" FontWeight="SemiBold" Margin="0,2,0,0"
                            TextWrapping="Wrap"
