@@ -199,7 +199,7 @@ td code{white-space:nowrap;}
 <tr><td>9</td><td>S2F23 → S2F24</td><td>訂閱 Trace（第 4.1 節）</td></tr>
 <tr><td>10</td><td>S6F23 → S6F24</td><td>取回斷線期間暫存的訊息</td></tr>
 <tr><td>11</td><td>S1F3 → S1F4</td><td>讀一次 VID 007／010／016／030，重建目前狀態（規則 R6、R9）</td></tr>
-<tr><td>12</td><td>S2F41 → S2F42</td><td><strong>補送目前的製程視窗</strong>：若平台知道 PM3 此刻在某個製程視窗內（已收到 Start、尚未收到 End），而步驟 11 讀到的 VID 030 ≠ 2，就把那個 Start 的 CEID 以 <code>TOOL_EVENT</code> 再送一次（§6.5）。OES 重新啟動後在下一個視窗邊界之前都是「狀態不明」，補送可以縮短這段時間</td></tr>
+<tr><td>12</td><td>S2F41 → S2F42</td><td><strong>（建議，非必要；待平台方確認是否採用）補送目前的製程視窗</strong>：若平台知道 PM3 此刻在某個製程視窗內（已收到 Start、尚未收到 End），而步驟 11 讀到的 VID 030 ≠ 2，就把那個 Start 的 CEID 以 <code>TOOL_EVENT</code> 再送一次（§6.5）。OES 重新啟動後在下一個視窗邊界之前都是「狀態不明」，補送可以縮短這段時間</td></tr>
 </tbody></table></div>
 <blockquote><p><strong>對時的注意事項：</strong> S2F31 只會設定 OES 回報給 Host 的 SECS 時鐘，<strong>不會改 OES PC 的系統時間</strong>。OES 寫的 CSV 與日誌用的是 PC 時鐘，所以 <strong>OES PC 要另外接廠內 NTP</strong>，否則事後拿 CSV 和 EAP 的紀錄對時會對不上。</p></blockquote>
 <h2 id="4-使用的識別碼">4. 使用的識別碼</h2>
