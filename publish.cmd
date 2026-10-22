@@ -79,6 +79,7 @@ for %%F in (
     CONTEXT-zh-TW.html
     golden-run-baseline-troubleshooting-zh-TW.html
     baseline-builder-sop-zh-TW.html
+    secs-ratio-svid-example-zh-TW.html
     check-oes-connect.ps1
     check-oes-connect.cmd
 ) do (
@@ -107,6 +108,7 @@ if defined MISSING (
     echo    python3 tools\md2html.py docs\CONTEXT-zh-TW.md docs\CONTEXT-zh-TW.html "OES Leak Monitor terms"
     echo    python3 tools\md2html.py docs\golden-run-baseline-troubleshooting-zh-TW.md docs\golden-run-baseline-troubleshooting-zh-TW.html "OES Leak Monitor Golden Run baseline troubleshooting"
     echo    python3 tools\md2html.py docs\baseline-builder-sop-zh-TW.md docs\baseline-builder-sop-zh-TW.html "OES Leak Monitor Baseline Builder SOP"
+    echo    python3 tools\md2html.py docs\secs-ratio-svid-example-zh-TW.md docs\secs-ratio-svid-example-zh-TW.html "OES Leak Monitor Species Ratio SVID examples"
     echo.
     echo  secs-acceptance-sheet-zh-TW.html has NO Markdown source - it is a form,
     echo  hand-authored as HTML. Do not regenerate it; restore it from git.
@@ -116,7 +118,7 @@ if defined MISSING (
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 21 files present ***
+echo  *** PUBLISH SUCCEEDED - all 22 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -137,6 +139,8 @@ echo    golden-run-baseline-troubleshooting-zh-TW.html
 echo                               why a Golden Run baseline was refused
 echo    baseline-builder-sop-zh-TW.html
 echo                               building a Golden Run from recordings on disk
+echo    secs-ratio-svid-example-zh-TW.html
+echo                               per-ratio SVID worked examples for the host
 echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
 echo.
 

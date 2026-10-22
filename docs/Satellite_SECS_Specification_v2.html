@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AQUSEN Satellite SECS Specification v2</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#0-導讀協定重點解讀">0. 導讀（協定重點解讀）</a>
+<a class="l2" href="#1-svid-編碼格式">1. SVID 編碼格式</a>
+<a class="l3" href="#11-cc--腔體chamber代號">1.1 cc — 腔體（Chamber）代號</a>
+<a class="l3" href="#12-ss--感測器類型代號">1.2 ss — 感測器類型代號</a>
+<a class="l3" href="#13-aa--slit-valve-代號">1.3 aa — Slit valve 代號</a>
+<a class="l3" href="#14-vvv--vid各感測器的量測項目">1.4 vvv — VID（各感測器的量測項目）</a>
+<a class="l2" href="#2-secs-連線參數">2. SECS 連線參數</a>
+<a class="l2" href="#3-支援的-secs-功能stream--function">3. 支援的 SECS 功能（Stream / Function）</a>
+<a class="l2" href="#4-secs-訊息範例與解讀">4. SECS 訊息範例與解讀</a>
+<a class="l3" href="#s1f2--上線資料回覆-are-you-online">S1F2 — 上線資料（回覆 Are You Online）</a>
+<a class="l3" href="#s1f3--s1f4--設備狀態查詢回覆">S1F3 / S1F4 — 設備狀態查詢／回覆</a>
+<a class="l3" href="#s1f13--s1f14--建立通訊">S1F13 / S1F14 — 建立通訊</a>
+<a class="l3" href="#s2f18--日期時間回覆">S2F18 — 日期時間回覆</a>
+<a class="l3" href="#s2f23--s2f24--追蹤初始化設定trace-initialize">S2F23 / S2F24 — 追蹤初始化設定（Trace Initialize）</a>
+<a class="l3" href="#s2f31--s2f32--日期時間設定">S2F31 / S2F32 — 日期時間設定</a>
+<a class="l3" href="#s2f33--s2f34--定義報告define-report">S2F33 / S2F34 — 定義報告（Define Report）</a>
+<a class="l3" href="#s2f35--s2f36--連結事件與報告link-event-report">S2F35 / S2F36 — 連結事件與報告（Link Event Report）</a>
+<a class="l3" href="#s2f37--s2f38--啟用停用事件報告">S2F37 / S2F38 — 啟用／停用事件報告</a>
+<a class="l3" href="#s2f41--s2f42--主機命令下達host-command-send">S2F41 / S2F42 — 主機命令下達（Host Command Send）</a>
+<a class="l3" href="#s5f1--s5f2--警報回報alarm-report">S5F1 / S5F2 — 警報回報（Alarm Report）</a>
+<a class="l3" href="#s6f1--s6f2--追蹤資料回傳trace-data-send">S6F1 / S6F2 — 追蹤資料回傳（Trace Data Send）</a>
+<a class="l3" href="#s6f11--s6f12--事件報告回傳event-report-send">S6F11 / S6F12 — 事件報告回傳（Event Report Send）</a>
+<a class="l2" href="#5-oes-leak-monitor-警報定義alid">5. OES Leak Monitor 警報定義（ALID）</a>
+<a class="l3" href="#51-全域警報nnn--001--099">5.1 全域警報（nnn = 001 ~ 099）</a>
+<a class="l3" href="#52-槽位警報nnn--101--130">5.2 槽位警報（nnn = 101 ~ 130）</a>
+<a class="l3" href="#53-alcd-與-altx-慣例">5.3 ALCD 與 ALTX 慣例</a>
+<a class="l2" href="#6-oes-leak-monitor-事件與報告定義ceid--rptid">6. OES Leak Monitor 事件與報告定義（CEID / RPTID）</a>
+<a class="l3" href="#61-事件清單">6.1 事件清單</a>
+<a class="l3" href="#62-建議報告rptid">6.2 建議報告（RPTID）</a>
+<a class="l3" href="#63-訊息範例以-ch_2cc02-為例">6.3 訊息範例（以 Ch_2、cc=02 為例）</a>
+<a class="l2" href="#附註">附註</a>
+</nav>
+<main>
+<h1 id="satellite-secs-通訊協定規格書">Satellite SECS 通訊協定規格書</h1>
+<blockquote><p>本文件為 AQUSEN Satellite 感測器系統的 SECS/GEM 通訊協定規格整理。 內容涵蓋 SVID 編碼規則、SECS 連線參數、支援的 SECS 訊息功能，以及實際訊息範例與解讀。</p></blockquote>
+<blockquote><p><strong>v2 增補：</strong> 新增 <code>ss=27</code> OES Leak Monitor（電漿發光光譜洩漏監測器）的 SVID 定義（§1.2、§1.4）、警報定義（§5）與事件／報告定義（§6）。</p></blockquote>
+<blockquote><p><strong>v2.1（實作狀態）：</strong> <code>ss=27</code> 的設備端 SECS/HSMS 介面<strong>已實作一部分</strong>： <strong>全域量測項目 VID 001 ~ 026</strong>（§1.4(a)）、<strong>警報 ALID 001／002／012 ~ 014</strong>（§5.1）、 <strong>事件 CEID 502／508／509</strong>（§6.1），加上 S1F3 狀態查詢與 S2F23／S6F1 追蹤。 <strong>比值槽位 VID 101 ~ 400（§1.4(b)）、其餘 ALID 與 CEID、遠端命令 S2F41 尚未實作。</strong> §5.1 的 ALID 012 ~ 014（設備故障）為實作時新增。</p></blockquote>
+<blockquote><p><strong>v2.2（比值槽位定義修訂，2026-10-20；第 4 項 2026-10-22）：</strong> 比對設備端程式後修正 §1.4(b)～(d) 三處（均在槽位 VID 實作之前），並更正一個範例：</p>
+<ol>
+<li><strong>位移 18 的判定條件</strong>改為「訊號線以原始平均擷取（位移 19 = 2）」，<strong>比值與絕對強度模式皆適用</strong>；原文只寫絕對強度模式（見 (d)）。
+</li>
+<li><strong>Ratio state（位移 05）增列 7 = Observing、8 = NotApplicable</strong>，與設備端列舉一致（見 (c)-3）。
+</li>
+<li><strong>位移 22 應填不變的 Key 還是顯示名稱，列為待決</strong>（見 (d)）。
+</li>
+<li><strong>§6.3 追蹤設定範例的 DSPER 更正為 <code>"000010"</code></strong>：原寫 <code>"001000"</code>，以 <code>hhmmss</code> 解讀是 10 分鐘，與範例說明的「每 10 秒」不符（格式見文末附註）。
+</li>
+</ol></blockquote>
+<hr>
+<h2 id="0-導讀協定重點解讀">0. 導讀（協定重點解讀）</h2>
+<p>SECS（SEMI Equipment Communications Standard）是半導體設備與主機（Host / MES）之間的標準通訊協定，本規格採用 <strong>SECS-II 訊息格式</strong> 搭配 <strong>HSMS（High-Speed SECS Message Services，走 TCP/IP）</strong> 傳輸。整份規格可拆成四個部分：</p>
+<ol>
+<li><strong>SVID 編碼規則</strong> — 定義每一筆量測資料（變數）的唯一 ID。Satellite 用一組 10 位數字 <code>1ccssaavvv</code> 把「哪個腔體、哪種感測器、對應哪個 slit valve、量測哪個物理量」全部編碼進去。這是整份文件最核心、也最需要理解的部分。
+</li>
+<li><strong>SECS 連線參數</strong> — HSMS 連線的 IP／Port 與各項逾時（T3、T5～T8）設定。
+</li>
+<li><strong>SECS 功能（Stream/Function）</strong> — 本設備支援哪些 SxFy 訊息（上線確認、狀態查詢、事件報告、警報等）。
+</li>
+<li><strong>訊息範例</strong> — 各 SxFy 的實際 SECS-II 資料結構範例。
+</li>
+</ol>
+<p>其中 SVID 是「資料的地址」，SECS Function 是「溝通的動作」，兩者搭配即可讓 Host 訂閱、查詢並接收 Satellite 感測器的即時資料。</p>
+<hr>
+<h2 id="1-svid-編碼格式">1. SVID 編碼格式</h2>
+<p>Satellite 以下列規則定義每個 SVID（Status Variable ID），總長 <strong>10 位數字</strong>：</p>
+<pre><code>1 c c s s a a v v v
+│ └┬┘ └┬┘ └┬┘ └─┬─┘
+│  │   │   │    └── vvv：VID（該感測器內的量測項目，3 碼）
+│  │   │   └─────── aa ：Slit valve 名稱（用於調節/對應感測器訊號，2 碼）
+│  │   └─────────── ss ：感測器類型（2 碼）
+│  └─────────────── cc ：腔體（Chamber）名稱（2 碼）
+└────────────────── 1  ：固定碼，代表 AQUSEN Sensor</code></pre>
+<div class="tablewrap"><table>
+<thead><tr><th>欄位</th><th>位數</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td><code>1</code></td><td>1</td><td>固定值，AQUSEN Sensor 專用識別碼</td></tr>
+<tr><td><code>cc</code></td><td>2</td><td>腔體（Chamber）代號</td></tr>
+<tr><td><code>ss</code></td><td>2</td><td>感測器類型代號</td></tr>
+<tr><td><code>aa</code></td><td>2</td><td>Slit valve 代號（用於調節感測器訊號）</td></tr>
+<tr><td><code>vvv</code></td><td>3</td><td>VID，該感測器類型下的量測項目</td></tr>
+</tbody></table></div>
+<blockquote><p><strong>範例解讀：</strong> <code>1110806001</code> = <code>1</code> + <code>cc=11</code> + <code>ss=08</code> + <code>aa=06</code> + <code>vvv=001</code> → AQUSEN 感測器，Buffer/Buffer 1 腔體，O2 sensor，對應 Ch_A/VIA_1 slit valve，量測項目為「O2 ppm」。</p></blockquote>
+<h3 id="11-cc--腔體chamber代號">1.1 <code>cc</code> — 腔體（Chamber）代號</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>代號</th><th>腔體</th><th>代號</th><th>腔體</th></tr></thead>
+<tbody>
+<tr><td>00</td><td>無 DVM 收集 slit valve 訊號</td><td>01</td><td>Ch_1</td></tr>
+<tr><td>02</td><td>Ch_2</td><td>03</td><td>Ch_3</td></tr>
+<tr><td>04</td><td>Ch_4</td><td>05</td><td>Ch_5</td></tr>
+<tr><td>06</td><td>Ch_A / VIA_1</td><td>07</td><td>Ch_E</td></tr>
+<tr><td>08</td><td>Ch_F</td><td>09</td><td>Ch_B</td></tr>
+<tr><td>10</td><td>X'fer / Buffer 2</td><td>11</td><td>Buffer / Buffer 1</td></tr>
+<tr><td>12</td><td>Ch_C</td><td>13</td><td>Ch_D</td></tr>
+<tr><td>14</td><td>LLA</td><td>15</td><td>LLB</td></tr>
+<tr><td>21</td><td>X'fer Viewport 1</td><td>22</td><td>X'fer Viewport 2</td></tr>
+<tr><td>23</td><td>X'fer Viewport 3</td><td>24</td><td>X'fer Viewport 4</td></tr>
+<tr><td>25</td><td>X'fer Viewport 5</td><td>31</td><td>Buffer Viewport 1</td></tr>
+<tr><td>32</td><td>Buffer Viewport 2</td><td>33</td><td>Buffer Viewport 3</td></tr>
+<tr><td>34</td><td>Buffer Viewport 4</td><td></td><td></td></tr>
+</tbody></table></div>
+<h3 id="12-ss--感測器類型代號">1.2 <code>ss</code> — 感測器類型代號</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>代號</th><th>感測器</th><th>代號</th><th>感測器</th></tr></thead>
+<tbody>
+<tr><td>01</td><td>RGA</td><td>02</td><td>OR4000</td></tr>
+<tr><td>03</td><td>Reserved</td><td>04</td><td>Reserved</td></tr>
+<tr><td>05</td><td>IR300</td><td>06</td><td>Temperature Sensor</td></tr>
+<tr><td>07</td><td>Reserved</td><td>08</td><td>O2 sensor</td></tr>
+<tr><td>09</td><td>H2 sensor</td><td>10</td><td>IR422C</td></tr>
+<tr><td>11</td><td>Reserved</td><td>12</td><td>DC Arcing detector</td></tr>
+<tr><td>13</td><td>RF Arc sensor</td><td>14</td><td>ESC monitor</td></tr>
+<tr><td>15</td><td>Pulsed RF monitor</td><td>16</td><td>O2 &amp; H2O sensor</td></tr>
+<tr><td>17</td><td>IT470</td><td>18</td><td>MS100</td></tr>
+<tr><td>19</td><td>AEDC_S</td><td>20</td><td>AEDC_E</td></tr>
+<tr><td>21</td><td>MKSDC_S</td><td>22</td><td>ATM-T/M-01</td></tr>
+<tr><td>23</td><td>Marc1000PN</td><td>24</td><td>RFZN</td></tr>
+<tr><td>25</td><td>RPS Monitor</td><td>26</td><td>Pumping efficient</td></tr>
+<tr><td>27</td><td>OES Leak Monitor</td><td></td><td></td></tr>
+</tbody></table></div>
+<h3 id="13-aa--slit-valve-代號">1.3 <code>aa</code> — Slit valve 代號</h3>
+<blockquote><p>用於調節（condition）感測器訊號，編碼表與腔體 <code>cc</code> 相同。</p></blockquote>
+<div class="tablewrap"><table>
+<thead><tr><th>代號</th><th>Slit valve</th><th>代號</th><th>Slit valve</th></tr></thead>
+<tbody>
+<tr><td>00</td><td>無 DVM 收集 slit valve 訊號</td><td>01</td><td>Ch_1</td></tr>
+<tr><td>02</td><td>Ch_2</td><td>03</td><td>Ch_3</td></tr>
+<tr><td>04</td><td>Ch_4</td><td>05</td><td>Ch_5</td></tr>
+<tr><td>06</td><td>Ch_A / VIA_1</td><td>07</td><td>Ch_E</td></tr>
+<tr><td>08</td><td>Ch_F</td><td>09</td><td>Ch_B</td></tr>
+<tr><td>10</td><td>X'fer / Buffer 2</td><td>11</td><td>Buffer / Buffer 1</td></tr>
+<tr><td>12</td><td>Ch_C</td><td>13</td><td>Ch_D</td></tr>
+<tr><td>14</td><td>LLA</td><td>15</td><td>LLB</td></tr>
+<tr><td>21</td><td>X'fer Viewport 1</td><td>22</td><td>X'fer Viewport 2</td></tr>
+<tr><td>23</td><td>X'fer Viewport 3</td><td>24</td><td>X'fer Viewport 4</td></tr>
+<tr><td>25</td><td>X'fer Viewport 5</td><td>31</td><td>Buffer Viewport 1</td></tr>
+<tr><td>32</td><td>Buffer Viewport 2</td><td>33</td><td>Buffer Viewport 3</td></tr>
+<tr><td>34</td><td>Buffer Viewport 4</td><td></td><td></td></tr>
+</tbody></table></div>
+<h3 id="14-vvv--vid各感測器的量測項目">1.4 <code>vvv</code> — VID（各感測器的量測項目）</h3>
+<p>以下依感測器類型列出對應的 VID 量測項目。</p>
+<h4 id="rgass01">RGA（<code>ss=01</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001 ~ 300</td><td>Mass Amp（質譜各質量數振幅）</td><td>301 ~ 600</td><td>Mass pp（各質量數分壓）</td></tr>
+<tr><td>601</td><td>H2O pp</td><td>602</td><td>N2 pp</td></tr>
+<tr><td>603</td><td>O2 pp</td><td>604</td><td>He pp</td></tr>
+<tr><td>605</td><td>CO2 pp</td><td>606</td><td>IPA pp</td></tr>
+<tr><td>607</td><td>MP Oil pp</td><td>608</td><td>Fomblin pp</td></tr>
+<tr><td>609</td><td>CxHy-S pp</td><td>610</td><td>Solvent pp</td></tr>
+<tr><td>611</td><td>Polymer pp</td><td>612</td><td>DC704 pp</td></tr>
+<tr><td>613</td><td>NH3 pp</td><td>614</td><td>SO2 pp</td></tr>
+<tr><td>615</td><td>CxHy-L pp</td><td>616</td><td>CxHy-H pp</td></tr>
+<tr><td>617</td><td>PM Index</td><td>618</td><td>N2/O2 ratio</td></tr>
+<tr><td>619</td><td>N1/H2O ratio</td><td>620</td><td>O2/H2O ratio</td></tr>
+<tr><td>621</td><td>N2/Ar ratio</td><td>622</td><td>O2/Ar ratio</td></tr>
+<tr><td>623</td><td>H2O/Ar ratio</td><td>624</td><td>Ar pp</td></tr>
+<tr><td>625</td><td>CxHy-L/Ar ratio</td><td>626</td><td>CO2/Ar ratio</td></tr>
+<tr><td>627</td><td>O2 ppm</td><td>628</td><td>H2O ppm</td></tr>
+<tr><td>629</td><td>N2 ppm</td><td>630</td><td>Ar ppm</td></tr>
+<tr><td>631</td><td>CO2 ppm</td><td>632</td><td>IPA ppm</td></tr>
+<tr><td>633</td><td>Solvent ppm</td><td>634</td><td>Polymer ppm</td></tr>
+<tr><td>635</td><td>Fomblin ppm</td><td>636</td><td>MP Oil ppm</td></tr>
+<tr><td>637</td><td>DC704 ppm</td><td>638</td><td>CxHy-L ppm</td></tr>
+<tr><td>639</td><td>CxHy-H ppm</td><td>640</td><td>CxHy-S ppm</td></tr>
+<tr><td>641</td><td>Cl2 ppm</td><td>642</td><td>HCl ppm</td></tr>
+<tr><td>643</td><td>Cl ppm</td><td>644</td><td>Ar impurity ppm</td></tr>
+<tr><td>645</td><td>H2 ppm</td><td>646</td><td>CO ppm</td></tr>
+<tr><td>647</td><td>H2 pp</td><td>648</td><td>CO pp</td></tr>
+<tr><td>649</td><td>O2/N2 ratio</td><td>650</td><td>H2O/N2 ratio</td></tr>
+</tbody></table></div>
+<h4 id="or4000ss02">OR4000（<code>ss=02</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Channel #1 Temperature</td></tr>
+<tr><td>002</td><td>Channel #2 Temperature</td></tr>
+<tr><td>003</td><td>Channel #3 Temperature</td></tr>
+<tr><td>004</td><td>Channel #4 Temperature</td></tr>
+</tbody></table></div>
+<h4 id="ir300ss05">IR300（<code>ss=05</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Concentration</td><td>002</td><td>Pressure</td></tr>
+<tr><td>003</td><td>Temperature</td><td>004</td><td>Light</td></tr>
+</tbody></table></div>
+<h4 id="temperature-sensorss06">Temperature Sensor（<code>ss=06</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Temperature</td></tr>
+</tbody></table></div>
+<h4 id="o2-sensorss08">O2 sensor（<code>ss=08</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>O2 ppm</td><td>002</td><td>Health index</td></tr>
+<tr><td>003</td><td>O2 ppm – Base</td><td>004</td><td>Air leak index</td></tr>
+<tr><td>005</td><td>Reserved</td><td>006</td><td>ROR</td></tr>
+</tbody></table></div>
+<h4 id="h2-sensorss09">H2 sensor（<code>ss=09</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>H2 ppm</td></tr>
+</tbody></table></div>
+<h4 id="ir422css10">IR422C（<code>ss=10</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>SiF4 pp</td><td>002</td><td>CF4 pp</td></tr>
+<tr><td>003</td><td>Reserved</td><td>004</td><td>Pressure</td></tr>
+<tr><td>005</td><td>Light #1</td><td>006</td><td>Light #2</td></tr>
+<tr><td>007</td><td>Light #3</td><td>008</td><td>Light #4</td></tr>
+<tr><td>009</td><td>SiF4 Slope</td><td>010</td><td>CF4 Slope</td></tr>
+<tr><td>011</td><td>Reserved</td><td>012</td><td>SiF4 Max.</td></tr>
+<tr><td>013</td><td>CF4 Max.</td><td>014</td><td>Reserved</td></tr>
+<tr><td>015</td><td>SiF4 Flat</td><td>016</td><td>CF4 Flat</td></tr>
+</tbody></table></div>
+<h4 id="dc-arc-detectorss12">DC Arc Detector（<code>ss=12</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Arc count #1</td><td>002</td><td>Arc Time #1</td></tr>
+<tr><td>003</td><td>Arc count #2</td><td>004</td><td>Arc Time #2</td></tr>
+<tr><td>005</td><td>Arc count #3</td><td>006</td><td>Arc Time #3</td></tr>
+<tr><td>007</td><td>Arc count #4</td><td>008</td><td>Arc Time #4</td></tr>
+</tbody></table></div>
+<h4 id="rf-arc-sensorss13">RF Arc Sensor（<code>ss=13</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>RF Voltage</td><td>002</td><td>RF Current</td></tr>
+<tr><td>003</td><td>E_11</td><td>004</td><td>E_11 Sum</td></tr>
+<tr><td>005</td><td>E_12</td><td>006</td><td>E_12 Sum</td></tr>
+<tr><td>007</td><td>E_13</td><td>008</td><td>E_13 Sum</td></tr>
+<tr><td>009</td><td>E_21</td><td>010</td><td>E_21 Sum</td></tr>
+<tr><td>011</td><td>E_22</td><td>012</td><td>E_22 Sum</td></tr>
+<tr><td>013</td><td>E_23</td><td>014</td><td>E_23 Sum</td></tr>
+<tr><td>015</td><td>E_31</td><td>016</td><td>E_31 Sum</td></tr>
+<tr><td>017</td><td>E_32</td><td>018</td><td>E_32 Sum</td></tr>
+<tr><td>019</td><td>E_33</td><td>020</td><td>E_33 Sum</td></tr>
+<tr><td>021</td><td>E_All</td><td>022</td><td>E_All Sum</td></tr>
+</tbody></table></div>
+<h4 id="esc-monitorss14">ESC Monitor（<code>ss=14</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>E1 I_Avg</td><td>002</td><td>E1 I_Max</td></tr>
+<tr><td>003</td><td>E1 I_Min</td><td>004</td><td>E1 V_Avg</td></tr>
+<tr><td>005</td><td>E1 V_Max</td><td>006</td><td>E1 V_Min</td></tr>
+<tr><td>007</td><td>E2 I_Avg</td><td>008</td><td>E2 I_Max</td></tr>
+<tr><td>009</td><td>E2 I_Min</td><td>010</td><td>E2 V_Avg</td></tr>
+<tr><td>011</td><td>E2 V_Max</td><td>012</td><td>E2 V_Min</td></tr>
+<tr><td>013</td><td>Arc_Front</td><td>014</td><td>Arc_Back</td></tr>
+<tr><td>015</td><td>Aging Index</td><td></td><td></td></tr>
+</tbody></table></div>
+<h4 id="pulsed-rf-monitorss15">Pulsed RF Monitor（<code>ss=15</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>RF Voltage</td><td>002</td><td>RF Current</td></tr>
+<tr><td>003</td><td>E_11</td><td>004</td><td>E_11 Sum</td></tr>
+<tr><td>005</td><td>E_12</td><td>006</td><td>E_12 Sum</td></tr>
+<tr><td>007</td><td>E_13</td><td>008</td><td>E_13 Sum</td></tr>
+<tr><td>009</td><td>E_21</td><td>010</td><td>E_21 Sum</td></tr>
+<tr><td>011</td><td>E_22</td><td>012</td><td>E_22 Sum</td></tr>
+<tr><td>013</td><td>E_23</td><td>014</td><td>E_23 Sum</td></tr>
+<tr><td>015</td><td>E_31</td><td>016</td><td>E_31 Sum</td></tr>
+<tr><td>017</td><td>E_32</td><td>018</td><td>E_32 Sum</td></tr>
+<tr><td>019</td><td>E_33</td><td>020</td><td>E_33 Sum</td></tr>
+<tr><td>021</td><td>E_All</td><td>022</td><td>E_All Sum</td></tr>
+<tr><td>023</td><td>Pulse AbCount</td><td>024</td><td>AbCount Sum</td></tr>
+<tr><td>025</td><td>Pulse On time</td><td>026</td><td>Duty Cycle</td></tr>
+<tr><td>027</td><td>Frequency</td><td>028</td><td>Pulse Voltage</td></tr>
+<tr><td>029</td><td>Pulse Current</td><td></td><td></td></tr>
+</tbody></table></div>
+<h4 id="o2--h2o-sensorss16">O2 &amp; H2O Sensor（<code>ss=16</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>O2 ppm</td><td>002</td><td>Health index_O2</td></tr>
+<tr><td>003</td><td>O2 ppm – Base</td><td>004</td><td>H2O ppm</td></tr>
+<tr><td>005</td><td>H2O ppm – Base</td><td>006</td><td>Air leak index</td></tr>
+<tr><td>007</td><td>Reserved</td><td>008</td><td>ROR</td></tr>
+</tbody></table></div>
+<h4 id="it470ss17">IT470（<code>ss=17</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Temperature</td></tr>
+</tbody></table></div>
+<h4 id="ms100ss18">MS100（<code>ss=18</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>H2O ppm</td></tr>
+</tbody></table></div>
+<h4 id="aedc_sss19">AEDC_S（<code>ss=19</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>DC Power</td><td>002</td><td>DC Voltage</td></tr>
+<tr><td>003</td><td>DC Current</td><td>004</td><td>Micro Arc Count</td></tr>
+<tr><td>005</td><td>Hard Arc Count</td><td></td><td></td></tr>
+</tbody></table></div>
+<h4 id="aedc_ess20">AEDC_E（<code>ss=20</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>DC Power</td><td>002</td><td>DC Voltage</td></tr>
+<tr><td>003</td><td>DC Current</td><td>004</td><td>Micro Arc Count</td></tr>
+<tr><td>005</td><td>Hard Arc Count</td><td></td><td></td></tr>
+</tbody></table></div>
+<h4 id="mksdc_sss21">MKSDC_S（<code>ss=21</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>DC Power</td><td>002</td><td>DC Voltage</td></tr>
+<tr><td>003</td><td>DC Current</td><td>004</td><td>Arc Count</td></tr>
+</tbody></table></div>
+<h4 id="atm-tm-01ss22">ATM-T/M-01（<code>ss=22</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Temperature</td><td>002</td><td>RH %</td></tr>
+</tbody></table></div>
+<h4 id="marc1000pnss23">MArc1000PN（<code>ss=23</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>E_11</td><td>002</td><td>E_11 Sum</td></tr>
+<tr><td>003</td><td>E_12</td><td>004</td><td>E_12 Sum</td></tr>
+<tr><td>005</td><td>E_13</td><td>006</td><td>E_13 Sum</td></tr>
+<tr><td>007</td><td>E_21</td><td>008</td><td>E_21 Sum</td></tr>
+<tr><td>009</td><td>E_22</td><td>010</td><td>E_22 Sum</td></tr>
+<tr><td>011</td><td>E_23</td><td>012</td><td>E_23 Sum</td></tr>
+<tr><td>013</td><td>E_31</td><td>014</td><td>E_31 Sum</td></tr>
+<tr><td>015</td><td>E_32</td><td>016</td><td>E_32 Sum</td></tr>
+<tr><td>017</td><td>E_33</td><td>018</td><td>E_33 Sum</td></tr>
+<tr><td>019</td><td>E_All</td><td>020</td><td>E_All Sum</td></tr>
+<tr><td>021</td><td>Pulse AbCount</td><td>022</td><td>AbCount Sum</td></tr>
+<tr><td>023</td><td>Pulse On time</td><td>024</td><td>Duty Cycle</td></tr>
+<tr><td>025</td><td>Frequency</td><td></td><td></td></tr>
+</tbody></table></div>
+<h4 id="rfznss24">RFZN（<code>ss=24</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>RF Frequency</td><td>002</td><td>RF Power</td></tr>
+<tr><td>003</td><td>RF Voltage</td><td>004</td><td>RF Current</td></tr>
+<tr><td>005</td><td>RF Phase</td><td>006</td><td>H1 Voltage</td></tr>
+<tr><td>007</td><td>H1 Current</td><td>008</td><td>H2 Voltage</td></tr>
+<tr><td>009</td><td>H2 Current</td><td>010</td><td>H3 Voltage</td></tr>
+<tr><td>011</td><td>H3 Current</td><td>012</td><td>H4 Voltage</td></tr>
+<tr><td>013</td><td>H4 Current</td><td>014</td><td>H5 Voltage</td></tr>
+<tr><td>015</td><td>H5 Current</td><td></td><td></td></tr>
+</tbody></table></div>
+<h4 id="rps-monitorss25">RPS Monitor（<code>ss=25</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>RPS Aging</td></tr>
+</tbody></table></div>
+<h4 id="pumping-efficientss26">Pumping Efficient（<code>ss=26</code>）</h4>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>VID</th><th>項目</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Pressure</td><td>002</td><td>Pumping Speed</td></tr>
+</tbody></table></div>
+<h4 id="oes-leak-monitorss27">OES Leak Monitor（<code>ss=27</code>）</h4>
+<blockquote><p><strong>實作狀態（v2.1）：</strong> 本節的 <strong>VID 001 ~ 026 已由設備端實作</strong>並可經 S1F3 查詢； <strong>(b) 的比值槽位 VID 101 ~ 400 尚未實作</strong>。以下 SVID（以及 §5 的 ALID、§6 的 CEID） 依現行設備軟體的演算法與資料結構訂定；設備端的實作細節見該軟體的 <code>docs/secs-integration.md</code>。</p>
+<p>兩點與本文件措辭有出入，Host 端解讀時請注意：</p>
+<ul>
+<li><strong>VID 023（Frame dropout count）是「本次執行累計」</strong>，非「本次採集累計」——設備端的計數器 不隨採集起停歸零。請當單調遞增計數器、以差值判讀。
+</li>
+<li><strong>ALID 在 S5F1／S5F6 以 ASCII 送出</strong>（如 <code>&lt;A[8] "10227002"&gt;</code>），與 §4、§5.3 的範例一致。
+</li>
+</ul></blockquote>
+<p><strong>編碼慣例：</strong> OES 直接觀測腔體內的電漿發光，不透過 slit valve 調節訊號，故 <code>aa</code> 一律填 <code>00</code>，<code>cc</code> 填實際量測的腔體。</p>
+<blockquote><p><strong>範例解讀：</strong> <code>1022700001</code> = <code>1</code> + <code>cc=02</code>（Ch_2）+ <code>ss=27</code> + <code>aa=00</code> + <code>vvv=001</code> → Ch_2 的 OES 洩漏監測器，洩漏率 Q̂（mbar·L/s）。</p></blockquote>
+<p><strong>量測原理（供解讀數值用）：</strong> 以 actinometry 為基礎——把漏氣特徵譜線（N₂、NO 等）除以電漿參考譜線（Ar 等）得到「比值（ratio）」，與無漏氣狀態下擷取的基準（Golden Run）比較；再以已知漏率的標準漏孔校正，把比值的上升量換算成洩漏率 Q̂（mbar·L/s）。設備最多可同時監測 <strong>10 組比值</strong>，以下稱「槽位（slot）」。槽位號即設備端比值設定畫面的第 N 列；某一槽位實際監測哪一條譜線由設備端設定決定，Host 可由該槽位的「身分」類 VID（位移 16–24）讀出，不需要取得設備的設定檔。</p>
+<h5 id="a-全域量測項目vid-001099">(a) 全域量測項目（VID 001–099）</h5>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>項目</th><th>單位</th><th>型別</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Leak rate</td><td>mbar·L/s</td><td>F4</td><td>融合各比值後的洩漏率估計 Q̂；<code>004 = 0</code> 時本值無效</td></tr>
+<tr><td>002</td><td>Leak rate sigma</td><td>mbar·L/s</td><td>F4</td><td>Q̂ 的 1σ 不確定度</td></tr>
+<tr><td>003</td><td>Leak rate confidence</td><td>0–1</td><td>F4</td><td>各比值推得的洩漏率彼此一致的程度</td></tr>
+<tr><td>004</td><td>Leak rate valid</td><td>—</td><td>U4</td><td>1 = 本幀有有效的洩漏率估計</td></tr>
+<tr><td>005</td><td>Out of calibrated range</td><td>—</td><td>U4</td><td>1 = 超出校正涵蓋的漏率範圍（外插值，僅供參考）</td></tr>
+<tr><td>006</td><td>Calibration status</td><td>—</td><td>U4</td><td>0/1/2，見 (c)-2</td></tr>
+<tr><td>007</td><td>Composite leak level</td><td>—</td><td>U4</td><td>0/1/2/3，見 (c)-1</td></tr>
+<tr><td>008</td><td>Enabled ratio count</td><td>個</td><td>U4</td><td>目前啟用監測的槽位數</td></tr>
+<tr><td>009</td><td>Warning ratio count</td><td>個</td><td>U4</td><td>處於 Warning 的槽位數</td></tr>
+<tr><td>010</td><td>Alarm ratio count</td><td>個</td><td>U4</td><td>處於 Alarm（已鎖存）的槽位數</td></tr>
+<tr><td>011</td><td>Low-signal ratio count</td><td>個</td><td>U4</td><td>因訊噪比不足而停判的槽位數</td></tr>
+<tr><td>012</td><td>Baseline available</td><td>—</td><td>U4</td><td>1 = 已有可用的 Golden Run 基準</td></tr>
+<tr><td>013</td><td>Active Golden Run name</td><td>—</td><td>A[32]</td><td>現用基準名稱（通常對應製程配方）</td></tr>
+<tr><td>014</td><td>Active calibration name</td><td>—</td><td>A[32]</td><td>現用洩漏率校正名稱；未選為空字串</td></tr>
+<tr><td>015</td><td>Acquisition mismatch</td><td>—</td><td>U4</td><td>1 = 目前採集參數（積分時間／平均／校正開關／波長軸）與基準擷取時不同</td></tr>
+<tr><td>016</td><td>Test / replay mode</td><td>—</td><td>U4</td><td>1 = 資料來自測試或錄檔回放，非實機量測</td></tr>
+<tr><td>017</td><td>Golden Run capture active</td><td>—</td><td>U4</td><td>1 = 正在擷取基準</td></tr>
+<tr><td>018</td><td>Golden Run capture progress</td><td>%</td><td>F4</td><td>0–100</td></tr>
+<tr><td>019</td><td>Calibration capture active</td><td>—</td><td>U4</td><td>1 = 正在擷取校正點</td></tr>
+<tr><td>020</td><td>Calibration capture progress</td><td>%</td><td>F4</td><td>0–100</td></tr>
+<tr><td>021</td><td>Plasma present</td><td>—</td><td>U4</td><td>1 = 判定電漿開啟（亮度閘門開啟，本幀納入評估）</td></tr>
+<tr><td>022</td><td>Plasma gate available</td><td>—</td><td>U4</td><td>0 = 無法判定電漿有無；此時絕對強度類槽位不設閘門</td></tr>
+<tr><td>023</td><td>Frame dropout count</td><td>次</td><td>U4</td><td>本次採集累計的瞬時掉幀（單幀異常暗），供光譜儀健康度追蹤</td></tr>
+<tr><td>024</td><td>Integration time</td><td>ms</td><td>F4</td><td>現行積分時間</td></tr>
+<tr><td>025</td><td>Average count</td><td>次</td><td>U4</td><td>現行平均次數</td></tr>
+<tr><td>026</td><td>Frame rate</td><td>Hz</td><td>F4</td><td>實際取樣率</td></tr>
+<tr><td>027</td><td>Process class</td><td>—</td><td>A[16]</td><td>現行電漿步驟的製程類別名稱；未分類時為空字串，理由見 028</td></tr>
+<tr><td>028</td><td>Process class state</td><td>—</td><td>U4</td><td>0 = 未設定分類器、1 = 無電漿步驟、2 = 步驟進行中尚未判定、3 = 已分類（名稱在 027）、4 = 判定為無法分類</td></tr>
+<tr><td>029</td><td>Process step index</td><td>次</td><td>U4</td><td>本次採集累計的電漿步驟數；不論是否設定分類器都會計數</td></tr>
+<tr><td>030 ~ 099</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
+</tbody></table></div>
+<h5 id="b-比值槽位vid-101400">(b) 比值槽位（VID 101–400）</h5>
+<p>槽位 N（N = 1 ~ 10）的 VID 由下式決定：</p>
+<pre><code>VID = 100 + (N − 1) × 30 + 位移</code></pre>
+<div class="tablewrap"><table>
+<thead><tr><th>槽位</th><th>VID 區段</th><th>槽位</th><th>VID 區段</th></tr></thead>
+<tbody>
+<tr><td>Ratio 1</td><td>101 ~ 130</td><td>Ratio 2</td><td>131 ~ 160</td></tr>
+<tr><td>Ratio 3</td><td>161 ~ 190</td><td>Ratio 4</td><td>191 ~ 220</td></tr>
+<tr><td>Ratio 5</td><td>221 ~ 250</td><td>Ratio 6</td><td>251 ~ 280</td></tr>
+<tr><td>Ratio 7</td><td>281 ~ 310</td><td>Ratio 8</td><td>311 ~ 340</td></tr>
+<tr><td>Ratio 9</td><td>341 ~ 370</td><td>Ratio 10</td><td>371 ~ 400</td></tr>
+</tbody></table></div>
+<p>每個槽位的位移定義如下（前 15 項為每幀更新的即時量，16–24 為身分與門檻，僅在設定變更時改變）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>位移</th><th>項目</th><th>單位</th><th>型別</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>01</td><td>Monitored value</td><td>—</td><td>F4</td><td>本幀監測值。比值模式 = 訊號線／參考線的原始比值；絕對強度模式 = 訊號線強度本身</td></tr>
+<tr><td>02</td><td>Smoothed value</td><td>—</td><td>F4</td><td>監測值的指數平滑（EMA）結果，狀態機以此判定</td></tr>
+<tr><td>03</td><td>Percent of baseline / sigma score</td><td>% 或 σ</td><td>F4</td><td>位移 18 = 0 時為基準的百分比（100 = 基準）；= 1 時為 σ 分數（100 = 基準、120 = 高於基準一個警告 σ）。<strong>讀值前必須先讀位移 18</strong></td></tr>
+<tr><td>04</td><td>Slope</td><td>%/min 或 σ/min</td><td>F4</td><td>近兩分鐘的線性迴歸斜率，單位隨位移 18</td></tr>
+<tr><td>05</td><td>Ratio state</td><td>—</td><td>U4</td><td>0 ~ 6，見 (c)-3</td></tr>
+<tr><td>06</td><td>Signal SNR</td><td>—</td><td>F4</td><td>訊號譜線訊噪比</td></tr>
+<tr><td>07</td><td>Reference SNR</td><td>—</td><td>F4</td><td>參考譜線訊噪比；絕對強度模式不使用參考線，固定 0</td></tr>
+<tr><td>08</td><td>Signal intensity</td><td>counts 或 counts·nm</td><td>F4</td><td>訊號譜線強度，單位隨位移 19</td></tr>
+<tr><td>09</td><td>Reference intensity</td><td>counts 或 counts·nm</td><td>F4</td><td>參考譜線強度；絕對強度模式固定 0</td></tr>
+<tr><td>10</td><td>Baseline mean</td><td>—</td><td>F4</td><td>Golden Run 基準平均值</td></tr>
+<tr><td>11</td><td>Baseline sigma</td><td>—</td><td>F4</td><td>Golden Run 基準標準差</td></tr>
+<tr><td>12</td><td>Warn threshold</td><td>—</td><td>F4</td><td>現行警告門檻（已含依實測雜訊加寬的部分），與位移 02 同單位</td></tr>
+<tr><td>13</td><td>Alarm threshold</td><td>—</td><td>F4</td><td>現行警報門檻</td></tr>
+<tr><td>14</td><td>Ratio leak rate</td><td>mbar·L/s</td><td>F4</td><td>僅由本槽位推得的洩漏率 Qᵢ</td></tr>
+<tr><td>15</td><td>Used in fusion</td><td>—</td><td>U4</td><td>1 = 本幀有納入 VID 001 的融合估計</td></tr>
+<tr><td>16</td><td>Slot enabled</td><td>—</td><td>U4</td><td>1 = 本槽位啟用監測</td></tr>
+<tr><td>17</td><td>Monitor mode</td><td>—</td><td>U4</td><td>0 = 比值、1 = 絕對強度，見 (c)-4</td></tr>
+<tr><td>18</td><td>Value semantics</td><td>—</td><td>U4</td><td>0 = 位移 03／04 為基準百分比、1 = σ 分數。訊號線以原始平均擷取（位移 19 = 2）時為 1，<strong>不論位移 17 是比值或絕對強度</strong>，見 (d)</td></tr>
+<tr><td>19</td><td>Extraction mode</td><td>—</td><td>U4</td><td>0 = 峰高、1 = 積分、2 = 原始平均，見 (c)-5</td></tr>
+<tr><td>20</td><td>Signal wavelength</td><td>nm</td><td>F4</td><td>訊號譜線波長（含波長校正偏移後的實際取值）</td></tr>
+<tr><td>21</td><td>Reference wavelength</td><td>nm</td><td>F4</td><td>參考譜線波長；絕對強度模式固定 0</td></tr>
+<tr><td>22</td><td>Slot display name</td><td>—</td><td>A[32]</td><td>槽位名稱，例如 <code>R_N2Ar</code>。<strong>填 Key 或顯示名稱待決</strong>，見 (d)</td></tr>
+<tr><td>23</td><td>Signal species</td><td>—</td><td>A[16]</td><td>訊號譜線物種，例如 <code>N2</code>、<code>NO</code>（<code>u</code> 開頭表示現場自訂譜線）</td></tr>
+<tr><td>24</td><td>Reference species</td><td>—</td><td>A[16]</td><td>參考譜線物種，例如 <code>Ar</code>；絕對強度模式為空字串</td></tr>
+<tr><td>25 ~ 30</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
+</tbody></table></div>
+<blockquote><p><strong>槽位範例：</strong> Ch_2 的 Ratio 2「基準百分比」 = <code>100 + (2 − 1) × 30 + 03</code> = VID <code>133</code> → SVID <code>1022700133</code>。</p></blockquote>
+<h5 id="c-列舉對照表">(c) 列舉對照表</h5>
+<p><strong>(c)-1 Composite leak level（VID 007）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>Idle — 無法判定（電漿未開、尚無基準，或全部槽位停用）</td></tr>
+<tr><td>1</td><td>Normal — 各啟用槽位均在警告門檻以下</td></tr>
+<tr><td>2</td><td>Warning — 有槽位持續高於警告門檻</td></tr>
+<tr><td>3</td><td>Alarm — 已確認洩漏，鎖存至操作者確認（Acknowledge）為止</td></tr>
+</tbody></table></div>
+<p><strong>(c)-2 Calibration status（VID 006）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>未校正 — 未選用任何洩漏率校正，僅提供定性判斷</td></tr>
+<tr><td>1</td><td>有效 — 校正與現用基準相符，洩漏率估計進行中</td></tr>
+<tr><td>2</td><td>基準不符 — 校正是對另一組基準做的，估計暫停（需選回相符基準或重新校正）</td></tr>
+</tbody></table></div>
+<p><strong>(c)-3 Ratio state（位移 05）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th><th>值</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>Normal</td><td>1</td><td>Warning</td></tr>
+<tr><td>2</td><td>Alarm（鎖存）</td><td>3</td><td>NoPlasma（電漿未開／參考線過弱）</td></tr>
+<tr><td>4</td><td>LowSignal（訊噪比不足，停判）</td><td>5</td><td>NoBaseline（本槽位無可用基準）</td></tr>
+<tr><td>6</td><td>Disabled（操作者停用）</td><td>7</td><td>Observing（只記錄不判定：TrendOnly／Guard 角色）</td></tr>
+<tr><td>8</td><td>NotApplicable（目前的製程步驟不屬於本槽位的製程類別）</td><td></td><td></td></tr>
+</tbody></table></div>
+<blockquote><p>7、8 為 v2.2 增列，附加在尾端，0～6 的數值不變。兩者都表示「本幀沒有判定」，但原因不同： 7 是設定上就不判定（趨勢指標或對照用的 guard 量），沒有基準是預期狀態； 8 是設備的製程分類器判定目前步驟不屬於本槽位（見 VID 027／028），本槽位已鎖存的警報會保留。</p></blockquote>
+<p><strong>(c)-4 Monitor mode（位移 17）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>比值（Ratio）— 訊號線 ÷ 參考線，可抵銷電漿條件漂移</td></tr>
+<tr><td>1</td><td>絕對強度（Absolute intensity）— 只看訊號線本身，不使用參考線；適合接近雜訊的弱線，但對電漿條件變動較敏感</td></tr>
+</tbody></table></div>
+<p><strong>(c)-5 Extraction mode（位移 19）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>峰高（Peak height）— 扣除兩側連續光內插而得的背景，單位 counts</td></tr>
+<tr><td>1</td><td>積分（Integral）— 扣背景後的譜線面積，單位 counts·nm</td></tr>
+<tr><td>2</td><td>原始平均（Raw mean）— 不扣背景、不搜尋峰位，讀值含連續光基座</td></tr>
+</tbody></table></div>
+<h5 id="d-判讀注意事項">(d) 判讀注意事項</h5>
+<ul>
+<li><strong>位移 03 的單位不固定，必須先讀位移 18。</strong> 訊號線以原始平均擷取（位移 19 = 2）時，讀值含連續光基座，任何「值 ÷ 基準」都會被壓縮到不到 1 %，因此該槽位改以 σ 分數表示。<strong>比值模式也一樣</strong>：除以參考線只是把基座等比縮放，並不會把它消掉，所以判定條件只看位移 19，不看位移 17。兩者共用 100 / 120 / 150 的刻度（100 = 基準、120 = 警告、150 = 警報），可套用同一組參考線，但物理意義不同，不可混算。（v2.1 寫成「原始平均 + 絕對強度模式」才用 σ 分數，與設備端不符：照該寫法，出廠的 <code>R_N2Ar</code>（N₂ 337.1 原始平均 ÷ Ar 750.4）與 <code>R_NOAr</code> 會被標成百分比，實際送出的卻是 σ 分數。）
+</li>
+<li><strong>狀態 3（NoPlasma）、4（LowSignal）、5（NoBaseline）、6（Disabled）、7（Observing）、8（NotApplicable）的槽位都不納入複合警報。</strong> 訊號接近雜訊時比值沒有意義，設備選擇停判而非誤報；Host 不應把這些狀態視為「正常」。
+</li>
+<li><strong>位移 22 待決：填 Key 還是顯示名稱。</strong> 設備端每組比值有兩個名稱：Key 一經建立永不改變（基準與校正靠它對應，改名後才不會失效），出廠比值的 Key 為 <code>R_N2Ar</code> 這類可讀名稱，現場新增的比值則是隨機 GUID 片段；顯示名稱（如 <code>N₂ 337 / Ar 750</code>）可隨時修改。Host 若要以名稱做長期對應應取 Key，若要顯示給人看應取顯示名稱。實作槽位 VID 前須與 Host 端約定，必要時把另一個放進保留位移 25。
+</li>
+<li><strong>複合警報為鎖存式。</strong> 進入 Alarm 後需操作者在設備端確認（見 §6 CEID <code>502</code>）才會解除；本規格未提供由 Host 遠端解除的命令。
+</li>
+<li><strong>洩漏率僅在 VID 006 = 1 時有效。</strong> 換了基準而未換校正時會轉為 2，估計暫停（VID 004 = 0），此時 VID 001 應視為無效而非 0。
+</li>
+<li><strong>VID 015 = 1 時應視同警告。</strong> 採集參數改變會整體改變絕對強度的刻度，與舊基準已無可比性，建議重新擷取 Golden Run。
+</li>
+<li><strong>VID 016 = 1 表示資料來自測試或回放</strong>，不可用於製程判定。
+</li>
+</ul>
+<hr>
+<h2 id="2-secs-連線參數">2. SECS 連線參數</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>參數</th><th>值</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>Host IP</td><td>客戶提供</td><td>主機端 IP 位址</td></tr>
+<tr><td>Host Port</td><td>客戶提供</td><td>主機端連接埠</td></tr>
+<tr><td>Local IP</td><td>客戶提供</td><td>設備（Satellite）端 IP 位址</td></tr>
+<tr><td>Local Port</td><td>客戶提供（與 Host Port 相同）</td><td>設備端連接埠</td></tr>
+<tr><td>Time out <strong>T3</strong></td><td>45（可設定）</td><td>Reply Timeout，等待回覆訊息的逾時（秒）</td></tr>
+<tr><td>Time out <strong>T5</strong></td><td>10（可設定）</td><td>Connect Separation Timeout，重新連線的間隔（秒）</td></tr>
+<tr><td>Time out <strong>T6</strong></td><td>10（可設定）</td><td>Control Transaction Timeout（秒）</td></tr>
+<tr><td>Time out <strong>T7</strong></td><td>10（可設定）</td><td>Not Selected Timeout，連線後等待 Select 的逾時（秒）</td></tr>
+<tr><td>Time out <strong>T8</strong></td><td>10（可設定）</td><td>Network Intercharacter Timeout（秒）</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="3-支援的-secs-功能stream--function">3. 支援的 SECS 功能（Stream / Function）</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>SxFy</th><th>名稱</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>S1F1 / F2</td><td>Are You Online?</td><td>上線確認（Are you there / online data）</td></tr>
+<tr><td>S1F3 / F4</td><td>Equipment Status Request</td><td>設備狀態查詢</td></tr>
+<tr><td>S1F13 / F14</td><td>Establish Communication Request</td><td>建立通訊請求</td></tr>
+<tr><td>S2F17 / F18</td><td>Date and Time Request</td><td>日期時間查詢</td></tr>
+<tr><td>S2F23 / F24</td><td>Trace Initialize Send</td><td>追蹤資料初始化設定</td></tr>
+<tr><td>S2F31 / F32</td><td>Date and Time Set Request</td><td>日期時間設定</td></tr>
+<tr><td>S2F33 / F34</td><td>Define Report</td><td>定義報告（Report）</td></tr>
+<tr><td>S2F35 / F36</td><td>Link Event Report</td><td>連結事件與報告</td></tr>
+<tr><td>S2F37 / F38</td><td>Enable / Disable Event Report</td><td>啟用／停用事件報告</td></tr>
+<tr><td>S2F41 / F42</td><td>Host Command Send</td><td>主機命令下達</td></tr>
+<tr><td>S5F1 / F18</td><td>Alarm Report Send</td><td>警報回報</td></tr>
+<tr><td>S6F1 / F2</td><td>Trace Data Send</td><td>追蹤資料回傳</td></tr>
+<tr><td>S6F11 / F12</td><td>Event Report Send</td><td>事件報告回傳</td></tr>
+</tbody></table></div>
+<blockquote><p>命名慣例：奇數 Function（F1、F3…）多為主動（Primary）訊息；偶數 Function（F2、F4…）為對應回覆（Reply）。<code>W</code> 位元表示要求對方回覆。</p></blockquote>
+<hr>
+<h2 id="4-secs-訊息範例與解讀">4. SECS 訊息範例與解讀</h2>
+<p>以下為各 SxFy 的 SECS-II 資料結構範例。資料型別代碼： <code>L</code>=List、<code>A</code>=ASCII、<code>B</code>/<code>Boolean</code>=Binary/布林、<code>U4</code>=4-byte 無號整數、<code>F4</code>/<code>F8</code>=4/8-byte 浮點數；中括號內數字為元素個數。</p>
+<h3 id="s1f2--上線資料回覆-are-you-online">S1F2 — 上線資料（回覆 Are You Online）</h3>
+<pre><code>S1F2
+&lt;L[2]
+  &lt;A[14] "AQST_SATELLITE"&gt;   # 設備型號名稱
+  &lt;A[8]  "1.0.4.7i"&gt;         # 軟體版本
+&gt;</code></pre>
+<h3 id="s1f3--s1f4--設備狀態查詢回覆">S1F3 / S1F4 — 設備狀態查詢／回覆</h3>
+<pre><code>S1F3 W
+&lt;L[1]
+  &lt;U4[1] 1110806001&gt;         # 查詢的 SVID（Buffer1 / O2 sensor / Ch_A / O2 ppm）
+&gt;
+.
+S1F4
+&lt;L[1]
+  &lt;F8[1] 0.05064&gt;            # 對應 SVID 的量測值
+&gt;</code></pre>
+<h3 id="s1f13--s1f14--建立通訊">S1F13 / S1F14 — 建立通訊</h3>
+<pre><code>S1F13 W
+&lt;L[2]
+  &lt;A[9] "SATELLITE"&gt;         # 設備型號
+  &lt;A[6] "1.4.7L"&gt;            # 軟體版本
+&gt;
+.
+S1F14
+&lt;L[1]
+  &lt;Boolean[1] 0x00&gt;          # 0x00 = 接受建立通訊
+&gt;</code></pre>
+<h3 id="s2f18--日期時間回覆">S2F18 — 日期時間回覆</h3>
+<pre><code>S2F18
+&lt;L[1]
+  &lt;A[12] "230530104725"&gt;     # YYMMDDhhmmss = 2023/05/30 10:47:25
+&gt;</code></pre>
+<h3 id="s2f23--s2f24--追蹤初始化設定trace-initialize">S2F23 / S2F24 — 追蹤初始化設定（Trace Initialize）</h3>
+<pre><code>S2F23 W
+&lt;L[5]
+  &lt;U4[1] 12&gt;                 # TRID：Trace 請求 ID
+  &lt;A[6] "001000"&gt;            # DSPER：取樣週期，hhmmss = 00:10:00，每 10 分鐘
+  &lt;U4[1] 99&gt;                 # TOTSMP：總取樣次數
+  &lt;U4[1] 1&gt;                  # REPGSZ：每次回報的取樣數
+  &lt;L[4]                      # 要追蹤的 SVID 清單
+    &lt;U4[1] 1020102018&gt;
+    &lt;U4[1] 1020102028&gt;
+    &lt;U4[1] 1020102032&gt;
+    &lt;U4[1] 1020102040&gt;
+  &gt;
+&gt;
+.
+S2F24
+&lt;B[1] 0x00&gt;                  # 0x00 = 接受</code></pre>
+<h3 id="s2f31--s2f32--日期時間設定">S2F31 / S2F32 — 日期時間設定</h3>
+<pre><code>S2F31 W
+&lt;A[16] "2023092113521300"&gt;   # YYYYMMDDhhmmsscc = 2023/09/21 13:52:13.00
+.
+S2F32
+&lt;B[1] 0x00&gt;                  # 0x00 = 接受</code></pre>
+<h3 id="s2f33--s2f34--定義報告define-report">S2F33 / S2F34 — 定義報告（Define Report）</h3>
+<pre><code>S2F33 W
+&lt;L[2]
+  &lt;U4[1] 0&gt;                  # DATAID
+  &lt;L[2]                      # 報告定義清單
+    &lt;L[2]
+      &lt;U4[1] 1&gt;              # RPTID = 1
+      &lt;L[4]                  # 此報告包含的 SVID
+        &lt;U4[1] 1020102902&gt;
+        &lt;U4[1] 1020102905&gt;
+        &lt;U4[1] 1020102906&gt;
+        &lt;U4[1] 1020102018&gt;
+      &gt;
+    &gt;
+    &lt;L[2]
+      &lt;U4[1] 2&gt;              # RPTID = 2
+      &lt;L[4]
+        &lt;U4[1] 1020102902&gt;
+        &lt;U4[1] 1020102905&gt;
+        &lt;U4[1] 1020102906&gt;
+        &lt;U4[1] 1030103018&gt;
+      &gt;
+    &gt;
+  &gt;
+&gt;</code></pre>
+<blockquote><p>回覆 <code>S2F34 &lt;B[1] 0x00&gt;</code> 表示接受。</p></blockquote>
+<h3 id="s2f35--s2f36--連結事件與報告link-event-report">S2F35 / S2F36 — 連結事件與報告（Link Event Report）</h3>
+<pre><code>S2F35 W
+&lt;L[2]
+  &lt;U4[1] 0&gt;                  # DATAID
+  &lt;L[2]                      # CEID 與 RPTID 的連結清單
+    &lt;L[2]
+      &lt;U4[1] 202001&gt;         # CEID = 202001
+      &lt;L[1]
+        &lt;U4[1] 1&gt;            # 連結 RPTID = 1
+      &gt;
+    &gt;
+    &lt;L[2]
+      &lt;U4[1] 203001&gt;         # CEID = 203001
+      &lt;L[1]
+        &lt;U4[1] 2&gt;            # 連結 RPTID = 2
+      &gt;
+    &gt;
+  &gt;
+&gt;</code></pre>
+<blockquote><p>回覆 <code>S2F36 &lt;B[1] 0x00&gt;</code> 表示接受。</p></blockquote>
+<h3 id="s2f37--s2f38--啟用停用事件報告">S2F37 / S2F38 — 啟用／停用事件報告</h3>
+<pre><code>S2F37 W
+&lt;L[2]
+  &lt;Boolean[1] 0xFF&gt;          # 0xFF = 啟用（0x00 = 停用）
+  &lt;L[2]                      # 要啟用的 CEID 清單
+    &lt;U4[1] 202001&gt;
+    &lt;U4[1] 203001&gt;
+  &gt;
+&gt;
+.
+S2F38
+&lt;B[1] 0x00&gt;                  # 0x00 = 接受</code></pre>
+<h3 id="s2f41--s2f42--主機命令下達host-command-send">S2F41 / S2F42 — 主機命令下達（Host Command Send）</h3>
+<pre><code>S2F41 W
+&lt;L[2]
+  &lt;A[12] "ChamberStart"&gt;     # RCMD：遠端命令名稱
+  &lt;L[4]                      # 參數（CPNAME / CPVAL）清單
+    &lt;L[2] &lt;A[11] "ChamberName"&gt;  &lt;A[5]  "CELL1"&gt;          &gt;
+    &lt;L[2] &lt;A[12] "ProcessJobID"&gt; &lt;A[14] "xxx0nnnF-10-01"&gt; &gt;
+    &lt;L[2] &lt;A[8]  "RecipeID"&gt;     &lt;A[4]  "Test"&gt;           &gt;
+    &lt;L[2] &lt;A[6]  "SlotNo"&gt;       &lt;A[2]  "10"&gt;             &gt;
+  &gt;
+&gt;
+.
+S2F42
+&lt;L[2]
+  &lt;B[1] 0x00&gt;                # HCACK = 0x00：命令已接受
+  &lt;L[0] &gt;                    # 無錯誤參數
+&gt;</code></pre>
+<h3 id="s5f1--s5f2--警報回報alarm-report">S5F1 / S5F2 — 警報回報（Alarm Report）</h3>
+<pre><code>S5F1 W
+&lt;L[3]
+  &lt;B[1] 0x80&gt;                # ALCD：警報碼（bit7=1 表示警報發生/set）
+  &lt;A[16] "50201018 "&gt;        # ALID：警報 ID
+  &lt;A[480] "CHB2 M18 too high "&gt;  # ALTX：警報文字描述
+&gt;
+.
+S5F2
+&lt;L[1]
+  &lt;Boolean[1] 0x00&gt;          # 0x00 = 接受
+&gt;</code></pre>
+<h3 id="s6f1--s6f2--追蹤資料回傳trace-data-send">S6F1 / S6F2 — 追蹤資料回傳（Trace Data Send）</h3>
+<pre><code>S6F1 W
+&lt;L[4]
+  &lt;U4[1] 11&gt;                 # TRID：Trace ID
+  &lt;U4[1] 1&gt;                  # SMPLN：取樣序號
+  &lt;A[14] "20230811090732"&gt;   # STIME：時間戳 2023/08/11 09:07:32
+  &lt;L[6]                      # 各 SVID 的量測值
+    &lt;F4[1] 1.6e-009&gt;
+    &lt;F4[1] 1.37e-010&gt;
+    &lt;F4[1] 1.19e-010&gt;
+    &lt;F4[1] 1.6e-009&gt;
+    &lt;F4[1] 1.37e-010&gt;
+    &lt;F4[1] 1.19e-010&gt;
+  &gt;
+&gt;
+.
+S6F2
+&lt;L[1]
+  &lt;Boolean[1] 0x00&gt;          # 0x00 = 接受
+&gt;</code></pre>
+<h3 id="s6f11--s6f12--事件報告回傳event-report-send">S6F11 / S6F12 — 事件報告回傳（Event Report Send）</h3>
+<pre><code>S6F11 W
+&lt;L[3]
+  &lt;U4[1] 0&gt;                  # DATAID
+  &lt;U4[1] 202001&gt;             # CEID：觸發的事件 ID
+  &lt;L[1]                      # 報告清單
+    &lt;L[2]
+      &lt;U4[1] 1&gt;              # RPTID = 1
+      &lt;L[5]                  # 該報告內各項目的值
+        &lt;A[16] "2023092114024100"&gt;   # 時間戳
+        &lt;A[7]  "P1PL001"&gt;            # 例如：Recipe / Job 名稱
+        &lt;A[5]  "TEST1"&gt;
+        &lt;F4[1] 4.71e-012&gt;
+        &lt;F4[1] 4.7e-012&gt;
+      &gt;
+    &gt;
+  &gt;
+&gt;
+.
+S6F12
+&lt;B[1] 0x00&gt;                  # 0x00 = 接受</code></pre>
+<hr>
+<h2 id="5-oes-leak-monitor-警報定義alid">5. OES Leak Monitor 警報定義（ALID）</h2>
+<blockquote><p>本節與 §6 同為規格定義草案（見 §1.4 <code>ss=27</code> 開頭說明）。</p></blockquote>
+<p>編碼規則沿用 SVID 的前段：</p>
+<pre><code>ALID = 1 + cc + ss + nnn      （共 8 碼數字）</code></pre>
+<p><code>cc</code> 為腔體代號、<code>ss</code> 固定為 <code>27</code>、<code>nnn</code> 為警報序號。於 S5F1 的 ALID 欄位以 ASCII 字串填入（與 §4 現有範例的型別一致）。</p>
+<blockquote><p><strong>範例：</strong> <code>10227002</code> = <code>1</code> + <code>cc=02</code>（Ch_2）+ <code>ss=27</code> + <code>nnn=002</code> → Ch_2 的 OES 洩漏警報。</p></blockquote>
+<h3 id="51-全域警報nnn--001--099">5.1 全域警報（<code>nnn</code> = 001 ~ 099）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>nnn</th><th>警報名稱</th><th>觸發條件</th><th>解除條件</th></tr></thead>
+<tbody>
+<tr><td>001</td><td>Leak warning</td><td>複合狀態（VID 007）升至 2</td><td>降回 1</td></tr>
+<tr><td>002</td><td>Leak alarm</td><td>複合狀態升至 3（已鎖存）</td><td>操作者確認後降回</td></tr>
+<tr><td>003</td><td>Low signal</td><td>任一啟用槽位進入 LowSignal（狀態 4）</td><td>訊噪比回升</td></tr>
+<tr><td>004</td><td>No baseline</td><td>無可用 Golden Run 基準（VID 012 = 0）</td><td>擷取到可用基準</td></tr>
+<tr><td>005</td><td>Calibration baseline mismatch</td><td>VID 006 = 2，洩漏率估計暫停</td><td>選回相符基準或重新校正</td></tr>
+<tr><td>006</td><td>Not calibrated</td><td>VID 006 = 0，僅有定性判斷</td><td>建立／選定校正</td></tr>
+<tr><td>007</td><td>Acquisition parameter mismatch</td><td>VID 015 = 1</td><td>參數改回或重新擷取基準</td></tr>
+<tr><td>008</td><td>Plasma gate unavailable</td><td>VID 022 = 0，無法判定電漿有無</td><td>觸發訊號恢復可量測</td></tr>
+<tr><td>009</td><td>Frame dropout high</td><td>掉幀率超過設備端門檻</td><td>恢復正常</td></tr>
+<tr><td>010</td><td>Golden Run capture rejected</td><td>擷取視窗未取得任何可用基準（原基準維持不變）</td><td>下一次擷取成功</td></tr>
+<tr><td>011</td><td>Recording disarmed</td><td>記錄器未啟用，或與存檔設定不一致（資料未落檔）</td><td>啟用記錄</td></tr>
+<tr><td>012</td><td>OES connection lost</td><td>光譜儀連線在曾經連上之後中斷</td><td>重新連上</td></tr>
+<tr><td>013</td><td>Acquisition error</td><td>設備回報擷取錯誤</td><td>離開錯誤狀態</td></tr>
+<tr><td>014</td><td>Data write failure</td><td>資料檔寫入失敗</td><td>下一次成功開檔</td></tr>
+<tr><td>015 ~ 099</td><td>Reserved</td><td></td><td></td></tr>
+</tbody></table></div>
+<blockquote><p>012 ~ 014 是設備本身的故障，與量測數據無關，因此<strong>不受「測試／回放模式不上報」的抑制</strong>： 光譜儀掉線或 CSV 寫不進去，是關於這台機器的事實。 012 是<strong>轉態</strong>而非狀態——設備啟動時本來就未連線，那不是故障。</p></blockquote>
+<h3 id="52-槽位警報nnn--101--130">5.2 槽位警報（<code>nnn</code> = 101 ~ 130）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>nnn</th><th>警報名稱</th><th>對應槽位</th></tr></thead>
+<tbody>
+<tr><td>101 ~ 110</td><td>Ratio N warning</td><td>N = nnn − 100</td></tr>
+<tr><td>111 ~ 120</td><td>Ratio N alarm</td><td>N = nnn − 110</td></tr>
+<tr><td>121 ~ 130</td><td>Ratio N low signal</td><td>N = nnn − 120</td></tr>
+</tbody></table></div>
+<h3 id="53-alcd-與-altx-慣例">5.3 ALCD 與 ALTX 慣例</h3>
+<ul>
+<li>ALCD 的 bit7 = 1 表示警報發生（set）、= 0 表示解除（clear），與 §4 的範例一致。
+</li>
+<li>ALTX 建議帶入腔體、槽位、譜線與當下數值，讓 Host 端的警報紀錄本身即可讀：
+<ul>
+<li><code>CH2 OES Ratio2 (NO 237.0 / Ar 750.4) ALARM sigma score 158</code>（原始平均擷取的槽位帶 σ 分數，其餘帶 <code>158% of baseline</code>，與位移 18 一致）</li>
+<li><code>CH2 OES leak rate 1.8e-004 mbar-L/s +/-3.0e-005 (conf 0.72)</code></li>
+<li><code>CH2 OES Ratio4 LOW SIGNAL snr 3.1 &lt; 5.0</code></li>
+</ul>
+</li>
+</ul>
+<p><strong>範例（Ch_2，Ratio 2 進入警報）</strong></p>
+<pre><code>S5F1 W
+&lt;L[3]
+  &lt;B[1] 0x80&gt;                # ALCD：bit7=1，警報發生
+  &lt;A[16] "10227112 "&gt;        # ALID：Ch_2 / ss=27 / nnn=112 → Ratio 2 alarm
+  &lt;A[480] "CH2 OES Ratio2 (NO 237.0 / Ar 750.4) ALARM sigma score 158 "&gt;
+&gt;
+.
+S5F2
+&lt;L[1]
+  &lt;Boolean[1] 0x00&gt;          # 0x00 = 接受
+&gt;</code></pre>
+<hr>
+<h2 id="6-oes-leak-monitor-事件與報告定義ceid--rptid">6. OES Leak Monitor 事件與報告定義（CEID / RPTID）</h2>
+<p>編碼形式與 ALID 相同，<code>nnn</code> 自 <strong>501</strong> 起編，使兩者在人眼上一望即知：</p>
+<pre><code>CEID = 1 + cc + ss + nnn      （nnn 自 501 起）</code></pre>
+<blockquote><p><strong>範例：</strong> <code>10227501</code> = Ch_2 的 OES Leak Monitor「洩漏狀態改變」事件。</p></blockquote>
+<h3 id="61-事件清單">6.1 事件清單</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>nnn</th><th>事件</th><th>觸發時機</th></tr></thead>
+<tbody>
+<tr><td>501</td><td>Leak state changed</td><td>複合警報等級（VID 007）改變，含進出 Idle</td></tr>
+<tr><td>502</td><td>Alarm acknowledged</td><td>操作者確認並解除鎖存（報告帶出操作者帳號）</td></tr>
+<tr><td>503</td><td>Golden Run capture started</td><td>開始擷取基準</td></tr>
+<tr><td>504</td><td>Golden Run capture finished</td><td>擷取結束，帶出是否採用、以及未取得基準的槽位數</td></tr>
+<tr><td>505</td><td>Active Golden Run changed</td><td>切換現用基準（配對的校正隨之改變）</td></tr>
+<tr><td>506</td><td>Calibration status changed</td><td>校正啟用／暫停／清除（VID 006 改變）</td></tr>
+<tr><td>507</td><td>Ratio configuration reloaded</td><td>比值設定重新載入 — <strong>槽位對應可能已改變，Host 應重讀身分類 VID（位移 16 ~ 24）</strong></td></tr>
+<tr><td>508</td><td>Acquisition started</td><td>開始採集光譜</td></tr>
+<tr><td>509</td><td>Acquisition stopped</td><td>停止採集</td></tr>
+<tr><td>510</td><td>Recording session changed</td><td>CSV 記錄開啟／關閉</td></tr>
+<tr><td>511 ~ 599</td><td>Reserved</td><td></td></tr>
+</tbody></table></div>
+<h3 id="62-建議報告rptid">6.2 建議報告（RPTID）</h3>
+<p>以下 RPTID 僅為建議編號，實際由 Host 於 S2F33 定義；VID 欄位以 Ch_2（<code>cc=02</code>）為例。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>RPTID</th><th>內容</th><th>包含的 VID</th></tr></thead>
+<tbody>
+<tr><td>27001</td><td>洩漏率摘要</td><td>001, 002, 003, 004, 005, 006</td></tr>
+<tr><td>27002</td><td>複合狀態</td><td>007, 008, 009, 010, 011, 012, 015, 016, 021, 022</td></tr>
+<tr><td>27011 ~ 27020</td><td>槽位 N 即時量（N = RPTID − 27010）</td><td>位移 01, 03, 04, 05, 06, 14, 15</td></tr>
+<tr><td>27021 ~ 27030</td><td>槽位 N 身分與門檻（N = RPTID − 27020）</td><td>位移 16, 17, 18, 19, 20, 21, 22, 23, 24, 10, 11, 12, 13</td></tr>
+</tbody></table></div>
+<blockquote><p>建議把 27001 / 27002 連到 <code>501</code>（狀態改變）與 <code>506</code>；把 27021 ~ 27030 連到 <code>507</code>（設定重載）與 <code>505</code>，其餘時間不需重讀。持續趨勢請走 S2F23 / S6F1 的 Trace，不要用事件報告逐幀推送。</p></blockquote>
+<h3 id="63-訊息範例以-ch_2cc02-為例">6.3 訊息範例（以 Ch_2、<code>cc=02</code> 為例）</h3>
+<p><strong>定義報告（S2F33）</strong></p>
+<pre><code>S2F33 W
+&lt;L[2]
+  &lt;U4[1] 0&gt;                  # DATAID
+  &lt;L[2]
+    &lt;L[2]
+      &lt;U4[1] 27001&gt;          # RPTID = 27001：洩漏率摘要
+      &lt;L[6]
+        &lt;U4[1] 1022700001&gt;   # Leak rate
+        &lt;U4[1] 1022700002&gt;   # Leak rate sigma
+        &lt;U4[1] 1022700003&gt;   # Leak rate confidence
+        &lt;U4[1] 1022700004&gt;   # Leak rate valid
+        &lt;U4[1] 1022700005&gt;   # Out of calibrated range
+        &lt;U4[1] 1022700006&gt;   # Calibration status
+      &gt;
+    &gt;
+    &lt;L[2]
+      &lt;U4[1] 27011&gt;          # RPTID = 27011：槽位 1 即時量
+      &lt;L[7]
+        &lt;U4[1] 1022700101&gt;   # Ratio1 monitored value      （位移 01）
+        &lt;U4[1] 1022700103&gt;   # Ratio1 percent of baseline   （位移 03）
+        &lt;U4[1] 1022700104&gt;   # Ratio1 slope                 （位移 04）
+        &lt;U4[1] 1022700105&gt;   # Ratio1 state                 （位移 05）
+        &lt;U4[1] 1022700106&gt;   # Ratio1 signal SNR            （位移 06）
+        &lt;U4[1] 1022700114&gt;   # Ratio1 leak rate             （位移 14）
+        &lt;U4[1] 1022700115&gt;   # Ratio1 used in fusion        （位移 15）
+      &gt;
+    &gt;
+  &gt;
+&gt;
+.
+S2F34
+&lt;B[1] 0x00&gt;                  # 0x00 = 接受</code></pre>
+<p><strong>連結事件與報告（S2F35）</strong></p>
+<pre><code>S2F35 W
+&lt;L[2]
+  &lt;U4[1] 0&gt;                  # DATAID
+  &lt;L[1]
+    &lt;L[2]
+      &lt;U4[1] 10227501&gt;       # CEID：Ch_2 OES 洩漏狀態改變
+      &lt;L[2]
+        &lt;U4[1] 27001&gt;
+        &lt;U4[1] 27002&gt;
+      &gt;
+    &gt;
+  &gt;
+&gt;
+.
+S2F36
+&lt;B[1] 0x00&gt;</code></pre>
+<p><strong>啟用事件報告（S2F37）</strong></p>
+<pre><code>S2F37 W
+&lt;L[2]
+  &lt;Boolean[1] 0xFF&gt;          # 0xFF = 啟用
+  &lt;L[3]
+    &lt;U4[1] 10227501&gt;         # 洩漏狀態改變
+    &lt;U4[1] 10227502&gt;         # 操作者確認
+    &lt;U4[1] 10227507&gt;         # 比值設定重載
+  &gt;
+&gt;
+.
+S2F38
+&lt;B[1] 0x00&gt;</code></pre>
+<p><strong>事件報告回傳（S6F11，複合狀態由 Warning 升為 Alarm）</strong></p>
+<pre><code>S6F11 W
+&lt;L[3]
+  &lt;U4[1] 0&gt;                  # DATAID
+  &lt;U4[1] 10227501&gt;           # CEID：Ch_2 OES 洩漏狀態改變
+  &lt;L[1]
+    &lt;L[2]
+      &lt;U4[1] 27001&gt;          # RPTID = 27001
+      &lt;L[6]
+        &lt;F4[1] 1.8e-004&gt;     # Leak rate Q̂（mbar·L/s）
+        &lt;F4[1] 3.0e-005&gt;     # Leak rate sigma
+        &lt;F4[1] 0.72&gt;         # Confidence
+        &lt;U4[1] 1&gt;            # Leak rate valid
+        &lt;U4[1] 0&gt;            # Out of calibrated range
+        &lt;U4[1] 1&gt;            # Calibration status = 有效
+      &gt;
+    &gt;
+  &gt;
+&gt;
+.
+S6F12
+&lt;B[1] 0x00&gt;                  # 0x00 = 接受</code></pre>
+<p><strong>追蹤設定（S2F23，每 10 秒取樣一次洩漏率與槽位 1 的基準百分比）</strong></p>
+<pre><code>S2F23 W
+&lt;L[5]
+  &lt;U4[1] 27&gt;                 # TRID
+  &lt;A[6] "000010"&gt;            # DSPER：取樣週期，hhmmss = 00:00:10，每 10 秒
+  &lt;U4[1] 0&gt;                  # TOTSMP：0 = 持續
+  &lt;U4[1] 1&gt;                  # REPGSZ
+  &lt;L[4]
+    &lt;U4[1] 1022700001&gt;       # Leak rate
+    &lt;U4[1] 1022700007&gt;       # Composite leak level
+    &lt;U4[1] 1022700103&gt;       # Ratio1 percent of baseline
+    &lt;U4[1] 1022700133&gt;       # Ratio2 percent of baseline
+  &gt;
+&gt;
+.
+S2F24
+&lt;B[1] 0x00&gt;</code></pre>
+<hr>
+<h2 id="附註">附註</h2>
+<ul>
+<li>訊息範例中每則以 <code>.</code> 作為結束符號。
+</li>
+<li><code>W</code> 位元（Wait bit）出現時，表示送出方要求對方回覆對應的偶數 Function。
+</li>
+<li>時間戳格式：<code>YYMMDDhhmmss</code>（12 碼）、<code>YYYYMMDDhhmmss</code>（14 碼）、<code>YYYYMMDDhhmmsscc</code>（16 碼，末兩碼為百分之一秒）。
+</li>
+<li>DSPER（S2F23 取樣週期）是<strong>時間長度</strong>，格式為 <code>hhmmss</code>（6 碼）或 <code>hhmmsscc</code>（8 碼，末兩碼為百分之一秒）：<code>"000010"</code> = 10 秒、<code>"001000"</code> = 10 分鐘、<code>"00000050"</code> = 0.5 秒。
+</li>
+<li>部分欄位解讀（如 S6F11 報告內各項目意義）依 S2F33 的報告定義而定，實際欄位順序以 Define Report 設定為準。
+</li>
+<li>ALID 與 CEID 雖同為 <code>1ccss</code> + 3 碼的形式，但屬不同命名空間；OES Leak Monitor 的 ALID 使用 001 ~ 130、CEID 自 501 起，兩者不會在人眼上混淆。
+</li>
+<li>§1.4 的 <code>ss=27</code> 全域量（VID 001 ~ 026）、§5.1 的 ALID 001／002／012 ~ 014、§6.1 的 CEID 502／508／509 已由設備端實作；比值槽位 VID 101 ~ 400、其餘 ALID／CEID 與遠端命令 S2F41 仍為規格定義草案。
+</li>
+</ul>
+<p>*本文件由原始 Word 規格書「Satellite SECS Specification」整理轉換而成；v2 增補 OES Leak Monitor（<code>ss=27</code>）章節，v2.1 標註其實作狀態並增訂 ALID 012 ~ 014；v2.2 依設備端程式修訂比值槽位的位移 18 判定、Ratio state 7／8，並將位移 22 列為待決，更正 §6.3 追蹤範例的 DSPER。*</p>
+</main>
+</div>
+</body>
+</html>

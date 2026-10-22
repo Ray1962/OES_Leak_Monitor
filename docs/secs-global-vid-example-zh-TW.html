@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor 全域 VID 001～009 範例說明</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#1-九個-vid-一覽">1. 九個 VID 一覽</a>
+<a class="l2" href="#2-profile-設定例">2. Profile 設定例</a>
+<a class="l3" href="#21-檔案位置">2.1 檔案位置</a>
+<a class="l3" href="#22-站點-profilecc--00未蓋章">2.2 站點 profile（cc = 00，未蓋章）</a>
+<a class="l3" href="#23-生效-profilesecs-分頁腔體號設為-02-之後">2.3 生效 profile（SECS 分頁腔體號設為 02 之後）</a>
+<a class="l3" href="#24-站點可以改什麼不能改什麼">2.4 站點可以改什麼、不能改什麼</a>
+<a class="l2" href="#3-各-vid-的來源與讀法">3. 各 VID 的來源與讀法</a>
+<a class="l2" href="#4-情境範例六種機台狀態下的讀值">4. 情境範例：六種機台狀態下的讀值</a>
+<a class="l2" href="#5-s1f3-查詢範例">5. S1F3 查詢範例</a>
+<a class="l2" href="#6-s2f23-追蹤範例">6. S2F23 追蹤範例</a>
+<a class="l2" href="#7-判讀注意事項">7. 判讀注意事項</a>
+<a class="l2" href="#附錄列舉值對照">附錄：列舉值對照</a>
+</nav>
+<main>
+<h1 id="全域量測項目-vid-001009-設定與判讀範例">全域量測項目 VID 001～009 設定與判讀範例</h1>
+<blockquote><p>本文以 Ch_2 一台裝了出廠比值組的 OES Leak Monitor 為例，說明全域 VID 001～009 怎麼設定（profile）、各項的值從哪裡來，以及在不同機台情境下 Host 會讀到什麼、該怎麼解讀。 依據：<code>docs/Satellite_SECS_Specification_v2.md</code> §1.4(a)、(c)、(d)；設備端實作見 <code>docs/secs-integration.md</code> §4、§5 與 <code>SecsBridge.BuildBindings</code>。</p></blockquote>
+<blockquote><p>✅ <strong>實作狀態：</strong> VID 001～029 <strong>已實作</strong>，可用 S1F3 查詢、S2F23 追蹤。（比值槽位 VID 101～400 尚未實作，見 <code>secs-ratio-svid-example-zh-TW.md</code>。） 本文情境中的數值是示意，用來說明怎麼解讀，不是實測數據。</p></blockquote>
+<h2 id="目錄">目錄</h2>
+<ul>
+<li><a href="#1-九個-vid-一覽">1. 九個 VID 一覽</a>
+</li>
+<li><a href="#2-profile-設定例">2. Profile 設定例</a>
+</li>
+<li><a href="#3-各-vid-的來源與讀法">3. 各 VID 的來源與讀法</a>
+</li>
+<li><a href="#4-情境範例六種機台狀態下的讀值">4. 情境範例：六種機台狀態下的讀值</a>
+</li>
+<li><a href="#5-s1f3-查詢範例">5. S1F3 查詢範例</a>
+</li>
+<li><a href="#6-s2f23-追蹤範例">6. S2F23 追蹤範例</a>
+</li>
+<li><a href="#7-判讀注意事項">7. 判讀注意事項</a>
+</li>
+<li><a href="#附錄列舉值對照">附錄：列舉值對照</a>
+</li>
+</ul>
+<h2 id="1-九個-vid-一覽">1. 九個 VID 一覽</h2>
+<p>SVID = <code>1</code> + <code>cc</code> + <code>27</code> + <code>00</code> + <code>vvv</code>。Ch_2（<code>cc = 02</code>）的 VID 001～009 如下：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>SVID（Ch_2）</th><th>項目</th><th>單位</th><th>型別</th><th>一句話</th></tr></thead>
+<tbody>
+<tr><td>001</td><td><code>1022700001</code></td><td>Leak rate</td><td>mbar·L/s</td><td>F4</td><td>融合各比值後的洩漏率估計 Q̂</td></tr>
+<tr><td>002</td><td><code>1022700002</code></td><td>Leak rate sigma</td><td>mbar·L/s</td><td>F4</td><td>Q̂ 的 1σ 不確定度</td></tr>
+<tr><td>003</td><td><code>1022700003</code></td><td>Leak rate confidence</td><td>0～1</td><td>F4</td><td>各比值推得的洩漏率彼此一致的程度</td></tr>
+<tr><td>004</td><td><code>1022700004</code></td><td>Leak rate valid</td><td>—</td><td>U4</td><td>1 = 本幀有有效的洩漏率估計</td></tr>
+<tr><td>005</td><td><code>1022700005</code></td><td>Out of calibrated range</td><td>—</td><td>U4</td><td>1 = 超出校正涵蓋範圍（外插值）</td></tr>
+<tr><td>006</td><td><code>1022700006</code></td><td>Calibration status</td><td>—</td><td>U4</td><td>0 未校正／1 有效／2 基準不符</td></tr>
+<tr><td>007</td><td><code>1022700007</code></td><td>Composite leak level</td><td>—</td><td>U4</td><td>0 Idle／1 Normal／2 Warning／3 Alarm</td></tr>
+<tr><td>008</td><td><code>1022700008</code></td><td>Enabled ratio count</td><td>個</td><td>U4</td><td>未被停用的比值數</td></tr>
+<tr><td>009</td><td><code>1022700009</code></td><td>Warning ratio count</td><td>個</td><td>U4</td><td>處於 Warning 的比值數</td></tr>
+</tbody></table></div>
+<p>可以分成三組來看：</p>
+<ul>
+<li><strong>001～005：洩漏率（定量）</strong>——「漏了多少」。只有做過洩漏率校正才有意義。
+</li>
+<li><strong>006～007：兩個 Host 要據以動作的狀態</strong>——校正能不能用、整台判定為何。
+</li>
+<li><strong>008～009：複合判定是怎麼得出來的</strong>——只讀 007 的 Host 分不出「健康的 Normal」和「四個比值有三個因訊號不足停判的 Normal」。
+</li>
+</ul>
+<h2 id="2-profile-設定例">2. Profile 設定例</h2>
+<h3 id="21-檔案位置">2.1 檔案位置</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>檔案</th><th>位置</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>站點 profile</td><td><code>{ConfigDirectory}\profiles\*.json</code></td><td>第一次啟用 SECS 時由內建範本寫出，<strong><code>cc</code> 一律寫成 <code>00</code></strong>。站點可改編號或顯示名稱，<strong>程式之後不會覆寫它</strong></td></tr>
+<tr><td>生效 profile</td><td><code>{ConfigDirectory}\profiles\.effective\*.json</code></td><td>每次啟動時把 SECS 分頁設定的腔體號蓋進每個 <code>svid</code>，寫到這裡並由此載入</td></tr>
+</tbody></table></div>
+<p>兩個路徑都會印在 SECS 分頁的 traffic log 開頭。</p>
+<h3 id="22-站點-profilecc--00未蓋章">2.2 站點 profile（<code>cc = 00</code>，未蓋章）</h3>
+<pre class="lang-jsonc"><code>"statusVariables": [
+  { "svid": 1002700001, "name": "Leak rate",               "units": "mbar-L/s", "format": "F4", "bind": "oes.leakRate" },
+  { "svid": 1002700002, "name": "Leak rate sigma",         "units": "mbar-L/s", "format": "F4", "bind": "oes.leakRateSigma" },
+  { "svid": 1002700003, "name": "Leak rate confidence",    "units": "",         "format": "F4", "bind": "oes.leakRateConfidence" },
+  { "svid": 1002700004, "name": "Leak rate valid",         "units": "",         "format": "U4", "bind": "oes.leakRateValid" },
+  { "svid": 1002700005, "name": "Out of calibrated range", "units": "",         "format": "U4", "bind": "oes.outOfCalibratedRange" },
+  { "svid": 1002700006, "name": "Calibration status",      "units": "",         "format": "U4", "bind": "oes.calibrationStatus" },
+  { "svid": 1002700007, "name": "Composite leak level",    "units": "",         "format": "U4", "bind": "oes.compositeLevel" },
+  { "svid": 1002700008, "name": "Enabled ratio count",     "units": "",         "format": "U4", "bind": "oes.enabledRatios" },
+  { "svid": 1002700009, "name": "Warning ratio count",     "units": "",         "format": "U4", "bind": "oes.warningRatios" },
+  ...
+]</code></pre>
+<h3 id="23-生效-profilesecs-分頁腔體號設為-02-之後">2.3 生效 profile（SECS 分頁腔體號設為 <code>02</code> 之後）</h3>
+<pre class="lang-jsonc"><code>"statusVariables": [
+  { "svid": 1022700001, "name": "Leak rate",               ..., "bind": "oes.leakRate" },
+  { "svid": 1022700002, "name": "Leak rate sigma",         ..., "bind": "oes.leakRateSigma" },
+  ...
+  { "svid": 1022700009, "name": "Warning ratio count",     ..., "bind": "oes.warningRatios" },
+]</code></pre>
+<h3 id="24-站點可以改什麼不能改什麼">2.4 站點可以改什麼、不能改什麼</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>欄位</th><th>可改</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><code>name</code>、<code>units</code></td><td>✔</td><td>S1F11／S1F12 回給 Host 的名稱與單位，可改成站點慣用語</td></tr>
+<tr><td><code>svid</code> 的 <code>vvv</code>（後三碼）</td><td>✔</td><td>Host 若已有自己的編號可改，但要和 Host 的設定一致</td></tr>
+<tr><td><code>svid</code> 的 <code>cc</code></td><td>✘</td><td>一律寫 <code>00</code>，由 SECS 分頁的腔體號蓋章；寫死別的值會被覆蓋</td></tr>
+<tr><td><code>svid</code> 的 <code>ss</code>／<code>aa</code></td><td>✘</td><td>蓋章時會驗證 <code>ss = 27</code>、<code>aa = 00</code>，不符則<strong>拒絕啟動</strong> SECS，不會送出屬於別種感測器的編號</td></tr>
+<tr><td><code>bind</code></td><td>✘</td><td>程式內的資料來源名稱。寫錯或寫了不存在的名稱，啟動時會以名稱報錯</td></tr>
+<tr><td>刪掉一列</td><td>✔</td><td>該 VID 就不再提供；啟動時記一筆 <code>SecsProfileMissingBinds</code>（Information），不視為錯誤</td></tr>
+</tbody></table></div>
+<blockquote><p><strong>升級注意：</strong> 因為程式不覆寫既有 profile，新版程式增加的 VID 不會自動出現在已經啟用過 SECS 的機台上。traffic log 與系統記錄的 <code>SecsProfileMissingBinds</code> 會列出缺了哪些 bind；把缺的列貼進 profile，或刪掉 profile 讓程式重寫一份（站點的修改會一併失去）。</p></blockquote>
+<h2 id="3-各-vid-的來源與讀法">3. 各 VID 的來源與讀法</h2>
+<p>設備端不為 SECS 另外計算：每一幀 Leak Monitor 引擎產生一份快照（<code>LeakMonitorSnapshot</code>），Host 查詢時只讀這份快照的欄位、轉成規定型別。所以 SECS 讀到的值和設備畫面上 Leak Monitor 分頁顯示的是同一份數字。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>VID</th><th>bind</th><th>設備端來源</th><th>讀法</th></tr></thead>
+<tbody>
+<tr><td>001</td><td><code>oes.leakRate</code></td><td><code>Snapshot.LeakRate.LeakRate</code>；沒有估計時送 0</td><td><strong>先看 004。</strong> 004 = 0 時 001 的 0 代表「沒有估計」，不是「沒有漏氣」。估計值下限截在 0，不會是負數</td></tr>
+<tr><td>002</td><td><code>oes.leakRateSigma</code></td><td><code>LeakRateEstimate.Sigma</code> = 1/√(Σwᵢ)，各比值依反變異數加權</td><td>Q̂ ± σ 是 1σ 區間。σ 和 Q̂ 同量級時，「有漏」的結論還不穩</td></tr>
+<tr><td>003</td><td><code>oes.leakRateConfidence</code></td><td><code>LeakRateEstimate.Confidence</code>，由各比值推得的 Qᵢ 彼此一致程度算出</td><td>接近 1 = 各比值說法一致；偏低表示比值之間互相矛盾，可能是單一比值受干擾而非真漏</td></tr>
+<tr><td>004</td><td><code>oes.leakRateValid</code></td><td><code>LeakRate?.HasEstimate == true</code> → 1</td><td>001～003 的有效旗標。未校正、基準不符、電漿未開、沒有比值可用時都是 0</td></tr>
+<tr><td>005</td><td><code>oes.outOfCalibratedRange</code></td><td><code>LeakRateEstimate.OutOfCalibratedRange</code></td><td>1 = Q̂ 超過校正點涵蓋的最大漏率（含 10 % 裕度），001 是外插值，<strong>僅供參考</strong></td></tr>
+<tr><td>006</td><td><code>oes.calibrationStatus</code></td><td><code>Snapshot.CalibrationStatus</code>，列舉直接轉數值</td><td>0 未校正（只有定性判斷）／1 有效／2 基準不符（換了 Golden Run 但校正沒換，估計暫停）</td></tr>
+<tr><td>007</td><td><code>oes.compositeLevel</code></td><td><code>Snapshot.Overall</code>，列舉直接轉數值</td><td>0 Idle／1 Normal／2 Warning／3 Alarm。<strong>3 是鎖存的</strong>，要操作者在設備端 Acknowledge 才會解除（CEID 502）</td></tr>
+<tr><td>008</td><td><code>oes.enabledRatios</code></td><td>快照中狀態<strong>不是 Disabled</strong> 的比值數</td><td>見 <a href="#7-判讀注意事項">§7</a>：NoPlasma、LowSignal、NoBaseline 的比值也算在內</td></tr>
+<tr><td>009</td><td><code>oes.warningRatios</code></td><td>快照中狀態<strong>等於 Warning</strong> 的比值數</td><td>已升到 Alarm 的比值<strong>不算</strong>在 009，算在 010</td></tr>
+</tbody></table></div>
+<h2 id="4-情境範例六種機台狀態下的讀值">4. 情境範例：六種機台狀態下的讀值</h2>
+<p>以下假設：出廠比值組四組，其中 <code>R_N2357Abs</code> 出廠停用，所以啟用的是 3 組；情境 B～E 已用標準漏孔做過校正，最大校正點為 1.0E-3 mbar·L/s。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>情境</th><th>001 Q̂</th><th>002 σ</th><th>003 conf</th><th>004</th><th>005</th><th>006</th><th>007</th><th>008</th><th>009</th></tr></thead>
+<tbody>
+<tr><td><strong>A</strong> 正常生產，未做洩漏率校正</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>3</td><td>0</td></tr>
+<tr><td><strong>B</strong> 正常生產，校正有效</td><td>1.2E-5</td><td>3.0E-5</td><td>0.85</td><td>1</td><td>0</td><td>1</td><td>1</td><td>3</td><td>0</td></tr>
+<tr><td><strong>C</strong> 輕微漏氣，兩組比值進入 Warning</td><td>1.8E-4</td><td>3.0E-5</td><td>0.72</td><td>1</td><td>0</td><td>1</td><td>2</td><td>3</td><td>2</td></tr>
+<tr><td><strong>D</strong> 嚴重漏氣，已確認並鎖存</td><td>2.4E-3</td><td>4.1E-4</td><td>0.64</td><td>1</td><td><strong>1</strong></td><td>1</td><td>3</td><td>3</td><td><strong>0</strong></td></tr>
+<tr><td><strong>E</strong> 換了配方的 Golden Run，校正沒換</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td><strong>2</strong></td><td>1</td><td>3</td><td>0</td></tr>
+<tr><td><strong>F</strong> 電漿未開（機台待機中）</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td><td>3</td><td>0</td></tr>
+</tbody></table></div>
+<p>逐一解讀：</p>
+<ul>
+<li><strong>A：</strong> 006 = 0，所以 001～005 全無意義，只能看 007。007 = 1 是「定性判斷正常」，但說不出漏了多少。
+</li>
+<li><strong>B：</strong> 004 = 1、006 = 1，估計有效。Q̂ = 1.2E-5 比它自己的 σ（3.0E-5）還小，應讀成「與零無法區分」，不是「漏了 1.2E-5」。
+</li>
+<li><strong>C：</strong> Q̂ = 1.8E-4 ± 3.0E-5，約 6σ，有漏且量級可信；003 = 0.72 表示各比值大致一致。007 = 2、009 = 2：三組啟用的比值中有兩組持續高於警告門檻。這時 Host 也會收到 ALID <code>10227001</code>（Leak warning）的 S5F1。
+</li>
+<li><strong>D：</strong> 007 = 3，已鎖存。注意 <strong>009 = 0</strong>——兩組比值都已升到 Alarm，改算在 VID 010（此例 010 = 2），Host 不能用 009 = 0 判斷「沒事」。005 = 1：2.4E-3 超過最大校正點 1.0E-3，數值是外插的，只能說「至少比校正範圍大」。從 Warning 升到 Alarm 時，設備會先送 ALID <code>10227001</code> 的 clear，再送 ALID <code>10227002</code>（Leak alarm）的 set——Host 的警報清單上同一時間只會掛著一個洩漏警報。漏點處理完、操作者在設備端按 Acknowledge 後，007 才會回落，並送出 CEID <code>10227502</code>。
+</li>
+<li><strong>E：</strong> 006 = 2，估計暫停，004 = 0、001 = 0。這不是「漏率歸零」，是「目前沒有能用的換算」。007 仍照常判定（定性判斷不需要校正）。處理方式：在設備端選回相符的 Golden Run，或對新基準重新校正。
+</li>
+<li><strong>F：</strong> 007 = 0（Idle）：電漿未開，無法判定。008 仍是 3——停用才不算，<strong>沒電漿的比值仍算「啟用」</strong>。004 = 0，因為沒有電漿就沒有估計；006 仍為 1，校正本身沒有失效。
+</li>
+</ul>
+<h2 id="5-s1f3-查詢範例">5. S1F3 查詢範例</h2>
+<p>Host 一次查 VID 001～009，設備在情境 C：</p>
+<pre><code>S1F3 W                             # Selected Equipment Status Request
+&lt;L[9]
+  &lt;U4[1] 1022700001&gt;               # Leak rate
+  &lt;U4[1] 1022700002&gt;               # Leak rate sigma
+  &lt;U4[1] 1022700003&gt;               # Leak rate confidence
+  &lt;U4[1] 1022700004&gt;               # Leak rate valid
+  &lt;U4[1] 1022700005&gt;               # Out of calibrated range
+  &lt;U4[1] 1022700006&gt;               # Calibration status
+  &lt;U4[1] 1022700007&gt;               # Composite leak level
+  &lt;U4[1] 1022700008&gt;               # Enabled ratio count
+  &lt;U4[1] 1022700009&gt;               # Warning ratio count
+&gt;
+.
+S1F4                               # 設備回覆，順序與查詢相同
+&lt;L[9]
+  &lt;F4[1] 0.00018&gt;                  # Q̂ = 1.8E-4 mbar·L/s
+  &lt;F4[1] 3E-05&gt;                    # σ = 3.0E-5 mbar·L/s
+  &lt;F4[1] 0.72&gt;                     # 各比值一致度 0.72
+  &lt;U4[1] 1&gt;                        # 估計有效
+  &lt;U4[1] 0&gt;                        # 在校正範圍內
+  &lt;U4[1] 1&gt;                        # 校正有效
+  &lt;U4[1] 2&gt;                        # Warning
+  &lt;U4[1] 3&gt;                        # 3 組啟用
+  &lt;U4[1] 2&gt;                        # 2 組 Warning
+&gt;
+.</code></pre>
+<h2 id="6-s2f23-追蹤範例">6. S2F23 追蹤範例</h2>
+<p>連續趨勢請走 Trace，不要用 S1F3 高頻輪詢。下例每 10 秒取樣一次，每 6 筆（1 分鐘）回報一次，追蹤 001、004、007、009：</p>
+<pre><code>S2F23 W                            # Trace Initialize Send
+&lt;L[5]
+  &lt;U4[1] 1&gt;                        # TRID
+  &lt;A[6] "000010"&gt;                  # DSPER：每 10 秒取樣
+  &lt;U4[1] 0&gt;                        # TOTSMP：0 = 持續到 Host 停止
+  &lt;U4[1] 6&gt;                        # REPGSZ：每 6 筆回報一次
+  &lt;L[4]
+    &lt;U4[1] 1022700001&gt;             # Leak rate
+    &lt;U4[1] 1022700004&gt;             # Leak rate valid
+    &lt;U4[1] 1022700007&gt;             # Composite leak level
+    &lt;U4[1] 1022700009&gt;             # Warning ratio count
+  &gt;
+&gt;
+.
+S2F24
+&lt;B[1] 0x00&gt;                        # TIAACK：0 = 接受
+.</code></pre>
+<p>之後設備以 S6F1 送出追蹤資料。追 001 時務必一起追 004，否則趨勢圖上的 0 分不出是「無漏」還是「無估計」。</p>
+<h2 id="7-判讀注意事項">7. 判讀注意事項</h2>
+<ol>
+<li><strong>001 必須搭配 004 讀。</strong> 沒有估計時 001～003 送 0 而不是空值；004 = 0 時這些 0 不代表任何量測結果。
+</li>
+<li><strong>001 只在 006 = 1 時才可能有效。</strong> 006 = 2（基準不符）時估計暫停，應視為「無資料」而非「漏率 0」。
+</li>
+<li><strong>005 = 1 的 001 是外插值</strong>，可用來判斷「很大」，不可用來比較大小或做趨勢。
+</li>
+<li><strong>007 = 3 是鎖存狀態</strong>，漏氣停止後也不會自己回落，要操作者在設備端確認。本規格沒有讓 Host 遠端解除的命令。
+</li>
+<li><strong>008 不是「正在判定的比值數」。</strong> 它只排除操作者停用的比值；NoPlasma、LowSignal、NoBaseline，以及製程分類設定下的 NotApplicable、TrendOnly／Guard 角色的 Observing，全都算在 008 裡。要知道多少比值真的參與判定，需要搭配 010（Alarm）、011（LowSignal）一起看，或等比值槽位 VID 實作後讀各槽位的狀態。
+</li>
+<li><strong>009 只算 Warning，不算 Alarm。</strong> 008、009、010、011 是各自計數，不是互斥分類，相加也不等於 008。Host 判斷「有沒有比值異常」應看 <code>009 + 010</code>，或直接看 007。
+</li>
+<li><strong>先看 VID 016。</strong> 016 = 1 表示資料來自測試模式或錄檔回放，001～009 雖然照常更新，但不是實機量測，不可用於製程判定。
+</li>
+<li><strong>VID 015 = 1 時，007 也要打折扣。</strong> 採集參數與基準擷取時不同，所有比值的刻度都已改變，應視同警告並重新擷取 Golden Run。
+</li>
+</ol>
+<h2 id="附錄列舉值對照">附錄：列舉值對照</h2>
+<p><strong>Calibration status（VID 006）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th><th>001～005</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>未校正——未選用任何洩漏率校正，只有定性判斷</td><td>無意義</td></tr>
+<tr><td>1</td><td>有效——校正與現用 Golden Run 相符</td><td>看 004</td></tr>
+<tr><td>2</td><td>基準不符——校正是對另一組基準做的，估計暫停</td><td>無意義（004 = 0）</td></tr>
+</tbody></table></div>
+<p><strong>Composite leak level（VID 007）</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>值</th><th>意義</th><th>伴隨的 SECS 訊息</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>Idle——無法判定（電漿未開、尚無基準，或全部比值停用）</td><td>—</td></tr>
+<tr><td>1</td><td>Normal——各啟用比值均在警告門檻以下</td><td>由 2 或 3 回落時，送出該警報的 clear</td></tr>
+<tr><td>2</td><td>Warning——有比值持續高於警告門檻</td><td>S5F1 ALID <code>1cc27001</code> set</td></tr>
+<tr><td>3</td><td>Alarm——已確認洩漏，鎖存至操作者確認為止</td><td>S5F1 ALID <code>1cc27001</code> clear + <code>1cc27002</code> set；確認時 S6F11 CEID <code>1cc27502</code></td></tr>
+</tbody></table></div>
+<blockquote><p>007 的值永遠如實回報；上表的 S5F1 則受 SECS 分頁的報告開關控制——<strong>Report alarms (S5F1)</strong> 未勾選時不送；測試模式／回放資料預設也不送，要勾選 <strong>Report test / replay data too</strong> 才送。</p></blockquote>
+</main>
+</div>
+</body>
+</html>

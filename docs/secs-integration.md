@@ -261,6 +261,18 @@ VID 030–099 保留(027–029 已用於製程分類,見上表)。比值槽位 V
 定義見規格 §1.4(b)。做這一段時要一併處理槽位↔ratio 的對應穩定性：ratio 的 key 是隨機 GUID stub，
 槽位號則是設定畫面的第 N 列，設定重載後可能改變——這正是規格保留 CEID 507 的原因。
 
+做槽位 VID 之前，以下三處已在 2026-10-20 比對過程式（規格 v2.2 已修正前兩項）：
+
+| # | 項目 | 程式的實際行為 | 規格 |
+|---|---|---|---|
+| 1 | 位移 18（位移 03／04 是百分比還是 σ 分數） | `RatioDefinition.ValueHasPedestal` = 分子為 `RawMean`，**比值模式也算**——除以參考線只會等比縮放連續光基座，不會消掉它（見 `CLAUDE.md` 的 pedestal 段與 `RatioPedestalTests`）。出廠 `R_N2Ar`、`R_NOAr`、停用的 `R_N2357Abs` 都是 1，只有 `R_N2357Ar`（`PeakHeight`）是 0 | v2.1 寫「原始平均 + 絕對強度模式」，v2.2 已改為只看位移 19 |
+| 2 | 位移 05（`RatioState`） | 0～6 之後還有 `Observing`（7）、`NotApplicable`（8），見 §5.1 | v2.1 只列 0～6，v2.2 已增列 |
+| 3 | 位移 22（槽位名稱） | `RatioDefinition` 有不變的 `Key`（現場新增者為 `RatioEditViewModel.GenerateKey` 產生的 GUID 片段）與可改的 `DisplayName`，規格範例 `R_N2Ar` 是 Key | **待決**，須與 Host 約定；另一個可放保留位移 25 |
+
+實作時位移 18 **必須直接取 `ValueHasPedestal`**，不要在 `SecsBridge` 依位移 17／19 重推一次——
+這正是 v2.1 規格寫錯的那一步，而 `SecsBridge` 的原則本來就是「只讀快照、不計算」。
+逐槽位的數值範例見 [`secs-ratio-svid-example-zh-TW.md`](secs-ratio-svid-example-zh-TW.md)。
+
 ---
 
 ## 6. 警報（S5F1）
@@ -442,7 +454,7 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `LeakMonitorEngine.cs` | §8 的三個快照欄位，以及 `Acknowledged` 事件 + `LeakAcknowledgedEventArgs`（§7） |
 | `OES_Leak_Monitor.csproj` | `PackageReference`：`Aqusen.Secs 0.6.0`、`Secs4Net 2.4.4`；profile 範本不隨 exe 出貨（首次啟動寫到 `ConfigDirectory`） |
 | `nuget.config` | 加 `aqusen` 來源（**不要動既有的 `<clear />`**，它是本專案刻意保留的） |
-| `docs/Satellite_SECS_Specification_v2.md` | §5.1 補 ALID 012–014 |
+| `docs/Satellite_SECS_Specification_v2.md` | §5.1 補 ALID 012–014；v2.2 修訂 §1.4(b)～(d) 的位移 18 判定、Ratio state 7／8、位移 22 待決（§5.3） |
 | `CLAUDE.md` | 補 SECS 段落 |
 
 > 註：`整合指南` §一.1 說「不要加 `<clear />`」，那是針對全新專案的建議。本專案的
@@ -573,6 +585,6 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 | 1 | ALID 型別 | 已決定改函式庫（§10）。若 Satellite 其他感測器實際送的是 U4，則要反過來改規格——上線前應向 Host 端確認一次實測封包 |
 | 2 | 列舉順序的隱性契約 | 見 §5.1。三處宣告（`LeakAlarmLevel`／`CalibrationStatus`／`RatioState`）已加註解指回本文件；仍應列入 code review 清單 |
 | 3 | 斷線期間的資料 | 本期不做 spooling。客戶若要求「MES 重開後資料不能掉」，需 Host 送 S2F43，並評估 `MaxSpooledMessages`（預設 100）是否夠 |
-| 4 | 比值槽位 VID | 本期不做。做之前要先解決槽位↔ratio key 的對應穩定性（§5.2） |
+| 4 | 比值槽位 VID | 本期不做。做之前要先解決槽位↔ratio key 的對應穩定性，以及位移 22 填 Key 或 `DisplayName`（§5.3） |
 | 5 | 設備故障的來源 | 已定案：綁在 `IsConnected`／`Status`／`ErrorOccurred` 三個明確轉態上（§6.1），不依賴框架未公開的事件。012 是轉態非狀態，刻意如此 |
 | 6 | 多腔體 | 一個 App 執行個體對一個 `cc`。同一台 PC 跑兩套監測不同腔體時，port 必須分開 |
