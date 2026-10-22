@@ -28,10 +28,24 @@ public sealed class ToolEventSettings
     /// </summary>
     public List<ToolEventMapping> Mappings { get; set; } = new();
 
+    /// <summary>
+    /// How long a window may stay open before the engine stops believing it. An End the EAP never
+    /// forwarded would otherwise keep every later process judged as this one; past the limit the
+    /// window closes to Unknown (the behaviour without tool events) and a warning says why.
+    /// Measured on the frame clock. <b>Hot-applied</b>, unlike the rest of this section: it names
+    /// no class, so applying it mid-run leaves nothing disagreeing.
+    /// </summary>
+    public double MaxWindowSeconds { get; set; } = DefaultMaxWindowSeconds;
+
+    /// <summary>Ten minutes — the measured process A step is 38–63 s, so a window this long has
+    /// lost its End rather than run long.</summary>
+    public const double DefaultMaxWindowSeconds = 600;
+
     public ToolEventSettings Clone() => new()
     {
         Enabled = Enabled,
         Mappings = (Mappings ?? new()).Select(m => m.Clone()).ToList(),
+        MaxWindowSeconds = MaxWindowSeconds,
     };
 }
 

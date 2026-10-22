@@ -372,10 +372,23 @@ public sealed class SecsBridge : IDisposable
                 : new RemoteCommandResult(3, new[] { new RemoteCommandParameterAck("CEID", 2) });  // CPACK 2: illegal value
         }
 
+        // TIME, when sent, is the tool's own moment for the event, so a forwarding delay in the
+        // EAP does not move the window. One that cannot be read refuses the event: stamping it
+        // with the arrival time instead would put a window somewhere the tool never said.
+        var time = DateTime.Now;
+        var timeParam = request.Find("TIME");
+        if (timeParam is not null)
+        {
+            if (ParseToolEventTime(timeParam.Value) is not { } sent)
+            {
+                Emit($"[EQP] TOOL_EVENT CEID {ceid} with an unreadable TIME -> HCACK=3");
+                return new RemoteCommandResult(3, new[] { new RemoteCommandParameterAck("TIME", 2) });  // CPACK 2: illegal value
+            }
+            time = sent;
+        }
+
         var sink = ToolEventSink;
-        // TIME is accepted (the profile lists it, so an EAP that sends it is not refused) but not
-        // yet used: the event is stamped with the moment it arrived.
-        var ack = sink?.Invoke(ceid.Value, DateTime.Now) ?? ToolEventAck.Disabled;
+        var ack = sink?.Invoke(ceid.Value, time) ?? ToolEventAck.Disabled;
         switch (ack)
         {
             case ToolEventAck.Accepted:
@@ -444,6 +457,30 @@ public sealed class SecsBridge : IDisposable
         catch (Exception)
         {
             return null;   // a malformed item is a parameter error, not a reason to drop the link
+        }
+    }
+
+    /// <summary>
+    /// <c>TOOL_EVENT</c>'s <c>TIME</c>: the SEMI clock form <c>YYYYMMDDhhmmsscc</c> (hundredths
+    /// last), or <c>YYYYMMDDhhmmss</c> without them, as ASCII. Read as local time, which is what
+    /// the tool and the frames both run on. Null for anything else.
+    /// </summary>
+    public static DateTime? ParseToolEventTime(Item value)
+    {
+        try
+        {
+            if (value.Format is not (SecsFormat.ASCII or SecsFormat.JIS8)) return null;
+            var text = value.GetString().Trim();
+            string? format = text.Length switch { 16 => "yyyyMMddHHmmssff", 14 => "yyyyMMddHHmmss", _ => null };
+            return format is not null &&
+                   DateTime.TryParseExact(text, format, CultureInfo.InvariantCulture,
+                       DateTimeStyles.AssumeLocal, out var t)
+                ? t
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 
