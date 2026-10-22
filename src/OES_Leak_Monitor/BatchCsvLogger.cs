@@ -67,7 +67,22 @@ public sealed class BatchCsvLogger : IDisposable
         _systemLogger = systemLogger;
         if (tracker is null) throw new ArgumentNullException(nameof(tracker));
         tracker.BatchCompleted += OnBatchCompleted;
+        tracker.StepClassAmbiguous += OnStepClassAmbiguous;
         _tracker = tracker;
+    }
+
+    /// <summary>
+    /// A step sampled for no class because its sampling window spanned two (a tool-event window
+    /// edge fell inside it). The row it leaves blank is in the file; why it is blank is here.
+    /// </summary>
+    private void OnStepClassAmbiguous(object? sender, StepClassAmbiguity e)
+    {
+        if (_disposed) return;
+        _systemLogger?.LogSystemEvent(LogSeverity.Information, "BatchStepClassAmbiguous",
+            $"Plasma step {e.StepIndex} changed process inside its sampling window " +
+            $"({string.Join(" → ", e.Classes)}); it is not sampled for any class",
+            related: $"Step={e.StepIndex},Classes={string.Join("|", e.Classes)}",
+            value: e.Start.ToString("HH:mm:ss", Inv));
     }
 
     private readonly BatchTracker _tracker;
@@ -265,6 +280,7 @@ public sealed class BatchCsvLogger : IDisposable
     {
         _disposed = true;
         _tracker.BatchCompleted -= OnBatchCompleted;
+        _tracker.StepClassAmbiguous -= OnStepClassAmbiguous;
         lock (_sync) CloseLocked();
     }
 }

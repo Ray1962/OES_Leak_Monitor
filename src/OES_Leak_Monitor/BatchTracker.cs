@@ -81,7 +81,8 @@ public sealed class StepSummary
     public int Index { get; init; }
 
     /// <summary>Process class, <see cref="ProcessClassifier.Unknown"/>, or "" when no classifier
-    /// is configured or the step ended before its verdict was taken.</summary>
+    /// is configured, the step ended before its verdict was taken, or its sampling window saw more
+    /// than one class (<see cref="BatchTracker.StepClassAmbiguous"/>).</summary>
     public string Class { get; init; } = "";
 
     public DateTime Start { get; init; }
@@ -105,6 +106,19 @@ public sealed class StepSummary
     /// <summary>Each classifier discriminant's value as measured when the verdict was taken.</summary>
     public IReadOnlyList<ProcessDiscriminant> Discriminants { get; init; } =
         Array.Empty<ProcessDiscriminant>();
+}
+
+/// <summary>
+/// A step whose sampling window saw more than one process class — with tool events, a window
+/// edge fell inside it. Its <see cref="StepSummary.Class"/> is left empty, so no class is sampled
+/// from it and it cannot anchor a batch; this says which step, and what it saw, so a blank batch
+/// column can be traced to its cause.
+/// </summary>
+public sealed class StepClassAmbiguity : EventArgs
+{
+    public int StepIndex { get; init; }
+    public DateTime Start { get; init; }
+    public IReadOnlyList<string> Classes { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>A batch: the run of steps between two batch boundaries.</summary>
@@ -166,6 +180,11 @@ public sealed class BatchTracker
     private int _stepFrames;
     private IReadOnlyList<ProcessDiscriminant> _stepDiscriminants = Array.Empty<ProcessDiscriminant>();
     private readonly Dictionary<string, List<double>> _window = new();
+    // Classes carried by the frames inside the sampling window, in the order first seen. Empty
+    // classes are not collected: on the classifier path "" means "verdict not taken yet", which
+    // at a slow frame rate can still be true at the start of the window, and is not a second
+    // process.
+    private readonly List<string> _windowClasses = new();
     private bool _inStep;
 
     private readonly List<StepSummary> _batch = new();
@@ -181,6 +200,10 @@ public sealed class BatchTracker
 
     /// <summary>Raised as each step completes, for a caller that wants the finer record.</summary>
     public event EventHandler<StepSummary>? StepCompleted;
+
+    /// <summary>Raised once for a step whose sampling window saw more than one class, before
+    /// <see cref="StepCompleted"/>.</summary>
+    public event EventHandler<StepClassAmbiguity>? StepClassAmbiguous;
 
     /// <summary>Steps accumulated into the batch in progress.</summary>
     public int PendingSteps => _batch.Count;
@@ -203,6 +226,7 @@ public sealed class BatchTracker
             _stepFrames = 0;
             _stepDiscriminants = Array.Empty<ProcessDiscriminant>();
             _window.Clear();
+            _windowClasses.Clear();
         }
 
         if (!_inStep) return;
@@ -222,6 +246,10 @@ public sealed class BatchTracker
 
         double t = (snapshot.Timestamp - _stepStart).TotalSeconds;
         if (t < _settings.WindowStartSeconds || t >= _settings.WindowEndSeconds) return;
+
+        if (!string.IsNullOrEmpty(snapshot.ProcessClass) &&
+            !_windowClasses.Contains(snapshot.ProcessClass, StringComparer.OrdinalIgnoreCase))
+            _windowClasses.Add(snapshot.ProcessClass);
 
         foreach (var r in snapshot.Ratios)
         {
@@ -259,10 +287,34 @@ public sealed class BatchTracker
                 : 0.5 * (values[values.Count / 2 - 1] + values[values.Count / 2]);
         }
 
+        // The step's class is the one in force throughout its sampling window, because that
+        // window is what the record is made of. With tool events the class follows the process
+        // window frame by frame and can change inside one plasma step; a median over frames of two
+        // processes is a number no batch could be compared on, so such a step is sampled for no
+        // class — and, its class being empty, it cannot anchor a batch either: the anchor is
+        // meant to be a fact. With no class in the window at all (a step too short to reach it, or
+        // a verdict taken after it) the step keeps the class it was given, as it always has; the
+        // classifier locks its verdict per step, so without tool events this never differs.
+        string stepClass = _stepClass;
+        if (_windowClasses.Count == 1)
+        {
+            stepClass = _windowClasses[0];
+        }
+        else if (_windowClasses.Count > 1)
+        {
+            stepClass = "";
+            StepClassAmbiguous?.Invoke(this, new StepClassAmbiguity
+            {
+                StepIndex = _stepIndex,
+                Start = _stepStart,
+                Classes = _windowClasses.ToList(),
+            });
+        }
+
         var step = new StepSummary
         {
             Index = _stepIndex,
-            Class = _stepClass,
+            Class = stepClass,
             Start = _stepStart,
             End = _stepLast,
             Frames = _stepFrames,
