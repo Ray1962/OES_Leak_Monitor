@@ -318,6 +318,10 @@ public sealed class LeakMonitorEngine : IDisposable
     // frame clock, like every other duration here, not on the tool's or the EAP's.
     private DateTime? _toolWindowOpenedAt;
     private double _toolMaxWindowSeconds = ToolEventSettings.DefaultMaxWindowSeconds;
+    // The stretch of plasma outside any window now in progress — see TrackUnmappedPlasma.
+    private DateTime? _unmappedSince, _unmappedLast;
+    private readonly List<float> _unmappedMetrics = new();
+    private const int MaxUnmappedSamples = 20000;   // ~1 h at 5 fps; enough for a median
     // Last event received, applied or not — the host reads it back (VID 032) to see that its
     // forwarding arrives. Written on the SECS thread, so it has its own small lock.
     private readonly object _toolLastGate = new();
@@ -508,6 +512,62 @@ public sealed class LeakMonitorEngine : IDisposable
                 : $"Process step classified as {_stepClass}",
             value: values,
             related: $"Step={_stepIndex},Class={_stepClass}");
+
+        // Inside a window the tool has already said which process this is; the verdict is kept
+        // only to be checked against it. Disagreement is either a clock skew between the EAP and
+        // this PC, or rules that no longer fit the chamber — both found here first or not at
+        // all, since the window, not the verdict, decides what is judged.
+        if (_toolContext == ToolEventContext.InWindow &&
+            !string.Equals(_stepClass, _toolWindowClass, StringComparison.OrdinalIgnoreCase))
+            _log?.LogSystemEvent(LogSeverity.Warning, "ToolEventClassMismatch",
+                $"The spectrum classified this step as {_stepClass}, inside the tool's " +
+                $"{_toolWindowClass} window — the window decides; check the classifier's rules, " +
+                "the CEID table, and the clocks of this PC and the EAP",
+                value: values,
+                related: $"Step={_stepIndex},Window={_toolWindowClass},Classifier={_stepClass}");
+    }
+
+    /// <summary>
+    /// Follows plasma that runs outside any tool window, and writes each such stretch to the log
+    /// when it ends. Caller holds <c>_gate</c>; call after <see cref="AdvanceStep"/>, whose
+    /// step boundaries define "plasma" here as they do for 028.
+    ///
+    /// <para>Not judged, so otherwise invisible: a process the CEID table does not map (process
+    /// C, today), or a Start the EAP never forwarded. Either way the fix is a row in the table or
+    /// a word with the EAP, and the start time, length and brightness written here are what
+    /// identify which process it was.</para>
+    /// </summary>
+    private void TrackUnmappedPlasma(float? metric, DateTime ts)
+    {
+        bool inStretch = _toolContext == ToolEventContext.OutsideWindow && _stepOpen;
+        if (inStretch)
+        {
+            // A frame inside the step's dropout tolerance (gate shut, step not yet over) neither
+            // extends the stretch nor counts toward its brightness: the stretch ends at the last
+            // frame that was actually lit.
+            if (_stepClosedSince is not null) return;
+            _unmappedSince ??= ts;
+            _unmappedLast = ts;
+            if (metric is { } m && _unmappedMetrics.Count < MaxUnmappedSamples) _unmappedMetrics.Add(m);
+            return;
+        }
+        if (_unmappedSince is not { } since) return;
+
+        double seconds = ((_unmappedLast ?? since) - since).TotalSeconds;
+        string brightness = "not measurable";
+        if (_unmappedMetrics.Count > 0)
+        {
+            var sorted = _unmappedMetrics.OrderBy(v => v).ToArray();
+            brightness = $"median {sorted[sorted.Length / 2]:0}, max {sorted[^1]:0}";
+        }
+        _log?.LogSystemEvent(LogSeverity.Information, "ToolEventUnmappedPlasma",
+            $"Plasma outside any process window from {since:HH:mm:ss} for {seconds:0} s " +
+            $"(trigger metric {brightness}) — not judged by class-scoped ratios; a process the " +
+            "CEID table does not map, or a window edge the EAP did not forward",
+            related: $"Start={since:yyyy-MM-dd HH:mm:ss},Seconds={seconds:0.0}");
+        _unmappedSince = null;
+        _unmappedLast = null;
+        _unmappedMetrics.Clear();
     }
 
     /// <summary>
@@ -529,10 +589,11 @@ public sealed class LeakMonitorEngine : IDisposable
         // boundary exactly, so it applies frame by frame rather than being locked per step the
         // way a verdict read off an ignition transient has to be.
         ToolEventContext.InWindow => (_toolWindowClass, true),
-        // A window has closed and none is open: no class is running, so every class-scoped
-        // entry stands down and an unscoped one carries on — the same answer an Unknown step
-        // gives, for a reason the tool supplied rather than one the spectrum guessed.
-        ToolEventContext.OutsideWindow => (null, true),
+        // A window has closed and none is open: no class the tool named is running, so every
+        // class-scoped entry stands down and an unscoped one carries on. With plasma lit this is
+        // a process the table does not map (process C, today) — Unknown, exactly as a step the
+        // classifier could not name; with the plasma off nothing is running at all.
+        ToolEventContext.OutsideWindow => (_stepOpen ? ProcessClassifier.Unknown : null, true),
         // Not in use, or in use with no window edge seen yet: exactly the behaviour without tool
         // events. "We have not been told" is not "nothing is running", and judging nothing until
         // the EAP's first event arrives would lose a real leak to a late message; the snapshot
@@ -763,6 +824,17 @@ public sealed class LeakMonitorEngine : IDisposable
     {
         get
         {
+            // When the tool's events decide, they decide this too: the tool has named the class
+            // inside a window (before the plasma lights as much as after), and outside one the
+            // only question left is whether anything is lit. The step machine's "deciding" stage
+            // belongs to a verdict read off the spectrum, which is not what is in force here.
+            switch (_toolContext)
+            {
+                case ToolEventContext.InWindow:
+                    return ProcessClassState.Classified;
+                case ToolEventContext.OutsideWindow:
+                    return _stepOpen ? ProcessClassState.Unclassified : ProcessClassState.NoStep;
+            }
             var frame = CurrentFrameClass();
             return !frame.Scoped ? ProcessClassState.NotConfigured
                 : !_stepOpen ? ProcessClassState.NoStep
@@ -951,6 +1023,7 @@ public sealed class LeakMonitorEngine : IDisposable
             // exists to prevent.
             float? metric = _plasmaGate?.TriggerMetric(wl, inten);
             AdvanceStep(metric, wl, inten, sample.Timestamp);
+            TrackUnmappedPlasma(metric, sample.Timestamp);
             // Asked once, after the step machine has moved, so every ratio on this frame is
             // judged against the same answer.
             var frameClass = CurrentFrameClass();
