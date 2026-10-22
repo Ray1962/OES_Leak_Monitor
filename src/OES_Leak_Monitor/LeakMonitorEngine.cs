@@ -310,10 +310,14 @@ public sealed class LeakMonitorEngine : IDisposable
     // Events arrive on the SECS receive thread and are applied by the frame thread at the start
     // of the next frame, so the window — like every other piece of per-frame state here — only
     // ever changes under _gate, between frames, and every ratio on one frame sees one answer.
-    private readonly ConcurrentQueue<ToolEventMapping> _toolQueue = new();
+    private readonly ConcurrentQueue<(ToolEventMapping Mapping, DateTime Time)> _toolQueue = new();
     private const int MaxQueuedToolEvents = 1000;   // acquisition stopped for a long time: keep the newest
     private ToolEventContext _toolContext = ToolEventContext.Disabled;
     private string? _toolWindowClass;
+    // Frame time at which the open window was first applied — the timeout is measured on the
+    // frame clock, like every other duration here, not on the tool's or the EAP's.
+    private DateTime? _toolWindowOpenedAt;
+    private double _toolMaxWindowSeconds = ToolEventSettings.DefaultMaxWindowSeconds;
     // Last event received, applied or not — the host reads it back (VID 032) to see that its
     // forwarding arrives. Written on the SECS thread, so it has its own small lock.
     private readonly object _toolLastGate = new();
@@ -578,6 +582,7 @@ public sealed class LeakMonitorEngine : IDisposable
 
             while (_toolQueue.TryDequeue(out _)) { }
             _toolWindowClass = null;
+            _toolWindowOpenedAt = null;
             _toolContext = table is null ? ToolEventContext.Disabled : ToolEventContext.Unknown;
             if (table is not null)
                 _log?.LogSystemEvent(LogSeverity.Information, "ToolEventsApplied",
@@ -589,6 +594,18 @@ public sealed class LeakMonitorEngine : IDisposable
                     "Process windows from the main tool's events are no longer in use");
             PublishToolStatus();
         }
+    }
+
+    /// <summary>
+    /// The hot-applied half of <see cref="ToolEventSettings"/>: the window time limit. Takes
+    /// effect on the next frame, unlike the table, because it names no class — there is nothing
+    /// for it to disagree with mid-run. The host calls it at start-up and whenever the SECS
+    /// settings are saved.
+    /// </summary>
+    public void ConfigureToolEventsLive(ToolEventSettings? settings)
+    {
+        double max = settings?.MaxWindowSeconds is > 0 and var v ? v : ToolEventSettings.DefaultMaxWindowSeconds;
+        lock (_gate) _toolMaxWindowSeconds = max;
     }
 
     /// <summary>
@@ -635,49 +652,95 @@ public sealed class LeakMonitorEngine : IDisposable
         PublishToolStatus();
         if (!table.TryGet(ceid, out var mapping)) return ToolEventAck.Ignored;
 
-        _toolQueue.Enqueue(mapping);
+        _toolQueue.Enqueue((mapping, time));
         while (_toolQueue.Count > MaxQueuedToolEvents && _toolQueue.TryDequeue(out _)) { }
         return ToolEventAck.Accepted;
     }
 
-    /// <summary>Applies the events queued since the last frame. Caller holds <c>_gate</c>.</summary>
-    private void ApplyQueuedToolEvents()
+    /// <summary>
+    /// Applies the events queued since the last frame, then retires a window that has outlived
+    /// <see cref="ToolEventSettings.MaxWindowSeconds"/>. Caller holds <c>_gate</c>;
+    /// <paramref name="frameTime"/> is the frame about to be judged.
+    ///
+    /// <para>Events that do not pair up are resolved in the direction that keeps judging the
+    /// process the tool is actually in, and each is logged as a warning — an EAP that drops
+    /// events is diagnosed from those lines or not at all:</para>
+    /// <list type="bullet">
+    /// <item>A Start while a window is open means the End was lost; the tool is plainly in the
+    /// new process now, so the old window closes and the new one opens.</item>
+    /// <item>An End matching no open window is stale or misrouted; acting on it could only close
+    /// a window the tool is still in, so it changes nothing.</item>
+    /// <item>A window open past the limit lost its End somewhere. It closes to Unknown — not to
+    /// "outside", because nobody said the process ended — so judging falls back to the behaviour
+    /// without tool events rather than standing every class-scoped ratio down.</item>
+    /// </list>
+    /// </summary>
+    private void ApplyQueuedToolEvents(DateTime frameTime)
     {
         if (_toolTable is null) return;
-        bool any = false;
-        while (_toolQueue.TryDequeue(out var m))
+        bool changed = false;
+        while (_toolQueue.TryDequeue(out var queued))
         {
-            any = true;
+            changed = true;
+            var (m, eventTime) = queued;
             string cls = m.ClassName?.Trim() ?? "";
             string name = m.Name.Length > 0 ? m.Name : m.Ceid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string at = eventTime.ToString("HH:mm:ss.ff", System.Globalization.CultureInfo.InvariantCulture);
             if (cls.Length == 0)
             {
                 // Recorded only — the event is a fact worth having in the log beside the
                 // measurement (a leak check, a slit valve), and decides nothing.
                 _log?.LogSystemEvent(LogSeverity.Information, "ToolEventRecorded",
-                    $"Main tool event {name}", related: $"CEID={m.Ceid}");
+                    $"Main tool event {name} at {at}", related: $"CEID={m.Ceid}");
                 continue;
             }
             if (m.Edge == ToolEventEdge.Start)
             {
+                if (_toolContext == ToolEventContext.InWindow)
+                    _log?.LogSystemEvent(LogSeverity.Warning, "ToolEventWindowUnclosed",
+                        $"Process window {_toolWindowClass} had no End before {name} at {at} — " +
+                        $"closed and replaced by window {cls}; check that the EAP forwards every ProcessEnd",
+                        related: $"CEID={m.Ceid},Previous={_toolWindowClass},Class={cls}");
                 _toolWindowClass = cls;
                 _toolContext = ToolEventContext.InWindow;
+                _toolWindowOpenedAt = frameTime;
                 _log?.LogSystemEvent(LogSeverity.Information, "ToolEventWindowOpened",
-                    $"Process window {cls} opened ({name})", related: $"CEID={m.Ceid},Class={cls}");
+                    $"Process window {cls} opened ({name} at {at})", related: $"CEID={m.Ceid},Class={cls}");
             }
             else if (_toolContext == ToolEventContext.InWindow &&
                      string.Equals(_toolWindowClass, cls, StringComparison.OrdinalIgnoreCase))
             {
                 _toolWindowClass = null;
+                _toolWindowOpenedAt = null;
                 _toolContext = ToolEventContext.OutsideWindow;
                 _log?.LogSystemEvent(LogSeverity.Information, "ToolEventWindowClosed",
-                    $"Process window {cls} closed ({name})", related: $"CEID={m.Ceid},Class={cls}");
+                    $"Process window {cls} closed ({name} at {at})", related: $"CEID={m.Ceid},Class={cls}");
             }
-            // An End for a window that is not the open one changes nothing. What such an edge
-            // means — a lost Start, a stale End — belongs with the rest of the rules for events
-            // that do not pair up, which are decided together rather than one at a time here.
+            else
+            {
+                string open = _toolContext == ToolEventContext.InWindow
+                    ? $"window {_toolWindowClass} is open" : "no window is open";
+                _log?.LogSystemEvent(LogSeverity.Warning, "ToolEventOrphanEnd",
+                    $"End of process window {cls} ({name} at {at}) ignored — {open}; " +
+                    "a lost Start or a stale End from the EAP",
+                    related: $"CEID={m.Ceid},Class={cls},Open={_toolWindowClass ?? ""}");
+            }
         }
-        if (any) PublishToolStatus();
+
+        if (_toolContext == ToolEventContext.InWindow && _toolWindowOpenedAt is { } opened &&
+            (frameTime - opened).TotalSeconds > _toolMaxWindowSeconds)
+        {
+            _log?.LogSystemEvent(LogSeverity.Warning, "ToolEventWindowTimedOut",
+                $"Process window {_toolWindowClass} open for {(frameTime - opened).TotalSeconds:0} s, " +
+                $"past the {_toolMaxWindowSeconds:0} s limit, with no End — no longer trusted; " +
+                "ratios are judged as without tool events until the next window edge",
+                related: $"Class={_toolWindowClass},MaxWindowSeconds={_toolMaxWindowSeconds:0}");
+            _toolWindowClass = null;
+            _toolWindowOpenedAt = null;
+            _toolContext = ToolEventContext.Unknown;
+            changed = true;
+        }
+        if (changed) PublishToolStatus();
     }
 
     /// <summary>
@@ -862,7 +925,7 @@ public sealed class LeakMonitorEngine : IDisposable
         {
             // Before anything else, so the window this frame is judged in includes every event
             // that arrived before it — even on a frame the disabled monitor then drops.
-            ApplyQueuedToolEvents();
+            ApplyQueuedToolEvents(sample.Timestamp);
             if (!_settings.Enabled) return;
 
             // Whether this frame was judged during a capture — read before FinalizeCapture can

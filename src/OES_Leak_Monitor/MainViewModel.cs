@@ -337,6 +337,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.ToolStatusChanged += _secs.OnToolStatus;
         _savedToolEvents = settings.Secs.ToolEvents?.Clone() ?? new ToolEventSettings();
         _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
+        // The hot-applied half (the window time limit): now, and again on every SECS-tab save.
+        _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
         _secs.Configure(settings.Secs);
 
         // One-click diagnostic bundle, on the Logs tab and deliberately ungated. Constructed last
@@ -865,8 +867,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var onDisk = _settingsService.Load();
             onDisk.Secs = secs;
             _settingsService.Save(onDisk);
-            // Saved now, applied on the next acquisition start — see _savedToolEvents.
+            // Saved now, applied on the next acquisition start — see _savedToolEvents. The
+            // hot-applied half takes effect at once: it names no class.
             _savedToolEvents = secs.ToolEvents?.Clone() ?? new ToolEventSettings();
+            _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
             _systemLogger.LogSystemEvent(LogSeverity.Information, "SecsSettingsSaved",
                 "SECS interface settings saved",
                 related: $"User={AccessControl.CurrentUsername ?? "(guest)"},Enabled={secs.Enabled}," +

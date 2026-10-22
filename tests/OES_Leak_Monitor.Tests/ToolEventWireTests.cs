@@ -146,4 +146,68 @@ public class ToolEventWireTests
         Assert.Null(SecsBridge.ParseCeid(U8(5_000_000_000UL)));      // does not fit a CEID
         Assert.Null(SecsBridge.ParseCeid(L()));
     }
+
+    // ---------------------------------------------------------------- TIME (#29)
+
+    /// <summary>
+    /// With <c>TIME</c> the event carries the tool's own moment, so a forwarding delay in the
+    /// EAP does not shift the window it reports.
+    /// </summary>
+    [Fact]
+    public async Task TIME_is_the_events_time()
+    {
+        await using var h = await SecsHarness.StartAsync();
+        DateTime? got = null;
+        h.Bridge.ToolEventSink = (_, time) => { got = time; return ToolEventAck.Accepted; };
+
+        var reply = await SendAsync(h, ("CEID", ProcessStart.ToString()), ("TIME", "2026102214030025"));
+
+        Assert.Contains("HCACK=0", reply);
+        Assert.Equal(new DateTime(2026, 10, 22, 14, 3, 0, 250, DateTimeKind.Local), got);
+    }
+
+    [Fact]
+    public async Task Without_TIME_the_event_is_stamped_when_it_arrives()
+    {
+        await using var h = await SecsHarness.StartAsync();
+        DateTime? got = null;
+        h.Bridge.ToolEventSink = (_, time) => { got = time; return ToolEventAck.Accepted; };
+        var before = DateTime.Now;
+
+        await SendAsync(h, ("CEID", ProcessStart.ToString()));
+
+        Assert.NotNull(got);
+        Assert.InRange(got!.Value, before.AddSeconds(-1), DateTime.Now.AddSeconds(1));
+    }
+
+    /// <summary>
+    /// A <c>TIME</c> that cannot be read is refused with the event — taking the event at the
+    /// arrival time instead would quietly put a window somewhere the tool never said it was.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-10-22 14:03")]    // a timestamp, but not this format
+    [InlineData("2026132214030000")]    // month 13
+    [InlineData("abc")]
+    public async Task An_unreadable_TIME_refuses_the_event(string time)
+    {
+        await using var h = await SecsHarness.StartAsync();
+        bool called = false;
+        h.Bridge.ToolEventSink = (_, _) => { called = true; return ToolEventAck.Accepted; };
+
+        var reply = await SendAsync(h, ("CEID", ProcessStart.ToString()), ("TIME", time));
+
+        Assert.Contains("HCACK=3", reply);
+        Assert.False(called);
+    }
+
+    [Fact]
+    public void TIME_is_read_with_or_without_hundredths()
+    {
+        Assert.Equal(new DateTime(2026, 10, 22, 14, 3, 0, 250, DateTimeKind.Local),
+            SecsBridge.ParseToolEventTime(A("2026102214030025")));
+        Assert.Equal(new DateTime(2026, 10, 22, 14, 3, 0, DateTimeKind.Local),
+            SecsBridge.ParseToolEventTime(A("20261022140300")));
+        Assert.Null(SecsBridge.ParseToolEventTime(A("2026102214030")));
+        Assert.Null(SecsBridge.ParseToolEventTime(U4(1)));
+    }
 }

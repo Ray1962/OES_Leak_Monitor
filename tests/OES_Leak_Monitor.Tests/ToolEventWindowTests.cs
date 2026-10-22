@@ -106,6 +106,9 @@ public class ToolEventWindowTests
         public List<LeakMonitorSnapshot> Snaps { get; } = new();
 
         public Harness(ProcessClassifierSettings? classifier, params RatioDefinition[] ratios)
+            : this(log: null, classifier, ratios) { }
+
+        public Harness(SystemLogger? log, ProcessClassifierSettings? classifier, params RatioDefinition[] ratios)
         {
             var settings = new LeakMonitorSettings
             {
@@ -116,7 +119,7 @@ public class ToolEventWindowTests
             foreach (var r in ratios) settings.Ratios.Add(r);
             if (classifier is not null) settings.ProcessClassifier = classifier;
 
-            Engine = new LeakMonitorEngine(settings);
+            Engine = new LeakMonitorEngine(settings, log);
             Engine.ConfigureTrigger(new LoggerSettings
             {
                 TriggerMode = TriggerMode.Wavelength,
@@ -134,6 +137,38 @@ public class ToolEventWindowTests
         public ToolEventAck Event(uint ceid, double t) => Engine.ReceiveToolEvent(ceid, Epoch.AddSeconds(t));
 
         public void Dispose() => Engine.Dispose();
+    }
+
+    /// <summary>
+    /// A real <see cref="SystemLogger"/> over a temporary folder, so a test can require that a
+    /// warning was written — the warnings are the acceptance criterion for the event rules, since
+    /// an EAP that drops an End is diagnosed from the log and nowhere else.
+    /// </summary>
+    private sealed class LogCapture : IDisposable
+    {
+        private readonly string _dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "oeslm-toolevent-" + Guid.NewGuid().ToString("N"));
+        public SystemLogger Logger { get; }
+
+        public LogCapture()
+        {
+            System.IO.Directory.CreateDirectory(_dir);
+            Logger = new SystemLogger(_dir);
+        }
+
+        /// <summary>Every line written so far. Flushes by disposing, so call it once, last.</summary>
+        public string[] Lines()
+        {
+            Logger.Dispose();
+            return System.IO.Directory.GetFiles(_dir, "*.csv")
+                .SelectMany(System.IO.File.ReadAllLines).ToArray();
+        }
+
+        public void Dispose()
+        {
+            Logger.Dispose();
+            try { System.IO.Directory.Delete(_dir, recursive: true); } catch { /* best effort */ }
+        }
     }
 
     // ---------------------------------------------------------------- off by default
@@ -462,5 +497,165 @@ public class ToolEventWindowTests
         Assert.Equal(ToolEventContext.InWindow, h.Engine.ToolStatus.State);
         Assert.Equal("A", h.Engine.ToolStatus.WindowClass);
         Assert.Equal(seen[^1], h.Engine.ToolStatus);
+    }
+
+
+    // ---------------------------------------------------------------- events that do not pair up (#29)
+
+    /// <summary>
+    /// A Start while a window is already open means the End was lost. The tool is plainly in the
+    /// new process now, so the old window closes and the new one opens — and the log says the
+    /// End never came, because an EAP that drops events is diagnosed from that line or not at all.
+    /// </summary>
+    [Fact]
+    public void ASecondStart_ReplacesTheOpenWindow_AndSaysTheEndWasLost()
+    {
+        using var log = new LogCapture();
+        using var h = new Harness(log.Logger, classifier: null, Ratio("R_A", "A"), Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(ProcessStart, 0);
+        h.Engine.ProcessSample(On(0));
+        h.Event(CleanStart, 0.5);                       // no ProcessEnd in between
+        h.Engine.ProcessSample(On(0.5));
+
+        Assert.Equal(ToolEventContext.InWindow, h.Last.ToolEventState);
+        Assert.Equal("B", h.Last.ToolWindowClass);
+        Assert.Equal(RatioState.NotApplicable, h.Ratio("R_A").State);
+        Assert.NotEqual(RatioState.NotApplicable, h.Ratio("R_B").State);
+
+        h.Engine.Dispose();
+        Assert.Contains(log.Lines(), l => l.Contains("ToolEventWindowUnclosed") && l.Contains("warn"));
+    }
+
+    /// <summary>
+    /// An End that matches no open window — the tool is outside any, or in a different one — is
+    /// a stale or misrouted event. Acting on it could only close a window the tool is still in,
+    /// so it changes nothing, and it is logged.
+    /// </summary>
+    [Fact]
+    public void AnEndForNoOpenWindow_ChangesNothing_AndIsLogged()
+    {
+        using var log = new LogCapture();
+        using var h = new Harness(log.Logger, classifier: null, Ratio("R_A", "A"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(ProcessEnd, 0);                         // nothing is open: still Unknown
+        h.Engine.ProcessSample(On(0));
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+
+        h.Event(ProcessStart, 0.5);
+        h.Engine.ProcessSample(On(0.5));
+        h.Event(CleanEnd, 1.0);                         // the open window is A, not B
+        h.Engine.ProcessSample(On(1.0));
+        Assert.Equal(ToolEventContext.InWindow, h.Last.ToolEventState);
+        Assert.Equal("A", h.Last.ToolWindowClass);
+
+        h.Engine.Dispose();
+        Assert.Equal(2, log.Lines().Count(l => l.Contains("ToolEventOrphanEnd") && l.Contains("warn")));
+    }
+
+    /// <summary>
+    /// A window open longer than <c>MaxWindowSeconds</c> lost its End somewhere. Holding it open
+    /// for ever would judge every later process as this one, so it closes — to Unknown, not to
+    /// "outside", since nobody said the process ended: the engine falls back to how it judged
+    /// without tool events, VID 030 reads 1, and the log says why. Measured on the frame clock,
+    /// like every other duration the engine keeps.
+    /// </summary>
+    [Fact]
+    public void AWindowThatOutlivesTheLimit_FallsBackToUnknown_AndIsLogged()
+    {
+        using var log = new LogCapture();
+        using var h = new Harness(log.Logger, classifier: null, Ratio("R_A", "A"), Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+        h.Engine.ConfigureToolEventsLive(new ToolEventSettings { MaxWindowSeconds = 10 });
+
+        h.Event(CleanStart, 0);
+        double t = 0;
+        for (; t <= 9.5; t += 0.5) h.Engine.ProcessSample(On(t));
+        Assert.Equal(ToolEventContext.InWindow, h.Last.ToolEventState);
+        Assert.Equal(RatioState.NotApplicable, h.Ratio("R_A").State);
+
+        for (; t <= 11.0; t += 0.5) h.Engine.ProcessSample(On(t));
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+        Assert.Equal(ToolEventContext.Unknown, h.Engine.ToolStatus.State);
+        Assert.NotEqual(RatioState.NotApplicable, h.Ratio("R_A").State);   // no classifier: unscoped
+
+        h.Engine.Dispose();
+        Assert.Contains(log.Lines(), l => l.Contains("ToolEventWindowTimedOut") && l.Contains("warn"));
+    }
+
+    /// <summary>
+    /// The limit is hot-applied: shortening it takes effect on the next frame, without waiting
+    /// for an acquisition restart the way the table does — it names no class, so there is
+    /// nothing for it to disagree with.
+    /// </summary>
+    [Fact]
+    public void TheLimit_IsHotApplied()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        h.Event(ProcessStart, 0);
+        double t = 0;
+        for (; t <= 20.0; t += 0.5) h.Engine.ProcessSample(On(t));
+        Assert.Equal(ToolEventContext.InWindow, h.Last.ToolEventState);   // default limit 600 s
+
+        h.Engine.ConfigureToolEventsLive(new ToolEventSettings { MaxWindowSeconds = 10 });
+        h.Engine.ProcessSample(On(t));
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+    }
+
+    /// <summary>
+    /// After a timeout the fallback is the classifier when one is configured, exactly as before
+    /// the first event — one meaning for Unknown, whichever way the engine came to it.
+    /// </summary>
+    [Fact]
+    public void AfterATimeout_WithAClassifier_TheClassifierDecidesAgain()
+    {
+        var classifier = new ProcessClassifierSettings
+        {
+            Enabled = true,
+            DecideAfterFrames = 1,
+            Rules =
+            {
+                new ProcessClassRule
+                {
+                    ClassName = "A", DisplayName = "O777/O777",
+                    Numerator = Raw("O 777", O777), Denominator = Raw("O 777", O777),
+                    Op = ComparisonOp.GreaterThan, Threshold = 0.5,
+                },
+            },
+        };
+        using var h = new Harness(classifier, Ratio("R_A", "A"), Ratio("R_B", "B"));
+        h.Engine.ConfigureToolEvents(Pm3());
+        h.Engine.ConfigureToolEventsLive(new ToolEventSettings { MaxWindowSeconds = 5 });
+
+        h.Event(CleanStart, 0);
+        double t = 0;
+        for (; t <= 2.0; t += 0.5) h.Engine.ProcessSample(On(t));
+        Assert.Equal("B", h.Last.ProcessClass);                          // the tool's word
+
+        for (; t <= 7.0; t += 0.5) h.Engine.ProcessSample(On(t));
+        Assert.Equal(ToolEventContext.Unknown, h.Last.ToolEventState);
+        Assert.Equal("A", h.Last.ProcessClass);                          // the classifier's again
+        Assert.Equal(RatioState.NotApplicable, h.Ratio("R_B").State);
+        Assert.NotEqual(RatioState.NotApplicable, h.Ratio("R_A").State);
+    }
+
+    /// <summary>
+    /// The event's own time — the tool's, when the EAP sends <c>TIME</c> — is what the status
+    /// reports for it, not the moment it happened to arrive.
+    /// </summary>
+    [Fact]
+    public void TheEventsOwnTime_IsWhatTheStatusReports()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"));
+        h.Engine.ConfigureToolEvents(Pm3());
+
+        var stamped = new DateTime(2026, 10, 22, 14, 3, 0, 250, DateTimeKind.Local);
+        h.Engine.ReceiveToolEvent(ProcessStart, stamped);
+
+        Assert.Equal(stamped, h.Engine.ToolStatus.LastTime);
     }
 }
