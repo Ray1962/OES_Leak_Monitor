@@ -17,6 +17,7 @@
 8. [日常操作 SOP](#8-日常操作-sop)
 9. [疑難排解](#9-疑難排解)
 10. [附錄：參數預設值](#10-附錄參數預設值)
+11. [附錄：SECS 識別碼（SVID／ALID／CEID）](#11-附錄secs-識別碼svidalidceid)
 
 ---
 
@@ -1523,6 +1524,91 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 | 閒置自動鎖定 | 5 分鐘 |
 | 角色等級 | Guest(0) < Operator(1) < Engineer(2) < Admin(3) |
 
+## 11. 附錄：SECS 識別碼（SVID／ALID／CEID）
+
+本機台以 SECS/GEM（HSMS）與廠內 Host／MES 連線時，Host 看到的每一筆資料都有一個識別碼。這三種識別碼各自回答 Host 的一個問題：
+
+| | 全名 | 回答的問題 | 誰先開口 | 訊息 |
+|---|---|---|---|---|
+| **SVID** | Status Variable ID | 「現在的值是多少？」 | Host 來問（或用 Trace 訂閱） | S1F3／S1F4、S2F23 → S6F1 |
+| **ALID** | Alarm ID | 「出了什麼問題？」 | 設備主動送 | S5F1（發生／解除） |
+| **CEID** | Collection Event ID | 「剛剛發生了什麼事？」 | 設備主動送 | S6F11 |
+
+可以這樣記：**SVID 是儀表板，ALID 是警報燈，CEID 是事件日誌。**
+
+> 連線設定、每班的檢查方式與故障排除見 SECS 連線操作 SOP（`secs-operation-sop-zh-TW.html`，與本手冊放在同一個資料夾）。本附錄只說明識別碼的意思。
+
+### 11.1 SVID：狀態變數
+
+一個 SVID 代表一個隨時可以讀的數值。Host 送 S1F3 列出想要的 SVID，設備以 S1F4 依同樣順序回值；要連續追蹤，Host 用 S2F23 訂閱 Trace，設備依週期以 S6F1 推送。
+
+編碼為 10 位數 `1ccssaavvv`：
+
+```
+1022700007
+│││││ │└─ vvv = 007  量測項目：Composite leak level
+│││││ └── aa  = 00   slit valve（OES 一律 00）
+│││└┴──── ss  = 27   感測器種類：OES Leak Monitor
+│└┴────── cc  = 02   腔體：Ch_2（SECS 分頁設定的機台號）
+└──────── 固定 1
+```
+
+- **VID 001～029 已實作**：洩漏率、複合狀態、電漿有無、積分時間、製程類別等。
+- **比值槽位 VID 101～400 尚未實作**（規格已定義，每組比值佔 30 個號碼）。
+- **SVID 的值永遠如實回報**，不受任何報告開關影響。資料來自測試模式或回放時，VID 016 也照實回 1，Host 據此就能判斷這批數據不可用於製程判定。
+
+最常用的幾個：
+
+| VID | 項目 | 讀法 |
+|---|---|---|
+| 001 | Leak rate（mbar·L/s） | **必須搭配 004 讀**——沒有估計時送 0，不代表沒有漏氣 |
+| 004 | Leak rate valid | 1 = 001～003 本幀有效 |
+| 006 | Calibration status | 0 未校正／1 有效／2 基準不符（估計暫停） |
+| 007 | Composite leak level | 0 Idle／1 Normal／2 Warning／3 Alarm（鎖存） |
+| 016 | Test / replay mode | 1 = 資料不是實機量測 |
+
+### 11.2 ALID：警報
+
+設備在異常**發生**時送一次 S5F1（ALCD bit7 = 1），**解除**時再送一次（bit7 = 0），Host 回 S5F2 表示收到。所以警報是成對的：Host 警報清單上掛著的，就是還沒解除的那些。
+
+編碼為 8 位數 `1ccssnnn`（比 SVID 少了 `aa`），例如 `10227002` = Ch_2 的 OES 洩漏警報。本機以 ASCII 送出：`<A[8] "10227002">`。
+
+| nnn | 警報 | 何時 set／clear |
+|---|---|---|
+| 001 | Leak warning | 複合狀態進入／離開 Warning |
+| 002 | Leak alarm | 進入 Alarm 時 set（同時 clear 001）；操作者確認後 clear |
+| 012 | Connection lost | 光譜儀斷線（是轉態；啟動時本來就沒連線不算） |
+| 013 | Acquisition error | 採集錯誤 |
+| 014 | Data write failure | CSV 寫不進去 |
+
+- 洩漏警報 001／002 受 SECS 分頁的 **Report alarms (S5F1)** 控制；測試或回放資料預設**不送**，要勾 **Report test / replay data too** 才送。
+- 設備故障 012～014 在測試模式下**照樣送**：光譜儀掉線是這台機器的事實，與畫面上的光譜是真是假無關。
+
+### 11.3 CEID：事件
+
+事件是「某件事剛剛發生」的通知，以 S6F11 送出，可附帶報告。與警報不同，事件沒有「解除」，發生一次就送一次。
+
+編碼與 ALID 同形式（`1ccss` + 3 碼），自 501 起編，例如 `10227502`。本機已實作三個：
+
+| nnn | 事件 | 觸發時機 |
+|---|---|---|
+| 502 | Operator acknowledged | 操作者在 Leak Monitor 分頁按 Acknowledge，解除鎖存的洩漏警報 |
+| 508 | Acquisition started | 開始採集 |
+| 509 | Acquisition stopped | 停止採集 |
+
+**報告（Report）：** Host 可先用 S2F33 把一組 SVID 定義成一個 RPTID，再用 S2F35 把它連到某個 CEID；事件發生時，S6F11 就會帶上那一刻的值。
+
+ALID 與 CEID 格式相同，但屬於不同的命名空間（ALID 用 001～130，CEID 自 501 起），不會互相衝突。
+
+### 11.4 三者如何配合：以一次漏氣為例
+
+1. 比值持續升高 → 設備送 **ALID 001 set**（Warning）。
+2. 確認是漏氣 → 送 **ALID 001 clear** 與 **ALID 002 set**（Alarm，鎖存）。
+3. Host 以 S1F3 讀 **SVID 001／004／007**，得知漏率多少、估計是否有效、目前等級。
+4. 漏點處理完，操作者按 Acknowledge → 送 **ALID 002 clear**，再送 **CEID 502**，告訴 Host 是人解除的，不是自己消失的。
+
+逐項的數值範例：比值槽位見 `secs-ratio-svid-example-zh-TW.html`（與本手冊同一個資料夾）；全域 VID 001～009 見原始碼庫的 `docs/secs-global-vid-example-zh-TW.html`。完整定義在 `docs/Satellite_SECS_Specification_v2.md` §1.4、§5、§6。
+
 ---
 
 ## 名詞對照
@@ -1537,3 +1623,6 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 | 鎖存 | Latched | 警報一旦觸發就保持，需人工清除 |
 | 標準漏孔 | Calibrated Leak | 已知漏率的校正件 |
 | 漏率 | Leak Rate (mbar·L/s) | 單位時間洩漏的氣體量 |
+| 狀態變數識別碼 | SVID (Status Variable ID) | Host 可隨時查詢的數值，見 §11.1 |
+| 警報識別碼 | ALID (Alarm ID) | 設備主動送出的警報，成對 set／clear，見 §11.2 |
+| 事件識別碼 | CEID (Collection Event ID) | 設備主動送出的事件通知，見 §11.3 |
