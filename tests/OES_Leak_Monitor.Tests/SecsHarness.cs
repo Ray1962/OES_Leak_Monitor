@@ -47,7 +47,8 @@ internal sealed class SecsHarness : IAsyncDisposable
 
     public int Samples { get { lock (_traces) { return _traces.Count; } } }
 
-    public static async Task<SecsHarness> StartAsync(Action<SecsSettings>? configure = null)
+    public static async Task<SecsHarness> StartAsync(Action<SecsSettings>? configure = null,
+        SystemLogger? log = null)
     {
         var h = new SecsHarness();
         var port = SecsTestPort.Free();
@@ -65,7 +66,7 @@ internal sealed class SecsHarness : IAsyncDisposable
         };
         configure?.Invoke(settings);
 
-        h.Bridge = new SecsBridge(null, h._folder, h._folder,
+        h.Bridge = new SecsBridge(log, h._folder, h._folder,
             () => new SecsBridge.AcquisitionInfo(120f, 4u));
         h.Bridge.Configure(settings);
 

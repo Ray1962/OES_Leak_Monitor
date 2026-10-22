@@ -1547,11 +1547,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // it later cannot answer the mismatch question. Write the conditions beside it while they
         // are still known. Best-effort: the recording is what matters, and a missing sidecar
         // leaves things exactly as they were before it existed.
+        // The process window the tool's events had put the monitor in goes with it, so a baseline
+        // built from this recording later can know which process it was.
         var acquisition = _leakMonitorEngine.CurrentAcquisition;
+        var toolStatus = _leakMonitorEngine.ToolStatus;
         foreach (var f in files)
         {
             if (string.IsNullOrEmpty(f)) continue;
-            var failure = AcquisitionSidecar.TryWrite(f, acquisition);
+            var failure = AcquisitionSidecar.TryWrite(f, acquisition, toolStatus);
             if (failure is not null)
                 _systemLogger.LogSystemEvent(LogSeverity.Warning, "AcquisitionSidecarFailed",
                     $"Could not record the acquisition conditions beside {System.IO.Path.GetFileName(f)}: " +
