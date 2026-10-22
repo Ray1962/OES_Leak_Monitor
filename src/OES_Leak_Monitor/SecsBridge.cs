@@ -383,11 +383,35 @@ public sealed class SecsBridge : IDisposable
                 return RemoteCommandResult.Accepted;
             case ToolEventAck.Ignored:
                 Emit($"[EQP] TOOL_EVENT CEID {ceid} ignored (not in the tool event table)");
+                LogIgnoredOnce(ceid.Value);
                 return RemoteCommandResult.Accepted;
             default:
                 Emit($"[EQP] TOOL_EVENT CEID {ceid} refused: tool events are not in use -> HCACK=2");
                 return RemoteCommandResult.Rejected(2);
         }
+    }
+
+    // CEIDs already reported as ignored this run. The EAP is invited to forward the tool's events
+    // unfiltered, so every slit-valve cycle and load-lock pump-down arrives here; one audit entry
+    // per CEID says "this event reaches us and is not mapped" without burying the log it is in.
+    // The traffic log still has every one.
+    private readonly HashSet<uint> _ignoredLogged = new();
+
+    /// <summary>
+    /// The first time a CEID arrives that the table does not map, put it in the system log — the
+    /// traffic log is not what anyone reads when asking why a window never opened. Runs on the
+    /// receive thread: <see cref="SystemLogger"/> only queues the entry for its writer thread.
+    /// </summary>
+    private void LogIgnoredOnce(uint ceid)
+    {
+        lock (_ignoredLogged)
+        {
+            if (!_ignoredLogged.Add(ceid)) return;
+        }
+        _log?.LogSystemEvent(LogSeverity.Information, "ToolEventIgnored",
+            $"Main tool event CEID {ceid} is not in the tool event table — acknowledged, nothing done " +
+            "(logged once per CEID; the SECS traffic log has every occurrence)",
+            related: $"CEID={ceid}");
     }
 
     /// <summary>

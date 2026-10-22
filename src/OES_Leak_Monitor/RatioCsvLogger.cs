@@ -66,6 +66,10 @@ public sealed class RatioCsvLogger : IDisposable
     // classifier is configured, in which case no process columns are written at all and the
     // file is identical to the one this logger has always produced.
     private string[] _discriminantLabels = Array.Empty<string>();
+    // Whether the main tool's events (S2F41 TOOL_EVENT) are in use for this file, fixed when it
+    // opens — the same rule as the process columns. It cannot change under an open file anyway:
+    // the table is adopted on an acquisition restart, and acquisition stopping closes the file.
+    private bool _toolColumns;
 
     private StreamWriter? _writer;
     private string _currentPath = "";
@@ -163,6 +167,14 @@ public sealed class RatioCsvLogger : IDisposable
                             ? snap.ProcessDiscriminants[i].Value
                             : (double?)null));
                 }
+                if (_toolColumns)
+                {
+                    // The window this frame was judged in, by name — the same words the engine
+                    // logs, so a row and the ToolEventWindowOpened entry beside it agree on their
+                    // face, and like OverallState it reads without the specification to hand.
+                    row.Append(',').Append(snap.ToolEventState.ToString());
+                    row.Append(',').Append(Safe(snap.ToolWindowClass));
+                }
                 writer.WriteLine(row.ToString());
             }
             catch (Exception ex)
@@ -210,6 +222,7 @@ public sealed class RatioCsvLogger : IDisposable
             _ratioLabels = monitored.Select(r => r.DisplayName ?? "").ToArray();
             _pedestal = monitored.Select(r => r.ValueHasPedestal).ToArray();
             _discriminantLabels = _engine.ProcessDiscriminantLabels.ToArray();
+            _toolColumns = _engine.ToolStatus.State != ToolEventContext.Disabled;
             _writer = new StreamWriter(_currentPath, append: false, Utf8Bom) { AutoFlush = true };
             _sessionDate = sessionStart.Date;
             _writeErrorLogged = false;
@@ -248,6 +261,12 @@ public sealed class RatioCsvLogger : IDisposable
                 foreach (var label in _discriminantLabels)
                     header.Append(",disc:").Append(Safe(label));
             }
+            // Which process window the main tool's events put each frame in. Last, and only while
+            // they are in use, for the same reasons as the process columns: name-keyed readers
+            // skip it, and a site with no EAP forwarding events gets the file it always got. A row
+            // without it cannot be told apart from one judged during a clean or between steps.
+            if (_toolColumns)
+                header.Append(",ToolContext,ToolWindowClass");
             _writer.WriteLine(header.ToString());
 
             _systemLogger?.LogSystemEvent(LogSeverity.Information, "RatioCsvOpened",
