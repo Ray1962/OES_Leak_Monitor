@@ -52,7 +52,9 @@ public sealed class ToolEventOutputTests : IDisposable
             Wavelengths = wl,
             Intensities = inten,
             SerialNumber = "TEST",
-            IsSimulated = true,
+            // A hardware frame: the windows these files record are the chamber's, and tool events
+            // are not applied to synthetic spectra unless asked (#31).
+            IsSimulated = false,
         };
     }
 
