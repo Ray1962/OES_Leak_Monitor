@@ -100,4 +100,11 @@ public sealed class SecsSettings
 
     /// <summary>How many days of SECS traffic logs to keep. 0 keeps them for ever.</summary>
     public int LogRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Main-tool process events the EAP forwards as S2F41 <c>TOOL_EVENT</c>. Unlike the rest of
+    /// this class it is <b>staged</b> — adopted when acquisition next restarts, not on Save &amp;
+    /// apply — see <see cref="ToolEventSettings"/>.
+    /// </summary>
+    public ToolEventSettings ToolEvents { get; set; } = new();
 }

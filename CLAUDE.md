@@ -58,7 +58,7 @@ Two guards exist because a publish can "succeed" and still produce an unshippabl
 | `Aqst.OesApp.Core` | 0.1.10 | `Ray1962/DualOes_PlasmaMonitor` — `dotnet pack DualOes_PlasmaMonitor.sln -c Release -p:Platform=x64` |
 | `Aqst.OesApp.Wpf` | 0.1.16 | same solution, same command |
 | `Aqst.OesSpectrometer` | 0.6.2 | a **different** repo, `Ray1962/Aqst.OesSpectrometer` — the hardware SDK, not the app framework |
-| `Aqusen.Secs` | 0.6.0 | a **third** repo, `Ray1962/Test_SECS` — the SECS/GEM library (see its `整合指南.md`). Packed with `dotnet pack src/Aqusen.Secs/Aqusen.Secs.csproj -c Release -o nupkgs`, then the nupkg is copied into `LocalPackages` |
+| `Aqusen.Secs` | 0.7.0 | a **third** repo, `Ray1962/Test_SECS` — the SECS/GEM library (see its `整合指南.md`). Packed with `dotnet pack src/Aqusen.Secs/Aqusen.Secs.csproj -c Release -o nupkgs`, then the nupkg is copied into `LocalPackages`. 0.7.0 adds `EquipmentSimulator.RemoteCommandHandler`, which is how `TOOL_EVENT` reaches this app — 0.6.0 answered every S2F41 itself |
 
 `nuget.config` also lists a second local source, `aqusen`, pointing at `Test_SECS\nupkgs`. Both on purpose: `local-aqst` is what makes a build reproducible on a machine with no `Test_SECS` checkout, `aqusen` is what picks up a fresh pack during development without a copy step. `Secs4Net` 2.4.4 comes from nuget.org (via `Aqusen.Secs`, and referenced directly for `SecsGemOptions`).
 

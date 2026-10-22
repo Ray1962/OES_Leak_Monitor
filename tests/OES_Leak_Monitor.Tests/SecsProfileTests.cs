@@ -27,9 +27,13 @@ public class SecsProfileTests : IDisposable
         var profile = LoadStamped(2);
 
         Assert.Equal("OES Leak Monitor (ss=27)", profile.Name);
-        Assert.Equal(29, profile.RequiredBindings.Count());
+        Assert.Equal(32, profile.RequiredBindings.Count());
         Assert.Equal(5, profile.Alarms.Count());
-        Assert.Empty(profile.RemoteCommands);   // this tool reports; it is not driven
+        // One command, and it informs rather than drives: the EAP forwards the main tool's
+        // process events. Its parameter names are what the library checks before the app sees it.
+        var command = Assert.Single(profile.RemoteCommands);
+        Assert.Equal("TOOL_EVENT", command.Key);
+        Assert.Equal(new[] { "CEID", "TIME" }, command.Value);
     }
 
     [Fact]

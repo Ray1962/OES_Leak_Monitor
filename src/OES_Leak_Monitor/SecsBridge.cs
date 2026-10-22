@@ -225,6 +225,9 @@ public sealed class SecsBridge : IDisposable
                 BuildBindings());
 
             equipment.Log += Emit;
+            // The library has already checked the command and its parameter names against the
+            // profile; this decides the rest.
+            equipment.RemoteCommandHandler = HandleRemoteCommand;
             equipment.CommunicationStateChanged += _ => RefreshState();
             equipment.ControlStateChanged += _ => RefreshState();
             equipment.ConnectionChanged += _ => RefreshState();
@@ -294,6 +297,131 @@ public sealed class SecsBridge : IDisposable
     }
 
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
+
+    // ---- inbound: TOOL_EVENT ------------------------------------------------
+
+    /// <summary>
+    /// Where a forwarded main-tool event goes — the leak monitor's
+    /// <c>ReceiveToolEvent</c>, wired by the host. Kept as a delegate rather than an engine
+    /// reference so this class stays what the class note says it is: it reads the snapshot and
+    /// hands things on, it holds no measurement state. Null answers every event "cannot perform
+    /// now", which is the truth.
+    /// </summary>
+    public Func<uint, DateTime, ToolEventAck>? ToolEventSink { get; set; }
+
+    /// <summary>
+    /// Raised when the tool-event part of the snapshot changes (window, class, last CEID), so
+    /// the tab can redraw its status line without polling. Not on the UI thread.
+    /// </summary>
+    public event EventHandler? ToolContextChanged;
+
+    // Where the tool events have put the engine. Its own reference rather than a snapshot field:
+    // the table is applied and the host's events arrive whether or not frames are flowing, and
+    // 030-032 must answer for that moment, not for the last frame (which may not exist yet).
+    private volatile ToolEventStatus _toolStatus = ToolEventStatus.Disabled;
+
+    /// <summary>The engine's <see cref="LeakMonitorEngine.ToolStatusChanged"/>. Any thread; it
+    /// stores the value and raises <see cref="ToolContextChanged"/>, nothing else.</summary>
+    public void OnToolStatus(ToolEventStatus status)
+    {
+        _toolStatus = status;
+        ToolContextChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>One line for the SECS tab: which window the leak monitor is judging in, and the
+    /// last event the EAP forwarded.</summary>
+    public string ToolEventStatusText
+    {
+        get
+        {
+            var s = _toolStatus;
+            if (s.State == ToolEventContext.Disabled)
+                return "Tool events: not in use";
+            string window = s.State switch
+            {
+                ToolEventContext.InWindow => $"in window {s.WindowClass}",
+                ToolEventContext.OutsideWindow => "outside any window",
+                _ => "window unknown (judging as without tool events)",
+            };
+            string last = s.LastTime is { } t
+                ? $"last CEID {s.LastCeid} at {t:HH:mm:ss}"
+                : "no event received yet";
+            return $"Tool events: {window}; {last}";
+        }
+    }
+
+    /// <summary>
+    /// S2F41 after the library's own checks (ONLINE/REMOTE, command and parameter names listed
+    /// in the profile). Runs on the receive thread while the host waits, so it parses, hands the
+    /// event on and answers — nothing else.
+    /// </summary>
+    private RemoteCommandResult HandleRemoteCommand(RemoteCommandRequest request)
+    {
+        // The profile is site-editable; a command added there that this build does not implement
+        // is not one it should pretend to have carried out.
+        if (!string.Equals(request.Command, "TOOL_EVENT", StringComparison.OrdinalIgnoreCase))
+            return RemoteCommandResult.Rejected(1);
+
+        var ceidParam = request.Find("CEID");
+        uint? ceid = ceidParam is null ? null : ParseCeid(ceidParam.Value);
+        if (ceid is null)
+        {
+            Emit($"[EQP] TOOL_EVENT without a readable CEID -> HCACK=3");
+            return ceidParam is null
+                ? RemoteCommandResult.Rejected(3)
+                : new RemoteCommandResult(3, new[] { new RemoteCommandParameterAck("CEID", 2) });  // CPACK 2: illegal value
+        }
+
+        var sink = ToolEventSink;
+        // TIME is accepted (the profile lists it, so an EAP that sends it is not refused) but not
+        // yet used: the event is stamped with the moment it arrived.
+        var ack = sink?.Invoke(ceid.Value, DateTime.Now) ?? ToolEventAck.Disabled;
+        switch (ack)
+        {
+            case ToolEventAck.Accepted:
+                Emit($"[EQP] TOOL_EVENT CEID {ceid} taken");
+                return RemoteCommandResult.Accepted;
+            case ToolEventAck.Ignored:
+                Emit($"[EQP] TOOL_EVENT CEID {ceid} ignored (not in the tool event table)");
+                return RemoteCommandResult.Accepted;
+            default:
+                Emit($"[EQP] TOOL_EVENT CEID {ceid} refused: tool events are not in use -> HCACK=2");
+                return RemoteCommandResult.Rejected(2);
+        }
+    }
+
+    /// <summary>
+    /// A CEID as the EAP may send it: ASCII digits (what <c>GemHost</c> and most hosts put in a
+    /// CPVAL), or an unsigned integer item. Null for anything else, or a value that cannot be a
+    /// CEID — a guess here would open a window nobody asked for.
+    /// </summary>
+    public static uint? ParseCeid(Item value)
+    {
+        try
+        {
+            switch (value.Format)
+            {
+                case SecsFormat.ASCII or SecsFormat.JIS8:
+                    return uint.TryParse(value.GetString().Trim(), NumberStyles.None,
+                        CultureInfo.InvariantCulture, out var n) ? n : null;
+                case SecsFormat.U4 when value.Count == 1:
+                    return value.FirstValue<uint>();
+                case SecsFormat.U8 when value.Count == 1:
+                    var u8 = value.FirstValue<ulong>();
+                    return u8 <= uint.MaxValue ? (uint)u8 : null;
+                case SecsFormat.U2 when value.Count == 1:
+                    return value.FirstValue<ushort>();
+                case SecsFormat.U1 when value.Count == 1:
+                    return value.FirstValue<byte>();
+                default:
+                    return null;
+            }
+        }
+        catch (Exception)
+        {
+            return null;   // a malformed item is a parameter error, not a reason to drop the link
+        }
+    }
 
     // ---- inputs ------------------------------------------------------------
 
@@ -521,6 +649,13 @@ public sealed class SecsBridge : IDisposable
                () => (uint)(_snapshot?.ProcessClassState ?? ProcessClassState.NotConfigured));
         b.Bind("oes.processStepIndex", () => (uint)Math.Max(0, _snapshot?.ProcessStepIndex ?? 0));
 
+        // 030-032: the process window the main tool's forwarded events put the monitor in, and
+        // the last event it received. 030 is what tells a host whether 027 came from the tool or
+        // from the fallback — and 032 lets the EAP see its own forwarding arrive.
+        b.Bind("oes.toolEventState", () => (uint)_toolStatus.State);
+        b.Bind("oes.toolWindowClass", () => _toolStatus.WindowClass);
+        b.Bind("oes.lastToolCeid", () => _toolStatus.LastCeid);
+
         return b;
     }
 
@@ -545,6 +680,7 @@ public sealed class SecsBridge : IDisposable
         "oes.calCaptureActive", "oes.calCaptureProgress", "oes.plasmaPresent",
         "oes.plasmaGateAvailable", "oes.dropoutCount", "oes.integrationTime", "oes.averageCount",
         "oes.frameRate", "oes.processClass", "oes.processClassState", "oes.processStepIndex",
+        "oes.toolEventState", "oes.toolWindowClass", "oes.lastToolCeid",
     };
 
     /// <summary>

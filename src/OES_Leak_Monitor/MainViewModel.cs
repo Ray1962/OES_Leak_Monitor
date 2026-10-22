@@ -80,6 +80,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Tracks the OES acquisition state so a Stop→Start transition applies a staged
     // Ratio Setup configuration. Single-device app, so one flag suffices.
     private bool _wasAcquiring;
+    // The tool-event table as last saved — what the engine adopts on the next acquisition start.
+    // Kept apart from the running one because it is staged: Save writes it, a restart applies it.
+    private ToolEventSettings _savedToolEvents = new();
 
     // Data-folder housekeeping: compress expired day folders (never delete) and warn about
     // free space. Runs off the UI thread on a slow timer; the results are surfaced in the
@@ -326,6 +329,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.SampleProcessed += (_, snap) => _secs.OnSample(snap);
         _leakMonitorEngine.Acknowledged += (_, e) => _secs.OnAcknowledged(e);
         Secs = new SecsViewModel(_secs, settings.Secs, PersistSecsSettings);
+        // Main-tool process events forwarded by the EAP (S2F41 TOOL_EVENT) go straight to the
+        // engine; the bridge only parses and answers. The table is adopted now — start-up is an
+        // acquisition start as far as configuration goes — and thereafter only when acquisition
+        // restarts, beside the ratio set whose classes it names.
+        _secs.ToolEventSink = _leakMonitorEngine.ReceiveToolEvent;
+        _leakMonitorEngine.ToolStatusChanged += _secs.OnToolStatus;
+        _savedToolEvents = settings.Secs.ToolEvents?.Clone() ?? new ToolEventSettings();
+        _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
         _secs.Configure(settings.Secs);
 
         // One-click diagnostic bundle, on the Logs tab and deliberately ungated. Constructed last
@@ -417,6 +428,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (now && !_wasAcquiring)
         {
             _leakMonitorEngine.ReloadRatios();
+            _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
             _systemLogger.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatiosApplied",
                 "Species-ratio configuration (re)applied on OES acquisition start");
         }
@@ -853,6 +865,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var onDisk = _settingsService.Load();
             onDisk.Secs = secs;
             _settingsService.Save(onDisk);
+            // Saved now, applied on the next acquisition start — see _savedToolEvents.
+            _savedToolEvents = secs.ToolEvents?.Clone() ?? new ToolEventSettings();
             _systemLogger.LogSystemEvent(LogSeverity.Information, "SecsSettingsSaved",
                 "SECS interface settings saved",
                 related: $"User={AccessControl.CurrentUsername ?? "(guest)"},Enabled={secs.Enabled}," +
