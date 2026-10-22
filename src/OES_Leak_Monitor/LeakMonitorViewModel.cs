@@ -188,7 +188,12 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     public bool TestMode
     {
         get => _testMode;
-        private set { if (Set(ref _testMode, value)) OnPropertyChanged(nameof(TestModeNote)); }
+        private set
+        {
+            if (!Set(ref _testMode, value)) return;
+            OnPropertyChanged(nameof(TestModeNote));
+            RaiseToolContextNote();
+        }
     }
 
     private string _testModeSourceNote = "synthetic spectra";
@@ -211,6 +216,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         _testModeAlarmsSuppressed = alarmsSuppressed;
         _testModeToolEventsApplied = toolEventsApplied;
         OnPropertyChanged(nameof(TestModeNote));
+        RaiseToolContextNote();
     }
 
     private bool? _testModeToolEventsApplied;
@@ -228,6 +234,38 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     public string TestModeNote => _testMode
         ? FormatTestModeNote(_testModeSourceNote, _testModeAlarmsSuppressed, _testModeToolEventsApplied)
         : "";
+
+    private ToolEventContext _toolContext = ToolEventContext.Disabled;
+
+    /// <summary>
+    /// The banner line for an unknown process context: tool events are in use, but no window is in
+    /// force — no edge has arrived yet, the last window timed out, or the events are not applied to
+    /// these spectra. Empty when it would say nothing new: inside or outside a known window, with
+    /// tool events off, or when the test-mode line already says the events are not applied (the
+    /// same fact, said once).
+    /// </summary>
+    public static string FormatToolContextNote(ToolEventContext state, bool testMode, bool? testModeToolEventsApplied) =>
+        state != ToolEventContext.Unknown || (testMode && testModeToolEventsApplied == false)
+            ? ""
+            : "PROCESS CONTEXT UNKNOWN — no process window from the main tool is in force (no window edge yet, " +
+              "or the last window timed out); ratios are judged as without tool events.";
+
+    public string ToolContextNote => FormatToolContextNote(_toolContext, _testMode, _testModeToolEventsApplied);
+
+    public bool HasToolContextNote => ToolContextNote.Length > 0;
+
+    private void SetToolContext(ToolEventContext context)
+    {
+        if (_toolContext == context) return;
+        _toolContext = context;
+        RaiseToolContextNote();
+    }
+
+    private void RaiseToolContextNote()
+    {
+        OnPropertyChanged(nameof(ToolContextNote));
+        OnPropertyChanged(nameof(HasToolContextNote));
+    }
 
     private string _signalWarningNote = "";
     /// <summary>Banner shown when one or more enabled ratios are below their SNR floor — the
@@ -463,6 +501,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private void ApplySnapshot(LeakMonitorSnapshot snap)
     {
         TestMode = snap.TestMode;
+        SetToolContext(snap.ToolEventState);
         CaptureActive = snap.CaptureActive;
         CaptureProgressPercent = snap.CaptureProgress01 * 100.0;
         ApplyLeakRate(snap);          // writes _pendingLeakRate*

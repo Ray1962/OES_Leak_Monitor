@@ -4,6 +4,7 @@
              xmlns:local="clr-namespace:OES_Leak_Monitor">
 
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
@@ -46,9 +47,17 @@
                            Foreground="#334" TextWrapping="Wrap"
                            ToolTip="Switching reporting off does not hide anything: the state still reaches this app's own log and any host status query. It only stops the equipment volunteering it."/>
 
-                <TextBlock Text="{Binding ToolEventStatus}" Margin="0,4,0,0"
-                           Foreground="#334" TextWrapping="Wrap"
-                           ToolTip="Which process window the leak monitor is judging in, from the main tool's events the EAP forwards as S2F41 TOOL_EVENT (VID 030–032). The CEID table is in settings.json under secs.toolEvents and is applied when acquisition next starts."/>
+                <!-- Tool events: which process window the leak monitor is judging in. Ungated —
+                     "does the OES know what the tool is running?" is an Operator question too. -->
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                            ToolTip="From the main tool's process events the EAP forwards as S2F41 TOOL_EVENT (VID 030–032). The CEID table is below.">
+                    <TextBlock Text="{Binding ToolContextText}" Foreground="#334" Margin="0,0,16,0"
+                               AutomationProperties.Name="Tool event context" TextWrapping="Wrap" MaxWidth="760"/>
+                    <TextBlock Text="{Binding ToolLastEventText}" Foreground="#334" Margin="0,0,16,0"
+                               AutomationProperties.Name="Last tool event"/>
+                    <TextBlock Text="{Binding ToolEventCountText}" Foreground="#334"
+                               AutomationProperties.Name="Tool event count"/>
+                </StackPanel>
 
                 <TextBlock Text="{Binding IdExample}" Margin="0,4,0,0" Foreground="#777"
                            TextWrapping="Wrap"
@@ -135,6 +144,33 @@
                     </StackPanel>
                 </WrapPanel>
 
+                <!-- Tool events. Two kinds of field, labelled as such: the switch (with the CEID
+                     table) is staged — adopted at the next acquisition start, because the table
+                     names the classes the ratios refer to — while the window limit and the
+                     test-mode switch apply on save. -->
+                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,6,0,2" Margin="0,2,0,4">
+                    <WrapPanel>
+                        <TextBlock Text="Tool events (S2F41 TOOL_EVENT):" FontWeight="Bold"
+                                   VerticalAlignment="Center" Margin="0,0,12,6"/>
+                        <CheckBox Content="Use tool events — takes effect at next acquisition start"
+                                  IsChecked="{Binding ToolEventsEnabled}"
+                                  AutomationProperties.Name="Use tool events"
+                                  VerticalAlignment="Center" Margin="0,0,20,6"
+                                  ToolTip="The main tool's process events, forwarded by the EAP, decide which class-scoped ratios judge. Staged with the CEID table: saved now, applied when acquisition next starts (Stop, then Start)."/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                            <TextBlock Text="Max window (s) — applies on save:" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding ToolMaxWindowSeconds}" Width="60" VerticalAlignment="Center"
+                                     AutomationProperties.Name="Max window seconds"
+                                     ToolTip="A window open longer than this lost its End: it closes and ratios are judged as without tool events until the next edge. 10–86400 s; a process A step is 38–63 s."/>
+                        </StackPanel>
+                        <CheckBox Content="Apply tool events in test mode — applies on save"
+                                  IsChecked="{Binding ToolApplyInTestMode}"
+                                  AutomationProperties.Name="Apply tool events in test mode"
+                                  VerticalAlignment="Center" Margin="0,0,0,6"
+                                  ToolTip="Off by default: a synthetic spectrum is not the chamber. On, the tool's window is applied to test-mode spectra, so the windows can be exercised on a machine with no spectrometer. Never applies during a replay."/>
+                    </WrapPanel>
+                </Border>
+
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                     <Button Content="Save &amp; apply" Command="{Binding SaveCommand}"
                             Padding="14,4" MinWidth="110" Margin="0,0,8,0" FontWeight="Bold"
@@ -156,6 +192,38 @@
                         </TextBlock.Style>
                     </TextBlock>
                 </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- The CEID table, read-only and ungated: everyone may see what the tool's events mean,
+             and a disabled grid would grey it out for exactly the people reading it. -->
+        <Border DockPanel.Dock="Top" Background="#FAFAFA"
+                BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,6">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Tool event CEID table (as saved):" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBlock Text="Edited in settings.json (secs.toolEvents.mappings); takes effect at the next acquisition start."
+                               Foreground="#777" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="{Binding ToolTablePendingText}" Foreground="#B8860B" FontWeight="SemiBold"
+                           Margin="0,4,0,0" TextWrapping="Wrap"
+                           AutomationProperties.Name="Tool table pending"
+                           Visibility="{Binding ToolTablePending, Converter={StaticResource BoolToVis}}"/>
+                <DataGrid ItemsSource="{Binding ToolEventMappings}" AutoGenerateColumns="False"
+                          IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False"
+                          CanUserDeleteRows="False" CanUserReorderColumns="False"
+                          GridLinesVisibility="Horizontal" Background="White"
+                          MaxHeight="150" Margin="0,4,0,0"
+                          AutomationProperties.Name="Tool event CEID table">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="CEID" Binding="{Binding Ceid}" Width="110"/>
+                        <DataGridTextColumn Header="Class" Binding="{Binding ClassName}" Width="100"/>
+                        <DataGridTextColumn Header="Edge" Binding="{Binding Edge}" Width="60"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="320"/>
+                        <DataGridTextColumn Header="Plasma threshold" Binding="{Binding PlasmaThreshold}" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </StackPanel>
         </Border>
 

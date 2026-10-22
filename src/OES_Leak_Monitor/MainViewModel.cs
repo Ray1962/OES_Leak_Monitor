@@ -337,6 +337,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.ToolStatusChanged += _secs.OnToolStatus;
         _savedToolEvents = settings.Secs.ToolEvents?.Clone() ?? new ToolEventSettings();
         _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
+        Secs.SetToolEventsInForce(_savedToolEvents);   // what the SECS tab compares a saved table to
         // The hot-applied half (the window time limit): now, and again on every SECS-tab save.
         _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
         UpdateTestModeContext();
@@ -432,6 +433,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             _leakMonitorEngine.ReloadRatios();
             _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
+            Secs.SetToolEventsInForce(_savedToolEvents);   // the saved table is now the one in force
             UpdateTestModeContext();   // the banner names whether tool events are in use
             _systemLogger.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatiosApplied",
                 "Species-ratio configuration (re)applied on OES acquisition start");

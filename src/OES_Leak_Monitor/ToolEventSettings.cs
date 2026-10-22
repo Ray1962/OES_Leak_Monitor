@@ -51,6 +51,27 @@ public sealed class ToolEventSettings
     /// </summary>
     public bool ApplyInTestMode { get; set; }
 
+    /// <summary>
+    /// Whether two settings agree on the <b>staged</b> half — the switch and the table — which is
+    /// what the engine adopts at an acquisition start. The hot-applied fields are left out: they
+    /// take effect on save, so they never leave a saved table waiting. Switched off is one state
+    /// whatever rows it carries.
+    /// </summary>
+    public static bool SameStaged(ToolEventSettings? a, ToolEventSettings? b)
+    {
+        bool aOn = a?.Enabled == true, bOn = b?.Enabled == true;
+        if (aOn != bOn) return false;
+        if (!aOn) return true;
+        var x = a!.Mappings ?? new();
+        var y = b!.Mappings ?? new();
+        return x.Count == y.Count && x.Zip(y).All(p =>
+            p.First.Ceid == p.Second.Ceid &&
+            string.Equals(p.First.ClassName?.Trim() ?? "", p.Second.ClassName?.Trim() ?? "", StringComparison.Ordinal) &&
+            p.First.Edge == p.Second.Edge &&
+            p.First.Name == p.Second.Name &&
+            p.First.PlasmaThreshold.Equals(p.Second.PlasmaThreshold));
+    }
+
     public ToolEventSettings Clone() => new()
     {
         Enabled = Enabled,
@@ -121,7 +142,11 @@ public enum ToolEventContext
 /// flowing at all — reading it off the last frame told an operator "not in use" for a table that
 /// had been applied, and told the host VID 030 = 0, until acquisition happened to start.
 /// </summary>
-public sealed record ToolEventStatus(ToolEventContext State, string WindowClass, uint LastCeid, DateTime? LastTime)
+/// <param name="ReceivedCount">Events received this run while tool events were in use — taken
+/// or ignored by the table alike. The SECS tab shows it so "is the EAP forwarding anything?" has a
+/// number for an answer.</param>
+public sealed record ToolEventStatus(ToolEventContext State, string WindowClass, uint LastCeid, DateTime? LastTime,
+    int ReceivedCount = 0)
 {
     public static readonly ToolEventStatus Disabled = new(ToolEventContext.Disabled, "", 0, null);
 }

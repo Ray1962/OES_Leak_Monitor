@@ -335,6 +335,7 @@ public sealed class LeakMonitorEngine : IDisposable
     private readonly object _toolLastGate = new();
     private uint _lastToolCeid;
     private DateTime? _lastToolEventTime;
+    private int _toolReceivedCount;   // this run, under _toolLastGate
     private volatile ToolEventStatus _toolStatus = ToolEventStatus.Disabled;
 
     /// <summary>Where the tool events have put the engine right now — current between frames too.</summary>
@@ -719,6 +720,16 @@ public sealed class LeakMonitorEngine : IDisposable
     }
 
     /// <summary>
+    /// Appended to a window's opened / closed log line while the window is being tracked but not
+    /// applied. Read later, a bare "Process window A opened" claims the ratios were scoped to A;
+    /// during a replay or on synthetic spectra they were judged as without tool events. The entry
+    /// names stay the same, so a filter on them still finds every edge the tool reported.
+    /// </summary>
+    private string NotAppliedNote() => !_toolSuppressed ? ""
+        : _replayActive ? " (not applied: a replay is running)"
+        : " (not applied: synthetic test-mode spectra)";
+
+    /// <summary>
     /// The window as far as judging is concerned: what the events say, or Unknown while they are
     /// suppressed for the frames now arriving (a replay, or synthetic spectra) — the same
     /// fail-open as before the first edge, because "these frames are not the chamber" is not
@@ -737,16 +748,18 @@ public sealed class LeakMonitorEngine : IDisposable
     {
         uint lastCeid;
         DateTime? lastTime;
+        int received;
         lock (_toolLastGate)
         {
             lastCeid = _lastToolCeid;
             lastTime = _lastToolEventTime;
+            received = _toolReceivedCount;
         }
         var context = ToolContextInForce;
         var status = new ToolEventStatus(
             context,
             context == ToolEventContext.InWindow ? _toolWindowClass ?? "" : "",
-            lastCeid, lastTime);
+            lastCeid, lastTime, received);
         if (status == _toolStatus) return;
         _toolStatus = status;
         ToolStatusChanged?.Invoke(status);
@@ -767,6 +780,7 @@ public sealed class LeakMonitorEngine : IDisposable
         {
             _lastToolCeid = ceid;
             _lastToolEventTime = time;
+            _toolReceivedCount++;
         }
         PublishToolStatus();
         if (!table.TryGet(ceid, out var mapping)) return ToolEventAck.Ignored;
@@ -824,7 +838,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 _toolContext = ToolEventContext.InWindow;
                 _toolWindowOpenedAt = frameTime;
                 _log?.LogSystemEvent(LogSeverity.Information, "ToolEventWindowOpened",
-                    $"Process window {cls} opened ({name} at {at})", related: $"CEID={m.Ceid},Class={cls}");
+                    $"Process window {cls} opened ({name} at {at}){NotAppliedNote()}", related: $"CEID={m.Ceid},Class={cls}");
             }
             else if (_toolContext == ToolEventContext.InWindow &&
                      string.Equals(_toolWindowClass, cls, StringComparison.OrdinalIgnoreCase))
@@ -833,7 +847,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 _toolWindowOpenedAt = null;
                 _toolContext = ToolEventContext.OutsideWindow;
                 _log?.LogSystemEvent(LogSeverity.Information, "ToolEventWindowClosed",
-                    $"Process window {cls} closed ({name} at {at})", related: $"CEID={m.Ceid},Class={cls}");
+                    $"Process window {cls} closed ({name} at {at}){NotAppliedNote()}", related: $"CEID={m.Ceid},Class={cls}");
             }
             else
             {
@@ -1054,10 +1068,12 @@ public sealed class LeakMonitorEngine : IDisposable
         lock (_gate)
         {
             // Before anything else, so the window this frame is judged in includes every event
-            // that arrived before it — even on a frame the disabled monitor then drops.
-            ApplyQueuedToolEvents(sample.Timestamp);
+            // that arrived before it — even on a frame the disabled monitor then drops. Whether the
+            // window applies to this frame is decided first, so the log lines for edges applied on
+            // it already say whether they were applied.
             _lastFrameSimulated = sample.IsSimulated;
             UpdateToolSuppression();
+            ApplyQueuedToolEvents(sample.Timestamp);
             if (!_settings.Enabled) return;
 
             // Whether this frame was judged during a capture — read before FinalizeCapture can
