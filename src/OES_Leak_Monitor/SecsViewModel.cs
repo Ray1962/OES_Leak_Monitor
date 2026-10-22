@@ -50,6 +50,8 @@ public sealed class SecsViewModel : INotifyPropertyChanged
 
         _bridge.StateChanged += (_, _) => _dispatcher.BeginInvoke(RaiseStatus);
         _bridge.Traffic += (_, line) => _dispatcher.BeginInvoke(() => AppendTraffic(line));
+        _bridge.ToolContextChanged += (_, _) =>
+            _dispatcher.BeginInvoke(() => OnPropertyChanged(nameof(ToolEventStatus)));
     }
 
     // ---- commands ----------------------------------------------------------
@@ -88,6 +90,9 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         : _bridge.StatusText;
 
     public string ControlStateText => _bridge.ControlStateText;
+
+    /// <summary>Which process window the leak monitor is judging in, and the last tool event.</summary>
+    public string ToolEventStatus => _bridge.ToolEventStatusText;
 
     public string ProfileTemplatePath => _bridge.ProfileTemplatePath;
     public string EffectiveProfilePath => _bridge.EffectiveProfilePath;
@@ -382,6 +387,9 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         T3 = s.T3, T5 = s.T5, T6 = s.T6, T7 = s.T7, T8 = s.T8,
         ProfileFileName = s.ProfileFileName,
         LogRetentionDays = s.LogRetentionDays,
+        // Carried through although this tab does not edit it yet: Save writes the whole object
+        // back, and a field the clone forgets is a mapping table wiped by the next Save.
+        ToolEvents = s.ToolEvents?.Clone() ?? new ToolEventSettings(),
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -94,4 +94,91 @@ public class AppSettingsDefaultsTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    /// <summary>
+    /// A settings.json written before tool events existed has a <c>secs</c> section without
+    /// <c>toolEvents</c>; it must load with them off and the table empty, so an upgrade changes
+    /// nothing about how the tool is judged.
+    /// </summary>
+    [Fact]
+    public void SettingsWithoutToolEvents_LoadWithThemOff()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>(
+            """{"secs":{"enabled":true,"chamberCode":3}}""", OnDisk)!;
+
+        Assert.True(settings.Secs.Enabled);
+        Assert.False(settings.Secs.ToolEvents.Enabled);
+        Assert.Empty(settings.Secs.ToolEvents.Mappings);
+    }
+
+    /// <summary>
+    /// The table round-trips through the real <c>SettingsService</c> with its edges as words, the
+    /// way a site writes them by hand.
+    /// </summary>
+    [Fact]
+    public void ToolEventTable_RoundTripsThroughSettingsJson()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "OesLeakSettings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "settings.json"), """
+                {"secs":{"toolEvents":{"enabled":true,"mappings":[
+                  {"ceid":3100439529,"className":"A","edge":"Start","name":"PM3 ProcessStart","plasmaThreshold":1200},
+                  {"ceid":3100439530,"className":"A","edge":"End","name":"PM3 ProcessEnd"}]}}}
+                """);
+
+            var service = new SettingsService(dir);
+            var loaded = service.Load();
+            service.Save(loaded);
+            var again = service.Load();
+
+            var rows = again.Secs.ToolEvents.Mappings;
+            Assert.True(again.Secs.ToolEvents.Enabled);
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(3100439529u, rows[0].Ceid);
+            Assert.Equal(ToolEventEdge.Start, rows[0].Edge);
+            Assert.Equal(1200, rows[0].PlasmaThreshold);
+            Assert.Equal(ToolEventEdge.End, rows[1].Edge);
+            Assert.Contains("\"End\"", File.ReadAllText(Path.Combine(dir, "settings.json")));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The SECS tab does not edit the tool-event table, but its Save writes the whole SECS
+    /// section back — so its edit buffer has to carry the table, or one Save wipes it.
+    /// </summary>
+    [Fact]
+    public void SavingTheSecsTab_KeepsTheToolEventTable()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "OesLeakSecsVm-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            using var bridge = new SecsBridge(null, dir, dir, () => default);
+            var original = new SecsSettings
+            {
+                ToolEvents = new ToolEventSettings
+                {
+                    Enabled = true,
+                    Mappings = { new ToolEventMapping { Ceid = 3100439529, ClassName = "A" } },
+                },
+            };
+            var vm = new SecsViewModel(bridge, original, _ => { });
+
+            var saved = vm.ToSettings();
+
+            Assert.True(saved.ToolEvents.Enabled);
+            Assert.Equal(3100439529u, Assert.Single(saved.ToolEvents.Mappings).Ceid);
+            Assert.NotSame(original.ToolEvents, saved.ToolEvents);   // a copy, not the live object
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

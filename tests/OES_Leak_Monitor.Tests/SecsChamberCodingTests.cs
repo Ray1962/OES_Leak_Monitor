@@ -50,9 +50,9 @@ public class SecsChamberCodingTests
         var svs = doc.RootElement.GetProperty("statusVariables");
         var alarms = doc.RootElement.GetProperty("alarms");
 
-        Assert.Equal(29, svs.GetArrayLength());
+        Assert.Equal(32, svs.GetArrayLength());
         Assert.Equal(1022700001, svs[0].GetProperty("svid").GetInt64());
-        Assert.Equal(1022700029, svs[28].GetProperty("svid").GetInt64());
+        Assert.Equal(1022700032, svs[31].GetProperty("svid").GetInt64());
         Assert.All(svs.EnumerateArray(), sv =>
         {
             var text = sv.GetProperty("svid").GetInt64().ToString();

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Aqst.OesSpectrometer.Models;
@@ -180,6 +181,22 @@ public sealed class LeakMonitorSnapshot
     /// acquisition-mode change actually helped.
     /// </summary>
     public int DropoutCount { get; init; }
+
+    /// <summary>
+    /// What the main tool's forwarded events say about the process window this frame was
+    /// judged in (VID 030). <see cref="ToolEventContext.Unknown"/> means the judgement fell back
+    /// to the behaviour without tool events — reported, so a host can discount it.
+    /// </summary>
+    public ToolEventContext ToolEventState { get; init; } = ToolEventContext.Disabled;
+
+    /// <summary>The open window's class (VID 031); "" when no window is open.</summary>
+    public string ToolWindowClass { get; init; } = "";
+
+    /// <summary>The last CEID forwarded, mapped or not (VID 032); 0 before the first.</summary>
+    public uint LastToolCeid { get; init; }
+
+    /// <summary>When <see cref="LastToolCeid"/> arrived; null before the first.</summary>
+    public DateTime? LastToolEventTime { get; init; }
 }
 
 public sealed class LeakAlarmEventArgs : EventArgs
@@ -285,6 +302,23 @@ public sealed class LeakMonitorEngine : IDisposable
     // When the boundary gate first closed during the step in progress. A brief closure is a
     // spectrometer dropout, not the end of the step — see AdvanceStep.
     private DateTime? _stepClosedSince;
+
+    // Process windows from the main tool's own events (S2F41 TOOL_EVENT, forwarded by the EAP).
+    // Null = not in use. Replaced whole, never mutated, so the SECS thread can read it without
+    // the frame lock to answer the host.
+    private volatile ToolEventTable? _toolTable;
+    // Events arrive on the SECS receive thread and are applied by the frame thread at the start
+    // of the next frame, so the window — like every other piece of per-frame state here — only
+    // ever changes under _gate, between frames, and every ratio on one frame sees one answer.
+    private readonly ConcurrentQueue<ToolEventMapping> _toolQueue = new();
+    private const int MaxQueuedToolEvents = 1000;   // acquisition stopped for a long time: keep the newest
+    private ToolEventContext _toolContext = ToolEventContext.Disabled;
+    private string? _toolWindowClass;
+    // Last event received, applied or not — the host reads it back (VID 032) to see that its
+    // forwarding arrives. Written on the SECS thread, so it has its own small lock.
+    private readonly object _toolLastGate = new();
+    private uint _lastToolCeid;
+    private DateTime? _lastToolEventTime;
 
     private AcquisitionFingerprint? _acquisition;
     private string _acquisitionWarning = "";  // "" when the active baseline still applies
@@ -474,8 +508,136 @@ public sealed class LeakMonitorEngine : IDisposable
     /// is running. <c>Scoped</c> false means no classes exist and every entry applies. Today
     /// the spectral classifier's locked per-step verdict is the only source.</para>
     /// </summary>
-    private (string? Class, bool Scoped) CurrentFrameClass() =>
-        (_stepClass, _classifier is not null);
+    private (string? Class, bool Scoped) CurrentFrameClass() => _toolContext switch
+    {
+        // The tool's own event is the authority on which process is running, and it marks the
+        // boundary exactly, so it applies frame by frame rather than being locked per step the
+        // way a verdict read off an ignition transient has to be.
+        ToolEventContext.InWindow => (_toolWindowClass, true),
+        // A window has closed and none is open: no class is running, so every class-scoped
+        // entry stands down and an unscoped one carries on — the same answer an Unknown step
+        // gives, for a reason the tool supplied rather than one the spectrum guessed.
+        ToolEventContext.OutsideWindow => (null, true),
+        // Not in use, or in use with no window edge seen yet: exactly the behaviour without tool
+        // events. "We have not been told" is not "nothing is running", and judging nothing until
+        // the EAP's first event arrives would lose a real leak to a late message; the snapshot
+        // says Unknown so nobody mistakes it for a scoped judgement.
+        _ => (_stepClass, _classifier is not null),
+    };
+
+    /// <summary>
+    /// The trigger-metric level that counts as plasma-on for this frame's class. The tool event
+    /// table's level for the class first, then the classifier's — and when the class came from a
+    /// window with the classifier switched off, the level the site wrote into the classifier
+    /// settings anyway, because that is where each process's level has been recorded so far.
+    /// Without that last step a window-supplied class would gate at the base threshold with
+    /// nothing to say its own level had been ignored.
+    /// </summary>
+    private double PlasmaThresholdFor(string? className, double baseThreshold)
+    {
+        if (className is null) return baseThreshold;
+        if (_toolContext == ToolEventContext.InWindow && _toolTable?.ThresholdFor(className) is { } t)
+            return t;
+        if (_classifier is not null) return _classifier.PlasmaThresholdFor(className, baseThreshold);
+        var defined = _settings.ProcessClassifier?.Classes?.FirstOrDefault(c =>
+            string.Equals(c.Name?.Trim(), className.Trim(), StringComparison.OrdinalIgnoreCase));
+        return defined is { PlasmaThreshold: > 0 } ? defined.PlasmaThreshold : baseThreshold;
+    }
+
+    // ---- tool events ----------------------------------------------------------
+
+    /// <summary>
+    /// Adopts a tool-event table. The host calls this at start-up and on every acquisition
+    /// Stop→Start, beside <see cref="ReloadRatios"/>: the table names the classes the ratios'
+    /// <c>ProcessClass</c> refers to, so the two are one configuration and are applied together.
+    /// <para>Re-applying the table already in force keeps the window the tool is in — every
+    /// restart does exactly that, and forgetting a known window on each one would put the engine
+    /// back to Unknown until the tool's next edge. A changed table starts from Unknown: the window
+    /// it remembers was named by rows that no longer exist.</para>
+    /// </summary>
+    public void ConfigureToolEvents(ToolEventSettings? settings)
+    {
+        var table = ToolEventTable.From(settings);
+        lock (_gate)
+        {
+            var previous = _toolTable;
+            bool same = previous is not null && table is not null && previous.Signature == table.Signature;
+            _toolTable = table;
+            if (same) return;
+
+            while (_toolQueue.TryDequeue(out _)) { }
+            _toolWindowClass = null;
+            _toolContext = table is null ? ToolEventContext.Disabled : ToolEventContext.Unknown;
+            if (table is not null)
+                _log?.LogSystemEvent(LogSeverity.Information, "ToolEventsApplied",
+                    "Process windows are taken from the main tool's events; until the first window " +
+                    "edge arrives, ratios are judged as they were without them",
+                    value: $"{table.Count} CEID(s) mapped");
+            else if (previous is not null)
+                _log?.LogSystemEvent(LogSeverity.Information, "ToolEventsOff",
+                    "Process windows from the main tool's events are no longer in use");
+        }
+    }
+
+    /// <summary>
+    /// One event forwarded from the main tool (S2F41 <c>TOOL_EVENT</c>). Called on the SECS
+    /// receive thread while the host waits for its reply, so it only looks the CEID up and
+    /// queues it — the window moves at the start of the next processed frame, under the frame
+    /// lock, so no frame is ever judged against a window that changed half way through it.
+    /// </summary>
+    public ToolEventAck ReceiveToolEvent(uint ceid, DateTime time)
+    {
+        var table = _toolTable;
+        if (table is null || _disposed) return ToolEventAck.Disabled;
+
+        lock (_toolLastGate)
+        {
+            _lastToolCeid = ceid;
+            _lastToolEventTime = time;
+        }
+        if (!table.TryGet(ceid, out var mapping)) return ToolEventAck.Ignored;
+
+        _toolQueue.Enqueue(mapping);
+        while (_toolQueue.Count > MaxQueuedToolEvents && _toolQueue.TryDequeue(out _)) { }
+        return ToolEventAck.Accepted;
+    }
+
+    /// <summary>Applies the events queued since the last frame. Caller holds <c>_gate</c>.</summary>
+    private void ApplyQueuedToolEvents()
+    {
+        if (_toolTable is null) return;
+        while (_toolQueue.TryDequeue(out var m))
+        {
+            string cls = m.ClassName?.Trim() ?? "";
+            string name = m.Name.Length > 0 ? m.Name : m.Ceid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (cls.Length == 0)
+            {
+                // Recorded only — the event is a fact worth having in the log beside the
+                // measurement (a leak check, a slit valve), and decides nothing.
+                _log?.LogSystemEvent(LogSeverity.Information, "ToolEventRecorded",
+                    $"Main tool event {name}", related: $"CEID={m.Ceid}");
+                continue;
+            }
+            if (m.Edge == ToolEventEdge.Start)
+            {
+                _toolWindowClass = cls;
+                _toolContext = ToolEventContext.InWindow;
+                _log?.LogSystemEvent(LogSeverity.Information, "ToolEventWindowOpened",
+                    $"Process window {cls} opened ({name})", related: $"CEID={m.Ceid},Class={cls}");
+            }
+            else if (_toolContext == ToolEventContext.InWindow &&
+                     string.Equals(_toolWindowClass, cls, StringComparison.OrdinalIgnoreCase))
+            {
+                _toolWindowClass = null;
+                _toolContext = ToolEventContext.OutsideWindow;
+                _log?.LogSystemEvent(LogSeverity.Information, "ToolEventWindowClosed",
+                    $"Process window {cls} closed ({name})", related: $"CEID={m.Ceid},Class={cls}");
+            }
+            // An End for a window that is not the open one changes nothing. What such an edge
+            // means — a lost Start, a stale End — belongs with the rest of the rules for events
+            // that do not pair up, which are decided together rather than one at a time here.
+        }
+    }
 
     /// <summary>
     /// Whether this entry measures the step now running. True for every entry while no
@@ -657,6 +819,9 @@ public sealed class LeakMonitorEngine : IDisposable
 
         lock (_gate)
         {
+            // Before anything else, so the window this frame is judged in includes every event
+            // that arrived before it — even on a frame the disabled monitor then drops.
+            ApplyQueuedToolEvents();
             if (!_settings.Enabled) return;
 
             // Whether this frame was judged during a capture — read before FinalizeCapture can
@@ -688,9 +853,7 @@ public sealed class LeakMonitorEngine : IDisposable
 
             bool? triggerPlasma = null;
             if (_plasmaGate is { IsUsable: true } && metric is { } m)
-                triggerPlasma = m > (_classifier is null
-                    ? _plasmaGate.Threshold
-                    : _classifier.PlasmaThresholdFor(frameClass.Class, _plasmaGate.Threshold));
+                triggerPlasma = m > PlasmaThresholdFor(frameClass.Class, _plasmaGate.Threshold);
             _lastGateOpen = triggerPlasma;
             if (triggerPlasma is { } g) TrackGateDropouts(g, sample.Timestamp);
 
@@ -1776,6 +1939,14 @@ public sealed class LeakMonitorEngine : IDisposable
         var ratios = _monitors.Select(m => m.Snapshot()).ToList();
         LeakRateEstimate? estimate = ComputeLeakRate(ratios);
 
+        uint lastCeid;
+        DateTime? lastTime;
+        lock (_toolLastGate)
+        {
+            lastCeid = _lastToolCeid;
+            lastTime = _lastToolEventTime;
+        }
+
         return new LeakMonitorSnapshot
         {
             Timestamp = ts,
@@ -1799,6 +1970,10 @@ public sealed class LeakMonitorEngine : IDisposable
             ProcessClassState = CurrentProcessClassState,
             ProcessStepIndex = _stepIndex,
             ProcessDiscriminants = _stepDiscriminants,
+            ToolEventState = _toolContext,
+            ToolWindowClass = _toolContext == ToolEventContext.InWindow ? _toolWindowClass ?? "" : "",
+            LastToolCeid = lastCeid,
+            LastToolEventTime = lastTime,
         };
     }
 

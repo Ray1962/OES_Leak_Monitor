@@ -38,13 +38,17 @@
                     <TextBlock Text="Control state:" Style="{StaticResource FieldLabel}"/>
                     <TextBlock Text="{Binding ControlStateText}" VerticalAlignment="Center"
                                Foreground="#334" Margin="0,0,16,0"
-                               ToolTip="SEMI E30 control state. ONLINE-REMOTE accepts host commands; this tool declares none, so the state only affects whether S1F17 succeeds."/>
+                               ToolTip="SEMI E30 control state. Only ONLINE-REMOTE accepts host commands — including TOOL_EVENT, the main tool's process events the EAP forwards. In any other state it is answered HCACK 2."/>
                     <TextBlock Text="{Binding ChamberName}" VerticalAlignment="Center" Foreground="#334"/>
                 </StackPanel>
 
                 <TextBlock Text="{Binding ReportingSummary}" Margin="0,6,0,0"
                            Foreground="#334" TextWrapping="Wrap"
                            ToolTip="Switching reporting off does not hide anything: the state still reaches this app's own log and any host status query. It only stops the equipment volunteering it."/>
+
+                <TextBlock Text="{Binding ToolEventStatus}" Margin="0,4,0,0"
+                           Foreground="#334" TextWrapping="Wrap"
+                           ToolTip="Which process window the leak monitor is judging in, from the main tool's events the EAP forwards as S2F41 TOOL_EVENT (VID 030–032). The CEID table is in settings.json under secs.toolEvents and is applied when acquisition next starts."/>
 
                 <TextBlock Text="{Binding IdExample}" Margin="0,4,0,0" Foreground="#777"
                            TextWrapping="Wrap"

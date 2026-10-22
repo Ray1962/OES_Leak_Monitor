@@ -91,7 +91,13 @@ public static class SecsProfileTemplate
     // the name is blank for "no classifier", "no step" and "not decided yet" alike.
     { "svid": 1002700027, "name": "Process class",               "units": "",         "format": "A",  "bind": "oes.processClass" },
     { "svid": 1002700028, "name": "Process class state",         "units": "",         "format": "U4", "bind": "oes.processClassState" },
-    { "svid": 1002700029, "name": "Process step index",          "units": "",         "format": "U4", "bind": "oes.processStepIndex" }
+    { "svid": 1002700029, "name": "Process step index",          "units": "",         "format": "U4", "bind": "oes.processStepIndex" },
+
+    // 030-032: the process window the main tool's events (S2F41 TOOL_EVENT) put the monitor in.
+    // 030: 0 not in use, 1 unknown (judging as without them), 2 in a window, 3 outside any.
+    { "svid": 1002700030, "name": "Tool event context state",    "units": "",         "format": "U4", "bind": "oes.toolEventState" },
+    { "svid": 1002700031, "name": "Tool event window class",     "units": "",         "format": "A",  "bind": "oes.toolWindowClass" },
+    { "svid": 1002700032, "name": "Last tool CEID",              "units": "",         "format": "U4", "bind": "oes.lastToolCeid" }
   ],
 
   // category follows SEMI E5: 4 = parameter control error, 5 = irrecoverable error,
@@ -105,9 +111,13 @@ public static class SecsProfileTemplate
     { "alid": 10027014, "category": 8, "text": "OES DATA WRITE FAILURE" }
   ],
 
-  // No remote commands: this tool reports, it is not driven from the host.
-  // A host S2F41 is answered HCACK=1 (command not recognised).
-  "remoteCommands": {},
+  // One remote command, and it is information rather than control: the EAP forwards the main
+  // tool's own process events so leak judgement runs inside the right process window.
+  // CEID = the tool's CEID (ASCII digits); TIME = YYYYMMDDhhmmsscc, optional.
+  // Anything else a host sends is answered HCACK=1 (command not recognised).
+  "remoteCommands": {
+    "TOOL_EVENT": [ "CEID", "TIME" ]
+  },
 
   "hostActions": [],
   "equipmentActions": []
