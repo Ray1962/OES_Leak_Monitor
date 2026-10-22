@@ -315,23 +315,36 @@ public sealed class SecsBridge : IDisposable
     /// </summary>
     public event EventHandler? ToolContextChanged;
 
+    // Where the tool events have put the engine. Its own reference rather than a snapshot field:
+    // the table is applied and the host's events arrive whether or not frames are flowing, and
+    // 030-032 must answer for that moment, not for the last frame (which may not exist yet).
+    private volatile ToolEventStatus _toolStatus = ToolEventStatus.Disabled;
+
+    /// <summary>The engine's <see cref="LeakMonitorEngine.ToolStatusChanged"/>. Any thread; it
+    /// stores the value and raises <see cref="ToolContextChanged"/>, nothing else.</summary>
+    public void OnToolStatus(ToolEventStatus status)
+    {
+        _toolStatus = status;
+        ToolContextChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>One line for the SECS tab: which window the leak monitor is judging in, and the
     /// last event the EAP forwarded.</summary>
     public string ToolEventStatusText
     {
         get
         {
-            var s = _snapshot;
-            if (s is null || s.ToolEventState == ToolEventContext.Disabled)
+            var s = _toolStatus;
+            if (s.State == ToolEventContext.Disabled)
                 return "Tool events: not in use";
-            string window = s.ToolEventState switch
+            string window = s.State switch
             {
-                ToolEventContext.InWindow => $"in window {s.ToolWindowClass}",
+                ToolEventContext.InWindow => $"in window {s.WindowClass}",
                 ToolEventContext.OutsideWindow => "outside any window",
                 _ => "window unknown (judging as without tool events)",
             };
-            string last = s.LastToolEventTime is { } t
-                ? $"last CEID {s.LastToolCeid} at {t:HH:mm:ss}"
+            string last = s.LastTime is { } t
+                ? $"last CEID {s.LastCeid} at {t:HH:mm:ss}"
                 : "no event received yet";
             return $"Tool events: {window}; {last}";
         }
@@ -418,13 +431,7 @@ public sealed class SecsBridge : IDisposable
     /// </summary>
     public void OnSample(LeakMonitorSnapshot snapshot)
     {
-        var before = _snapshot;
         _snapshot = snapshot;
-        if (before is null ||
-            before.ToolEventState != snapshot.ToolEventState ||
-            before.ToolWindowClass != snapshot.ToolWindowClass ||
-            before.LastToolEventTime != snapshot.LastToolEventTime)
-            ToolContextChanged?.Invoke(this, EventArgs.Empty);
 
         var ts = snapshot.Timestamp;
         if (_lastFrameTs != DateTime.MinValue)
@@ -645,10 +652,9 @@ public sealed class SecsBridge : IDisposable
         // 030-032: the process window the main tool's forwarded events put the monitor in, and
         // the last event it received. 030 is what tells a host whether 027 came from the tool or
         // from the fallback — and 032 lets the EAP see its own forwarding arrive.
-        b.Bind("oes.toolEventState",
-               () => (uint)(_snapshot?.ToolEventState ?? ToolEventContext.Disabled));
-        b.Bind("oes.toolWindowClass", () => _snapshot?.ToolWindowClass ?? "");
-        b.Bind("oes.lastToolCeid", () => _snapshot?.LastToolCeid ?? 0u);
+        b.Bind("oes.toolEventState", () => (uint)_toolStatus.State);
+        b.Bind("oes.toolWindowClass", () => _toolStatus.WindowClass);
+        b.Bind("oes.lastToolCeid", () => _toolStatus.LastCeid);
 
         return b;
     }

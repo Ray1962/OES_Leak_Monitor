@@ -112,19 +112,14 @@ public class ToolEventWireTests
         Assert.False(called);
     }
 
-    /// <summary>VIDs 030–032 carry what the snapshot holds, so the EAP can read back which
-    /// window the leak monitor believes it is in and the last event it received.</summary>
+    /// <summary>VIDs 030–032 carry the engine's published tool-event status, so the EAP can read
+    /// back which window the leak monitor believes it is in and the last event it received. They
+    /// do not come from a frame: no frame is sent here, as none is while acquisition is stopped.</summary>
     [Fact]
-    public async Task The_tool_event_status_variables_report_the_snapshot()
+    public async Task The_tool_event_status_variables_report_the_published_status()
     {
         await using var h = await SecsHarness.StartAsync();
-        h.Bridge.OnSample(new LeakMonitorSnapshot
-        {
-            Timestamp = DateTime.Now,
-            ToolEventState = ToolEventContext.InWindow,
-            ToolWindowClass = "A",
-            LastToolCeid = ProcessStart,
-        });
+        h.Bridge.OnToolStatus(new ToolEventStatus(ToolEventContext.InWindow, "A", ProcessStart, DateTime.Now));
 
         Assert.True(
             await h.Host.StartTraceAsync(trid: 30, TimeSpan.FromMilliseconds(200), totalSamples: 2, groupSize: 1,

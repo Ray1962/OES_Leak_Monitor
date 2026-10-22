@@ -319,6 +319,17 @@ public sealed class LeakMonitorEngine : IDisposable
     private readonly object _toolLastGate = new();
     private uint _lastToolCeid;
     private DateTime? _lastToolEventTime;
+    private volatile ToolEventStatus _toolStatus = ToolEventStatus.Disabled;
+
+    /// <summary>Where the tool events have put the engine right now — current between frames too.</summary>
+    public ToolEventStatus ToolStatus => _toolStatus;
+
+    /// <summary>
+    /// Raised whenever <see cref="ToolStatus"/> changes: a table applied, an event received, a
+    /// window opened or closed. May be raised on the SECS receive thread or under the frame lock,
+    /// so a handler must only store the value and post any further work.
+    /// </summary>
+    public event Action<ToolEventStatus>? ToolStatusChanged;
 
     private AcquisitionFingerprint? _acquisition;
     private string _acquisitionWarning = "";  // "" when the active baseline still applies
@@ -563,7 +574,7 @@ public sealed class LeakMonitorEngine : IDisposable
             var previous = _toolTable;
             bool same = previous is not null && table is not null && previous.Signature == table.Signature;
             _toolTable = table;
-            if (same) return;
+            if (same) { PublishToolStatus(); return; }
 
             while (_toolQueue.TryDequeue(out _)) { }
             _toolWindowClass = null;
@@ -576,7 +587,33 @@ public sealed class LeakMonitorEngine : IDisposable
             else if (previous is not null)
                 _log?.LogSystemEvent(LogSeverity.Information, "ToolEventsOff",
                     "Process windows from the main tool's events are no longer in use");
+            PublishToolStatus();
         }
+    }
+
+    /// <summary>
+    /// Rebuilds <see cref="ToolStatus"/> from the fields and raises the change if there is one.
+    /// The context and class are only written under <c>_gate</c>; a call from the SECS thread
+    /// (which does not hold it) can read a value a frame is about to replace, and that frame's
+    /// own call then publishes the newer one.
+    /// </summary>
+    private void PublishToolStatus()
+    {
+        uint lastCeid;
+        DateTime? lastTime;
+        lock (_toolLastGate)
+        {
+            lastCeid = _lastToolCeid;
+            lastTime = _lastToolEventTime;
+        }
+        var context = _toolContext;
+        var status = new ToolEventStatus(
+            context,
+            context == ToolEventContext.InWindow ? _toolWindowClass ?? "" : "",
+            lastCeid, lastTime);
+        if (status == _toolStatus) return;
+        _toolStatus = status;
+        ToolStatusChanged?.Invoke(status);
     }
 
     /// <summary>
@@ -595,6 +632,7 @@ public sealed class LeakMonitorEngine : IDisposable
             _lastToolCeid = ceid;
             _lastToolEventTime = time;
         }
+        PublishToolStatus();
         if (!table.TryGet(ceid, out var mapping)) return ToolEventAck.Ignored;
 
         _toolQueue.Enqueue(mapping);
@@ -606,8 +644,10 @@ public sealed class LeakMonitorEngine : IDisposable
     private void ApplyQueuedToolEvents()
     {
         if (_toolTable is null) return;
+        bool any = false;
         while (_toolQueue.TryDequeue(out var m))
         {
+            any = true;
             string cls = m.ClassName?.Trim() ?? "";
             string name = m.Name.Length > 0 ? m.Name : m.Ceid.ToString(System.Globalization.CultureInfo.InvariantCulture);
             if (cls.Length == 0)
@@ -637,6 +677,7 @@ public sealed class LeakMonitorEngine : IDisposable
             // means — a lost Start, a stale End — belongs with the rest of the rules for events
             // that do not pair up, which are decided together rather than one at a time here.
         }
+        if (any) PublishToolStatus();
     }
 
     /// <summary>

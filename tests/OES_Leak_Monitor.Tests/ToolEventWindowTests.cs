@@ -431,4 +431,36 @@ public class ToolEventWindowTests
         Assert.Equal(ToolEventContext.Disabled, h.Last.ToolEventState);
         Assert.Equal(ToolEventAck.Disabled, h.Event(ProcessStart, 2.0));
     }
+
+    // ---------------------------------------------------------------- status between frames
+
+    /// <summary>
+    /// The status the SECS tab and VIDs 030–032 report is current before any frame arrives. It
+    /// used to be read off the last frame, so an applied table read "not in use" — and VID 030
+    /// read 0 — until acquisition started; the 2026-10-23 smoke test caught exactly that. A host
+    /// forwarding events while the spectrometer is stopped must still see them arrive (032), and
+    /// see the window move as soon as a frame applies it.
+    /// </summary>
+    [Fact]
+    public void TheStatus_IsCurrent_BetweenFrames()
+    {
+        using var h = new Harness(classifier: null, Ratio("R_A", "A"));
+        var seen = new List<ToolEventStatus>();
+        h.Engine.ToolStatusChanged += seen.Add;
+
+        Assert.Equal(ToolEventContext.Disabled, h.Engine.ToolStatus.State);
+
+        h.Engine.ConfigureToolEvents(Pm3());
+        Assert.Equal(ToolEventContext.Unknown, h.Engine.ToolStatus.State);
+        Assert.Equal(ToolEventContext.Unknown, seen[^1].State);
+
+        h.Event(ProcessStart, 0);
+        Assert.Equal(ProcessStart, h.Engine.ToolStatus.LastCeid);        // arrived, no frame yet
+        Assert.Equal(ToolEventContext.Unknown, h.Engine.ToolStatus.State); // applied by the next frame
+
+        h.Engine.ProcessSample(On(0));
+        Assert.Equal(ToolEventContext.InWindow, h.Engine.ToolStatus.State);
+        Assert.Equal("A", h.Engine.ToolStatus.WindowClass);
+        Assert.Equal(seen[^1], h.Engine.ToolStatus);
+    }
 }

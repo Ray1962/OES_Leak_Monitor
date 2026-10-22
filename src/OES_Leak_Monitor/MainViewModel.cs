@@ -334,6 +334,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // acquisition start as far as configuration goes — and thereafter only when acquisition
         // restarts, beside the ratio set whose classes it names.
         _secs.ToolEventSink = _leakMonitorEngine.ReceiveToolEvent;
+        _leakMonitorEngine.ToolStatusChanged += _secs.OnToolStatus;
         _savedToolEvents = settings.Secs.ToolEvents?.Clone() ?? new ToolEventSettings();
         _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
         _secs.Configure(settings.Secs);

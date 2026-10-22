@@ -90,6 +90,17 @@ public enum ToolEventContext
     OutsideWindow = 3,
 }
 
+/// <summary>
+/// Where the tool events have put the engine, published the moment it changes. It is not part
+/// of a frame: the table is applied, and the host's events arrive, while no spectrum may be
+/// flowing at all — reading it off the last frame told an operator "not in use" for a table that
+/// had been applied, and told the host VID 030 = 0, until acquisition happened to start.
+/// </summary>
+public sealed record ToolEventStatus(ToolEventContext State, string WindowClass, uint LastCeid, DateTime? LastTime)
+{
+    public static readonly ToolEventStatus Disabled = new(ToolEventContext.Disabled, "", 0, null);
+}
+
 /// <summary>What became of one forwarded tool event, for the HCACK the host is answered with.</summary>
 public enum ToolEventAck
 {
