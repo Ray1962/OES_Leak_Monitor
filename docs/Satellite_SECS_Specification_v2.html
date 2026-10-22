@@ -135,13 +135,18 @@ td code{white-space:nowrap;}
 <a class="l3" href="#61-事件清單">6.1 事件清單</a>
 <a class="l3" href="#62-建議報告rptid">6.2 建議報告（RPTID）</a>
 <a class="l3" href="#63-訊息範例以-ch_2cc02-為例">6.3 訊息範例（以 Ch_2、cc=02 為例）</a>
+<a class="l2" href="#7-oes-leak-monitor-遠端命令s2f41-tool_event">7. OES Leak Monitor 遠端命令（S2F41 TOOL_EVENT）</a>
+<a class="l3" href="#71-命令格式">7.1 命令格式</a>
+<a class="l3" href="#72-hcackcpack">7.2 HCACK／CPACK</a>
+<a class="l3" href="#73-訊息範例pm3cc03">7.3 訊息範例（PM3、cc=03）</a>
+<a class="l3" href="#74-視窗的規則host-解讀用">7.4 視窗的規則（Host 解讀用）</a>
 <a class="l2" href="#附註">附註</a>
 </nav>
 <main>
 <h1 id="satellite-secs-通訊協定規格書">Satellite SECS 通訊協定規格書</h1>
 <blockquote><p>本文件為 AQUSEN Satellite 感測器系統的 SECS/GEM 通訊協定規格整理。 內容涵蓋 SVID 編碼規則、SECS 連線參數、支援的 SECS 訊息功能，以及實際訊息範例與解讀。</p></blockquote>
 <blockquote><p><strong>v2 增補：</strong> 新增 <code>ss=27</code> OES Leak Monitor（電漿發光光譜洩漏監測器）的 SVID 定義（§1.2、§1.4）、警報定義（§5）與事件／報告定義（§6）。</p></blockquote>
-<blockquote><p><strong>v2.1（實作狀態）：</strong> <code>ss=27</code> 的設備端 SECS/HSMS 介面<strong>已實作一部分</strong>： <strong>全域量測項目 VID 001 ~ 026</strong>（§1.4(a)）、<strong>警報 ALID 001／002／012 ~ 014</strong>（§5.1）、 <strong>事件 CEID 502／508／509</strong>（§6.1），加上 S1F3 狀態查詢與 S2F23／S6F1 追蹤。 <strong>比值槽位 VID 101 ~ 400（§1.4(b)）、其餘 ALID 與 CEID、遠端命令 S2F41 尚未實作。</strong> §5.1 的 ALID 012 ~ 014（設備故障）為實作時新增。</p></blockquote>
+<blockquote><p><strong>v2.1（實作狀態）：</strong> <code>ss=27</code> 的設備端 SECS/HSMS 介面<strong>已實作一部分</strong>： <strong>全域量測項目 VID 001 ~ 026</strong>（§1.4(a)）、<strong>警報 ALID 001／002／012 ~ 014</strong>（§5.1）、 <strong>事件 CEID 502／508／509</strong>（§6.1），加上 S1F3 狀態查詢與 S2F23／S6F1 追蹤。 <strong>比值槽位 VID 101 ~ 400（§1.4(b)）、其餘 ALID 與 CEID、遠端命令 S2F41 尚未實作。</strong>（S2F41 已於 v2.3 以 <code>TOOL_EVENT</code> 實作，見 §7。） §5.1 的 ALID 012 ~ 014（設備故障）為實作時新增。</p></blockquote>
 <blockquote><p><strong>v2.2（比值槽位定義修訂，2026-10-20；第 4 項 2026-10-22）：</strong> 比對設備端程式後修正 §1.4(b)～(d) 三處（均在槽位 VID 實作之前），並更正一個範例：</p>
 <ol>
 <li><strong>位移 18 的判定條件</strong>改為「訊號線以原始平均擷取（位移 19 = 2）」，<strong>比值與絕對強度模式皆適用</strong>；原文只寫絕對強度模式（見 (d)）。
@@ -153,6 +158,7 @@ td code{white-space:nowrap;}
 <li><strong>§6.3 追蹤設定範例的 DSPER 更正為 <code>"000010"</code></strong>：原寫 <code>"001000"</code>，以 <code>hhmmss</code> 解讀是 10 分鐘，與範例說明的「每 10 秒」不符（格式見文末附註）。
 </li>
 </ol></blockquote>
+<blockquote><p><strong>v2.3（主機台製程事件，2026-10-23）：</strong> 設備端新增<strong>遠端命令 S2F41 <code>TOOL_EVENT</code></strong>（§7）與<strong>全域量 VID 030 ~ 032</strong>（§1.4(a)）。 Host（廠內 EAP）把主機台本身的製程事件 CEID 原樣轉送給 OES，OES 據以知道「此刻腔體在跑哪個製程」，讓指定製程類別的比值只在該製程的視窗內判定。 <code>TOOL_EVENT</code> 是<strong>資訊轉送，不是控制命令</strong>：它不會啟停採集、不會解除警報，也不改變設備的任何設定。 VID 027／028 在製程事件生效時改由事件決定（見 (a) 的說明）。</p></blockquote>
 <hr>
 <h2 id="0-導讀協定重點解讀">0. 導讀（協定重點解讀）</h2>
 <p>SECS（SEMI Equipment Communications Standard）是半導體設備與主機（Host / MES）之間的標準通訊協定，本規格採用 <strong>SECS-II 訊息格式</strong> 搭配 <strong>HSMS（High-Speed SECS Message Services，走 TCP/IP）</strong> 傳輸。整份規格可拆成四個部分：</p>
@@ -477,7 +483,7 @@ td code{white-space:nowrap;}
 <tr><td>001</td><td>Pressure</td><td>002</td><td>Pumping Speed</td></tr>
 </tbody></table></div>
 <h4 id="oes-leak-monitorss27">OES Leak Monitor（<code>ss=27</code>）</h4>
-<blockquote><p><strong>實作狀態（v2.1）：</strong> 本節的 <strong>VID 001 ~ 026 已由設備端實作</strong>並可經 S1F3 查詢； <strong>(b) 的比值槽位 VID 101 ~ 400 尚未實作</strong>。以下 SVID（以及 §5 的 ALID、§6 的 CEID） 依現行設備軟體的演算法與資料結構訂定；設備端的實作細節見該軟體的 <code>docs/secs-integration.md</code>。</p>
+<blockquote><p><strong>實作狀態（v2.3）：</strong> 本節的 <strong>VID 001 ~ 032 已由設備端實作</strong>並可經 S1F3 查詢（027 ~ 029 為製程分類、030 ~ 032 為主機台製程事件）； <strong>(b) 的比值槽位 VID 101 ~ 400 尚未實作</strong>。以下 SVID（以及 §5 的 ALID、§6 的 CEID） 依現行設備軟體的演算法與資料結構訂定；設備端的實作細節見該軟體的 <code>docs/secs-integration.md</code>。</p>
 <p>兩點與本文件措辭有出入，Host 端解讀時請注意：</p>
 <ul>
 <li><strong>VID 023（Frame dropout count）是「本次執行累計」</strong>，非「本次採集累計」——設備端的計數器 不隨採集起停歸零。請當單調遞增計數器、以差值判讀。
@@ -518,10 +524,13 @@ td code{white-space:nowrap;}
 <tr><td>024</td><td>Integration time</td><td>ms</td><td>F4</td><td>現行積分時間</td></tr>
 <tr><td>025</td><td>Average count</td><td>次</td><td>U4</td><td>現行平均次數</td></tr>
 <tr><td>026</td><td>Frame rate</td><td>Hz</td><td>F4</td><td>實際取樣率</td></tr>
-<tr><td>027</td><td>Process class</td><td>—</td><td>A[16]</td><td>現行電漿步驟的製程類別名稱；未分類時為空字串，理由見 028</td></tr>
-<tr><td>028</td><td>Process class state</td><td>—</td><td>U4</td><td>0 = 未設定分類器、1 = 無電漿步驟、2 = 步驟進行中尚未判定、3 = 已分類（名稱在 027）、4 = 判定為無法分類</td></tr>
+<tr><td>027</td><td>Process class</td><td>—</td><td>A[16]</td><td>現行電漿步驟的製程類別名稱；未分類時為空字串，理由見 028。製程事件生效時（030 = 2 或 3）改由事件決定：視窗內為視窗類別；視窗外有電漿為 <code>Unknown</code>；視窗外無電漿為空字串</td></tr>
+<tr><td>028</td><td>Process class state</td><td>—</td><td>U4</td><td>0 = 未設定分類器、1 = 無電漿步驟、2 = 步驟進行中尚未判定、3 = 已分類（名稱在 027）、4 = 判定為無法分類。製程事件生效時：視窗內恆為 3（點火前亦然）；視窗外有電漿為 4、無電漿為 1</td></tr>
 <tr><td>029</td><td>Process step index</td><td>次</td><td>U4</td><td>本次採集累計的電漿步驟數；不論是否設定分類器都會計數</td></tr>
-<tr><td>030 ~ 099</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
+<tr><td>030</td><td>Tool event context state</td><td>—</td><td>U4</td><td>主機台製程事件（§7）的狀態：0 = 未使用、1 = 狀態不明（照未使用製程事件時的方式判定）、2 = 在製程視窗內（類別在 031）、3 = 不在任何視窗內</td></tr>
+<tr><td>031</td><td>Tool event window class</td><td>—</td><td>A[16]</td><td>目前視窗的製程類別；030 ≠ 2 時為空字串</td></tr>
+<tr><td>032</td><td>Last tool CEID</td><td>—</td><td>U4</td><td>最後一筆收到的 <code>TOOL_EVENT</code> 的 CEID（不論是否在對照表內）；尚未收到為 0</td></tr>
+<tr><td>033 ~ 099</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
 </tbody></table></div>
 <h5 id="b-比值槽位vid-101400">(b) 比值槽位（VID 101–400）</h5>
 <p>槽位 N（N = 1 ~ 10）的 VID 由下式決定：</p>
@@ -625,6 +634,10 @@ td code{white-space:nowrap;}
 <li><strong>VID 015 = 1 時應視同警告。</strong> 採集參數改變會整體改變絕對強度的刻度，與舊基準已無可比性，建議重新擷取 Golden Run。
 </li>
 <li><strong>VID 016 = 1 表示資料來自測試或回放</strong>，不可用於製程判定。
+</li>
+<li><strong>VID 030 = 1 不只是「還沒收到事件」。</strong> 製程事件啟用後、第一個視窗邊界到達前；視窗超過設備端設定的上限時間仍未收到 End（逾時）；以及事件暫不套用時（錄檔回放期間一律如此，測試模式下除非設備端另行開啟），都是 1。此時設備照未使用製程事件時的方式判定，指定製程類別的比值<strong>不會</strong>因此停判。
+</li>
+<li><strong>VID 030 = 3 只表示「不在任何視窗內」，與有沒有電漿無關。</strong> 有沒有電漿看 VID 021。視窗外有電漿（例如對照表沒有對應的製程）時，指定製程類別的比值顯示 NotApplicable、不判定；未指定類別的比值照常判定。
 </li>
 </ul>
 <hr>
@@ -1044,6 +1057,70 @@ S6F12
 S2F24
 &lt;B[1] 0x00&gt;</code></pre>
 <hr>
+<h2 id="7-oes-leak-monitor-遠端命令s2f41-tool_event">7. OES Leak Monitor 遠端命令（S2F41 <code>TOOL_EVENT</code>）</h2>
+<p>主機台本身知道此刻在跑哪個製程，並以自己的 CEID（例如 PM3 ProcessStart／ProcessEnd）回報給廠內 EAP。<code>TOOL_EVENT</code> 讓 EAP 把這些 CEID <strong>原樣轉送</strong>給 OES Leak Monitor。OES 依設備端的對照表（CEID → 製程類別、Start／End）開關「製程視窗」，指定了製程類別的比值只在該類別的視窗內判定。</p>
+<ul>
+<li><strong>是資訊轉送，不是控制命令。</strong> 它不啟停採集、不解除警報、不改變設備設定；設備收到後只更新製程視窗。
+</li>
+<li><strong>可以不加篩選地轉送。</strong> 對照表沒有的 CEID 照樣回 HCACK 0，設備只記錄、不做任何事，所以 EAP 不必另外維護過濾清單。
+</li>
+<li><strong>製程事件預設關閉</strong>，由設備端設定啟用；未啟用時回 HCACK 2。
+</li>
+</ul>
+<h3 id="71-命令格式">7.1 命令格式</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>值</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>RCMD</td><td><code>TOOL_EVENT</code></td><td>唯一支援的遠端命令</td></tr>
+<tr><td>CPNAME <code>CEID</code></td><td>必填。ASCII 十進位數字（如 <code>"3100439529"</code>），亦接受 U1／U2／U4／U8</td><td>主機台的 CEID，原樣轉送</td></tr>
+<tr><td>CPNAME <code>TIME</code></td><td>選填。ASCII <code>YYYYMMDDhhmmsscc</code>（16 碼）或 <code>YYYYMMDDhhmmss</code>（14 碼），本地時間</td><td>主機台事件的發生時間。帶了就以它為事件時間，EAP 轉送延遲不影響；沒帶則用設備收到的時間</td></tr>
+</tbody></table></div>
+<h3 id="72-hcackcpack">7.2 HCACK／CPACK</h3>
+<p>回覆依下列順序判定，前面的條件成立就不再往下看：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>順序</th><th>條件</th><th>HCACK</th><th>CPACK</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>設備不在 ONLINE／REMOTE 控制狀態</td><td>2（目前無法執行）</td><td>—</td></tr>
+<tr><td>2</td><td>RCMD 不在設備的 profile 內（例如舊版 profile 尚未加入 <code>TOOL_EVENT</code>）</td><td>1（命令不存在）</td><td>—</td></tr>
+<tr><td>3</td><td>參數名稱不是 <code>CEID</code>／<code>TIME</code></td><td>3（參數錯誤）</td><td>該參數 1（名稱不存在）</td></tr>
+<tr><td>4</td><td>缺少 <code>CEID</code></td><td>3</td><td>—</td></tr>
+<tr><td>5</td><td><code>CEID</code> 無法解讀</td><td>3</td><td><code>CEID</code> 2（值不合法）</td></tr>
+<tr><td>6</td><td><code>TIME</code> 格式錯誤（該事件<strong>不採用</strong>）</td><td>3</td><td><code>TIME</code> 2</td></tr>
+<tr><td>7</td><td>設備端未啟用製程事件</td><td>2</td><td>—</td></tr>
+<tr><td>8</td><td>CEID 不在對照表內</td><td>0（記錄、不做任何事）</td><td>—</td></tr>
+<tr><td>9</td><td>CEID 在對照表內</td><td>0（事件已收下，於下一幀套用）</td><td>—</td></tr>
+</tbody></table></div>
+<p>1～3 由設備端的 SECS 函式庫判定，4～9 由設備軟體判定。</p>
+<h3 id="73-訊息範例pm3cc03">7.3 訊息範例（PM3、<code>cc=03</code>）</h3>
+<pre><code>S2F41 W
+&lt;L[2]
+  &lt;A[10] "TOOL_EVENT"&gt;                       # RCMD
+  &lt;L[2]
+    &lt;L[2] &lt;A[4] "CEID"&gt; &lt;A[10] "3100439529"&gt; &gt;        # PM3 ProcessStart（Chamber Process）
+    &lt;L[2] &lt;A[4] "TIME"&gt; &lt;A[16] "2026102314030000"&gt; &gt;  # 2026-10-23 14:03:00.00（選填）
+  &gt;
+&gt;
+.
+S2F42
+&lt;L[2]
+  &lt;B[1] 0x00&gt;                                # HCACK = 0：已收下
+  &lt;L[0] &gt;
+&gt;
+.</code></pre>
+<p>Host 可接著以 S1F3 讀 VID <code>1032700030</code> ~ <code>1032700032</code> 確認：030 = 2、031 = <code>"A"</code>、032 = 3100439529。事件於設備的<strong>下一幀光譜</strong>套用，所以採集停止時 030 不會立即變成 2，但 032 會立即更新。</p>
+<h3 id="74-視窗的規則host-解讀用">7.4 視窗的規則（Host 解讀用）</h3>
+<ul>
+<li><strong>Start 開窗、對應的 End 關窗。</strong> 視窗內的類別逐幀生效，視窗一關，指定該類別的比值立即轉為 NotApplicable（已鎖存的警報保留）。
+</li>
+<li><strong>視窗開著又收到 Start</strong>（漏了 End）：關閉舊視窗、開新視窗，設備記警告。
+</li>
+<li><strong>End 與目前開著的視窗不符</strong>：忽略，設備記警告。
+</li>
+<li><strong>視窗開太久仍未收到 End</strong>（超過設備端設定的上限，預設 600 秒）：視窗作廢，030 回到 1，設備記警告。
+</li>
+<li><strong>錄檔回放期間不套用事件</strong>；測試模式（合成光譜）預設也不套用。事件照樣收下並更新 032，但 030 顯示 1。
+</li>
+</ul>
 <h2 id="附註">附註</h2>
 <ul>
 <li>訊息範例中每則以 <code>.</code> 作為結束符號。
@@ -1058,10 +1135,10 @@ S2F24
 </li>
 <li>ALID 與 CEID 雖同為 <code>1ccss</code> + 3 碼的形式，但屬不同命名空間；OES Leak Monitor 的 ALID 使用 001 ~ 130、CEID 自 501 起，兩者不會在人眼上混淆。
 </li>
-<li>§1.4 的 <code>ss=27</code> 全域量（VID 001 ~ 026）、§5.1 的 ALID 001／002／012 ~ 014、§6.1 的 CEID 502／508／509 已由設備端實作；比值槽位 VID 101 ~ 400、其餘 ALID／CEID 與遠端命令 S2F41 仍為規格定義草案。
+<li>§1.4 的 <code>ss=27</code> 全域量（VID 001 ~ 032）、§5.1 的 ALID 001／002／012 ~ 014、§6.1 的 CEID 502／508／509、§7 的遠端命令 S2F41 <code>TOOL_EVENT</code> 已由設備端實作；比值槽位 VID 101 ~ 400、其餘 ALID／CEID 仍為規格定義草案。
 </li>
 </ul>
-<p>*本文件由原始 Word 規格書「Satellite SECS Specification」整理轉換而成；v2 增補 OES Leak Monitor（<code>ss=27</code>）章節，v2.1 標註其實作狀態並增訂 ALID 012 ~ 014；v2.2 依設備端程式修訂比值槽位的位移 18 判定、Ratio state 7／8，並將位移 22 列為待決，更正 §6.3 追蹤範例的 DSPER。*</p>
+<p>*本文件由原始 Word 規格書「Satellite SECS Specification」整理轉換而成；v2 增補 OES Leak Monitor（<code>ss=27</code>）章節，v2.1 標註其實作狀態並增訂 ALID 012 ~ 014；v2.2 依設備端程式修訂比值槽位的位移 18 判定、Ratio state 7／8，並將位移 22 列為待決，更正 §6.3 追蹤範例的 DSPER；v2.3 增訂遠端命令 S2F41 <code>TOOL_EVENT</code>（§7）與 VID 030 ~ 032。*</p>
 </main>
 </div>
 </body>
