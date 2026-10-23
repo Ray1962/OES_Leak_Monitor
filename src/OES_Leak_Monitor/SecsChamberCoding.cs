@@ -71,6 +71,20 @@ public static class SecsChamberCoding
         (uint)(10_000_000 + chamber * 100_000 + SensorCode * 1_000 + nnn);
 
     /// <summary>
+    /// <paramref name="id"/> with its chamber digits set to 00 if it is shaped like one of ours
+    /// (1 cc 27 …: 10 digits for an SVID, 8 for an ALID / CEID); anything else unchanged. The
+    /// inverse of <see cref="ApplyChamber"/> for one id — how two profiles stamped for different
+    /// chambers are compared.
+    /// </summary>
+    public static long Unstamp(long id)
+    {
+        var text = id.ToString(CultureInfo.InvariantCulture);
+        bool ours = (text.Length == 10 || text.Length == 8) && text[0] == '1' &&
+                    text.Substring(3, 2) == SensorCode.ToString("00", CultureInfo.InvariantCulture);
+        return ours ? long.Parse("100" + text.Substring(3), CultureInfo.InvariantCulture) : id;
+    }
+
+    /// <summary>
     /// Returns <paramref name="json"/> with every <c>svid</c>, <c>alid</c> and <c>ceid</c>
     /// re-stamped for <paramref name="chamber"/>.
     /// </summary>

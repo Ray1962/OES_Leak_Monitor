@@ -13,7 +13,8 @@
 **狀態：** 已實作，並有自動化測試（§13.2–13.3，38 個）。連線、S1F3、S5F5 已在真機驗證；
 洩漏警報 S5F1 已用 2026-08-14 的實機錄檔重放驗證，S6F11 的三個事件已由 `SecsEventTests`
 走 loopback 驗證。**尚待人工驗收的只剩 UI 到 bridge 的接線**（按鈕、Replay 分頁），逐項狀態見 §13.4。
-2026-10-23 起另有**主機台製程事件**：S2F41 `TOOL_EVENT` 與 VID 030–032，見 §15。
+2026-10-23 起另有**主機台製程事件**：S2F41 `TOOL_EVENT` 與 VID 030–032，見 §15；
+同日實作**比值槽位 VID 101–400 與 CEID 507**（§5.3），以及 SECS 分頁的 **Add missing rows**（§5.2）。
 
 ---
 
@@ -33,7 +34,7 @@
 
 | 項目 | 理由 |
 |---|---|
-| 比值槽位 VID 101–400（規格 §1.4(b)） | 10 槽 × 30 位移 = 300 個 SVID，且需 slot↔ratio 的穩定對應。先讓機台級結論通到 Host。 |
+| ~~比值槽位 VID 101–400（規格 §1.4(b)）~~ | **已實作（2026-10-23）**：槽位對應的穩定性以「槽位 = Ratio Setup 第 N 列、即時量以 Key 對應、身分改變送 CEID 507」解決，位移 22 = `DisplayName`、位移 25 = Key。見 §5.3。 |
 | ~~遠端命令 S2F41~~ | **已推翻（2026-10-22）**：原本需求方不要任何遠端命令。後來確認洩漏判定必須知道主機台此刻在跑哪個製程，而這只有主機台知道；廠內 EAP 已經收得到主機台的 CEID，最省事的路就是由 EAP 透過既有的 OES 連線轉送。所以只做**一個**命令 `TOOL_EVENT`，而且是資訊轉送、不是控制。見 §15。其他 RCMD 仍一律 `HCACK=1`。 |
 | Spooling（S2F43／S6F23） | `Aqusen.Secs` 預設不留。斷線期間送出的警報會失敗並記在日誌。客戶要求時再由 Host 送 S2F43 開啟。 |
 | 製程程式 S7、終端訊息 S10 | `Aqusen.Secs 0.6.0` 尚未支援。 |
@@ -243,7 +244,8 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 | `ToolEventContext` | Disabled, Unknown, InWindow, OutsideWindow | (a) VID 030 的 0～3 ✔ |
 
 > ⚠️ 這是**隱性契約**。日後在這三個列舉中間插入成員，會靜默改變送給 Host 的數值。
-> 三處宣告都應加註解指回本節；`RatioState` 雖然本期只用來統計數量，將來做槽位 VID 就會直接上報。
+> 三處宣告都應加註解指回本節；`RatioState` 現在也直接上報（槽位位移 05），`MonitorMode`／`LineExtractMode`
+> 同理（位移 17／19：Ratio 0、AbsoluteIntensity 1；PeakHeight 0、Integral 1、RawMean 2）。
 
 ### 5.2 profile 檔不會被覆寫——新增 VID 的副作用
 
@@ -257,26 +259,92 @@ OES 直接觀測腔體內電漿發光，不透過 slit valve 調節訊號，故 
 `SecsProfileTests.The_shipped_template_asks_for_every_binding_the_app_supplies` 則把**隨附範本**
 釘住:範本一定要問到程式能提供的每一個 bind,否則新加的 VID 連新機台都讀不到。
 
-現場處理方式二選一:把缺的幾列貼進 `profiles\*.json`,或把該檔刪掉讓程式重新產生一份
-（站點編輯會一併失去,所以先看 log 裡列出的名字再決定）。
+現場處理方式:按 SECS 分頁的 **Add missing rows**（補上缺少的列；Engineer 以上,`SecsProfileRows`）。它把隨附範本有、
+站點 profile 沒有的列附加進站點 profile（cc = 00 的那份,不是 `.effective`）,四個區段各自比對:
+statusVariables 以 `bind`、events 以 CEID、alarms 以 ALID、remoteCommands 以 RCMD 名稱。
 
-### 5.3 尚未實作但已保留
+- **既有列一律不動**——包括現場改過的編號、名稱、單位與 JSON 註解。做法是**改文字而不是重新序列化**:
+  新列另起一行接在該區段最後一個元素之後,分隔的逗號放在新列開頭,原本那一行一個位元組都不變;
+  整個缺少的區段接在根物件最後一個屬性之後（越過該行的註解與既有的尾逗號）;沿用檔案原本的換行
+  （CRLF／LF）與 BOM;寫入前重新解析一次,解析不了就不寫。唯一會變的是原本空著的 `{}`／`[]`,
+  它必須展開才放得進一列。
+- **編號衝突**:要補的 SV 的 SVID 已被站點的其他列使用（例如站點自己的常數 SV）時,該列拒絕並列出,
+  其他照補。只剩被拒絕的列時按鈕停用,頁籤寫明哪一列、為什麼,讓人手動改號,而不是一直重按。
+- **備份**:寫入前先複製成 `{profile}.bak-{yyyyMMddHHmmss}`（同一秒內再備份時加 `_N`,不覆蓋前一份）。
+- **站點刪掉的列也會補回**——光看檔案分不出「刻意刪掉」與「舊版沒寫」,所以頁籤明講這一點,
+  而這也是它是按鈕、不在啟動時自動做的原因。
+- **下次啟動 SECS 時生效**（Restart interface）;執行結果寫系統記錄 `SecsProfileRowsAdded`,
+  內含各區段補了幾列與被拒絕的列。
 
-VID 033–099 保留（027–029 已用於製程分類、030–032 已用於主機台製程事件，見上表）。比值槽位 VID = `100 + (N−1)×30 + 位移`（N = 1…10，對應 `RatioSetupViewModel.MaxRatios`），
-定義見規格 §1.4(b)。做這一段時要一併處理槽位↔ratio 的對應穩定性：ratio 的 key 是隨機 GUID stub，
-槽位號則是設定畫面的第 N 列，設定重載後可能改變——這正是規格保留 CEID 507 的原因。
+也可以把該檔刪掉讓程式重新產生一份,但站點編輯會一併失去。
 
-做槽位 VID 之前，以下三處已在 2026-10-20 比對過程式（規格 v2.2 已修正前兩項）：
+### 5.3 比值槽位（VID 101–400）與 CEID 507
 
-| # | 項目 | 程式的實際行為 | 規格 |
+VID 033–099 保留（027–029 已用於製程分類、030–032 已用於主機台製程事件，見上表）。
+
+比值槽位 VID = `100 + (N−1)×30 + 位移`（N = 1…10，`RatioSlotTable.SlotCount` =
+`RatioSetupViewModel.MaxRatios`），位移 01–25，共 250 個 SVID，定義見規格 §1.4(b)。
+
+**綁定名稱** `oes.slot{N}.{field}`。25 個位移的欄位名、名稱、單位、格式只寫在一處——`SecsRatioSlots.Fields`——
+隨附範本的 250 列由它產生（不手寫進 JSON 常數），`SecsBridge` 的綁定也讀它，`SuppliedBindNames` 由它串接。
+
+| 位移 | field | 格式 | 來源 |
 |---|---|---|---|
-| 1 | 位移 18（位移 03／04 是百分比還是 σ 分數） | `RatioDefinition.ValueHasPedestal` = 分子為 `RawMean`，**比值模式也算**——除以參考線只會等比縮放連續光基座，不會消掉它（見 `CLAUDE.md` 的 pedestal 段與 `RatioPedestalTests`）。出廠 `R_N2Ar`、`R_NOAr`、停用的 `R_N2357Abs` 都是 1，只有 `R_N2357Ar`（`PeakHeight`）是 0 | v2.1 寫「原始平均 + 絕對強度模式」，v2.2 已改為只看位移 19 |
-| 2 | 位移 05（`RatioState`） | 0～6 之後還有 `Observing`（7）、`NotApplicable`（8），見 §5.1 | v2.1 只列 0～6，v2.2 已增列 |
-| 3 | 位移 22（槽位名稱） | `RatioDefinition` 有不變的 `Key`（現場新增者為 `RatioEditViewModel.GenerateKey` 產生的 GUID 片段）與可改的 `DisplayName`，規格範例 `R_N2Ar` 是 Key | **待決**，須與 Host 約定；另一個可放保留位移 25 |
+| 01 | `monitoredValue` | F4 | 快照列 `RawRatio` |
+| 02 | `smoothedValue` | F4 | `SmoothedRatio` |
+| 03 | `percentOfBaseline` | F4 | `PercentOfBaseline`（σ 分數或百分比，看 18） |
+| 04 | `slope` | F4 | `SlopePerMinute` |
+| 05 | `state` | U4 | `RatioState`；對不到列時見下 |
+| 06 | `signalSnr` | F4 | `NumeratorSnr` |
+| 07 | `referenceSnr` | F4 | `DenominatorSnr`；**槽位表**為絕對強度模式時 0 |
+| 08 | `signalIntensity` | F4 | `NumeratorIntensity` |
+| 09 | `referenceIntensity` | F4 | `DenominatorIntensity`；同 07 |
+| 10–13 | `baselineMean`／`baselineSigma`／`warnThreshold`／`alarmThreshold` | F4 | 快照列同名欄位 |
+| 14 | `leakRate` | F4 | `LeakRateEstimate.PerRatio` 中同 Key 者的 `LeakRate` |
+| 15 | `usedInFusion` | U4 | 同上的 `Used` |
+| 16 | `enabled` | U4 | 槽位表 `Enabled` |
+| 17 | `monitorMode` | U4 | 槽位表 `MonitorMode` |
+| 18 | `valueSemantics` | U4 | 槽位表 `ValueHasPedestal` |
+| 19 | `extractionMode` | U4 | 槽位表 `ExtractMode`（分子的 `LineExtractMode`） |
+| 20／21 | `signalWavelength`／`referenceWavelength` | F4 | 槽位表，**校正後**的 `CenterNm`；絕對強度模式 21 = 0 |
+| 22 | `displayName` | A | 槽位表 `DisplayName` |
+| 23／24 | `signalSpecies`／`referenceSpecies` | A | 槽位表，label 開頭的 token 經 `WavelengthCalibration` 別名表（`N₂`→`N2`、`Hα`→`H`），使用者譜線保留 `u` 前綴；絕對強度模式 24 = "" |
+| 25 | `key` | A | 槽位表 `Key`（不變） |
 
-實作時位移 18 **必須直接取 `ValueHasPedestal`**，不要在 `SecsBridge` 依位移 17／19 重推一次——
-這正是 v2.1 規格寫錯的那一步，而 `SecsBridge` 的原則本來就是「只讀快照、不計算」。
+槽位對應改變的時機：在 Ratio Setup 用 **▲／▼**（Move up／Move down）**調整列順序**，或**刪除、新增一列**（刪掉第 1 列，其後每組比值都往前移一個槽位）、改譜線／模式／啟用／名稱，或改波長校正。
+移動列是搬動同一個 `RatioEditViewModel`，Key 不變，所以基準、校正與鎖存警報都會延續（`RatioSetupReorderTests`）；刪掉再重建則會拿到新 Key，三者都對不上。
+`settings.json` 裡直接改 `ratios` 的順序要重開 App 才生效，那時沒有「前一份」可比，不送 507。
+
+**槽位表**（`RatioSlotTable`／`RatioSlot`）是引擎在建構子與每次 `ReloadRatios` 建立的不可變記錄，
+槽位 N = 引擎比值清單第 N 筆（= Ratio Setup 第 N 列），每槽記錄位移 16–25 需要的一切。`SecsBridge`
+以 volatile 參考保存（`OnSlotTable`，比照 `ToolEventStatus`），所以**身分類不讀快照**：設備剛啟動、
+擷取停止、沒有任何光譜幀時都正確。
+
+**即時量以 Key 對應，不用索引。** 位移 01–15 從最後一幀的 `LeakMonitorSnapshot.Ratios` 找 `Key` 等於該槽位
+Key 的那一列。重排後、下一幀之前，手上的快照仍是舊順序——以索引取就會把甲的數值放進乙的槽位。
+擷取停止後停在最後一幀，與全域 VID 一致。07／09 的「絕對強度模式為 0」依**槽位表**的模式判斷（與 17 一致），
+不依快照列的模式，理由相同。
+
+**無值規則**：F4 一律送 0（`F4()` 把 null、NaN、∞ 都轉成 0），字串送 ""。Host 依 05／18／19 判讀，
+規格 §1.4(b) 有對照表。對不到列時（重載後第一幀之前）05 依槽位表回 3（啟用）或 6（停用）。
+**空槽位**（N 大於比值數）照常回應：16 = 0、05 = 6，數值 0，字串空；看 25 是否為空分辨空槽與停用。
+
+**位移 18 直接取 `ValueHasPedestal`**，不在 `SecsBridge` 依 17／19 重推——那正是 v2.1 規格寫錯的那一步。
+
+**位移 22 = `DisplayName`、位移 25 = Key（2026-10-23 決定）。** Key 不變，跨重載、跨改名追蹤用 25；22 給人看。
+A 格式是 ASCII：出廠顯示名稱 `N₂ 337 / Ar 750` 的下標會變成 `?`（實測 Host 收到 `N? 337 / Ar 750`）。
+
+**CEID 507**：`RatioSlotTable.SameIdentityAs` 比較 10 槽（含空槽）的位移 16–25，`ReloadRatios` 發現不同時
+引擎觸發 `SlotIdentityChanged`，`SecsBridge.OnSlotIdentityChanged` 先存新表再走既有的 `Enqueue` 送 S6F11，
+受「回報事件」與測試模式閘門控制（與 502／508／509 相同）。只改門檻、平滑、`ConfirmSeconds`、`MinSnr` 不送；
+`ProcessClass`／`Role` 不在任何位移裡，Host 看不到，所以也不送（它們影響的是 `MeasuresSameAs`——鎖存與基準的延續——
+那是另一個問題）。
+
+**這些都在 bridge 裡，與「只讀不算」的原則怎麼並存。** 以 Key 找列、05 的 3／6 規則、07／09 依槽位模式歸零，
+都是把**引擎已經算好的兩份資料（快照、槽位表）對起來**，沒有重算任何量測值；把這一步放在 bridge 是 GitHub issue #45 的設計決定。
+
 逐槽位的數值範例見 [`secs-ratio-svid-example-zh-TW.md`](secs-ratio-svid-example-zh-TW.md)。
+2026-10-20 比對程式時發現的三處規格出入（位移 18、05 的 7／8、22）已在規格 v2.2／v2.4 全部關閉。
 
 ---
 
@@ -332,6 +400,7 @@ clear，否則 Host 的紀錄裡會出現從未發生過的事件。
 | CEID `1{cc}27nnn` | 事件 | 觸發點 |
 |---|---|---|
 | 502 | Alarm acknowledged | `LeakMonitorEngine.Acknowledged`（本案新增的事件），帶操作者帳號與被清除的比值 |
+| 507 | Ratio configuration reloaded | `LeakMonitorEngine.SlotIdentityChanged`：`ReloadRatios` 後槽位身分（位移 16–25）改變時，見 §5.3 |
 | 508 | Acquisition started | `DeviceViewModel.IsAcquiring` false→true |
 | 509 | Acquisition stopped | `IsAcquiring` true→false |
 
@@ -342,7 +411,8 @@ clear，否則 Host 的紀錄裡會出現從未發生過的事件。
 紀錄完全相同**（`cleared.Count > 0`）——一次沒清到任何東西的 Acknowledge 不寫紀錄，也不發事件，
 所以事件的意義就是那行紀錄的意義：有人結束了一個已確認的洩漏警報。
 
-規格 §6.1 另定義了 501、503–507、510，本期不送；日後補上時沿用該編號，不要另起一套。
+規格 §6.1 另定義了 501、503–506、510，本期不送；日後補上時沿用該編號，不要另起一套。
+隨附範本的 `events` 區段列出設備會送的四個 CEID（給讀 profile 的人看；程式依編號送出，不讀這個清單）。
 
 ---
 
@@ -448,6 +518,9 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `SecsLogFile.cs` | 獨立日誌檔，依日輪替、保留 `logRetentionDays` 天 |
 | `SecsViewModel.cs` | 分頁的 VM：連線／通訊／控制狀態、設定、日誌 ring buffer |
 | `SecsPanel.xaml(.cs)` | 分頁 UI |
+| `RatioSlotTable.cs` | §5.3：`RatioSlot`／`RatioSlotTable`，引擎發布的槽位身分表 |
+| `SecsRatioSlots.cs` | §5.3：25 個位移的唯一定義，範本列與綁定共用 |
+| `SecsProfileRows.cs` | §5.2：補上缺少的列——比對、以文字插入、衝突拒絕 |
 | `ToolEventSettings.cs` | §15：`ToolEventSettings`／`ToolEventMapping`／`ToolEventEdge`、`ToolEventContext`（VID 030 的編碼）、`ToolEventStatus`、`ToolEventAck`、引擎用的不可變對照表 `ToolEventTable` |
 
 ### 11.2 修改
@@ -460,10 +533,11 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `LeakMonitorEngine.cs` | §8 的三個快照欄位，以及 `Acknowledged` 事件 + `LeakAcknowledgedEventArgs`（§7） |
 | `OES_Leak_Monitor.csproj` | `PackageReference`：`Aqusen.Secs 0.6.0`、`Secs4Net 2.4.4`；profile 範本不隨 exe 出貨（首次啟動寫到 `ConfigDirectory`） |
 | `nuget.config` | 加 `aqusen` 來源（**不要動既有的 `<clear />`**，它是本專案刻意保留的） |
-| `docs/Satellite_SECS_Specification_v2.md` | §5.1 補 ALID 012–014；v2.2 修訂 §1.4(b)～(d) 的位移 18 判定、Ratio state 7／8、位移 22 待決（§5.3）；v2.3 增訂 §7 S2F41 `TOOL_EVENT` 與 VID 030–032（§15） |
+| `docs/Satellite_SECS_Specification_v2.md` | §5.1 補 ALID 012–014；v2.2 修訂 §1.4(b)～(d) 的位移 18 判定、Ratio state 7／8、位移 22 待決（§5.3）；v2.3 增訂 §7 S2F41 `TOOL_EVENT` 與 VID 030–032（§15）；v2.4 實作比值槽位與 CEID 507、定位移 22／25、無值與空槽位規則（§5.3） |
 | `LeakMonitorEngine.cs`（§15） | `ConfigureToolEvents`（staged）、`ConfigureToolEventsLive`（hot）、`SetReplayActive`、`ReceiveToolEvent`、`ToolStatus`／`ToolStatusChanged`；`CurrentFrameClass()` 與每類別電漿門檻改看視窗 |
 | `SecsBridge.cs`／`SecsViewModel.cs`／`SecsPanel.xaml`（§15） | `RemoteCommandHandler`、VID 030–032 binding、`ToolEventIgnored`；分頁的製程事件設定、狀態列、唯讀 CEID 表 |
 | `BatchTracker.cs`／`BatchCsvLogger.cs`／`RatioCsvLogger.cs`／`AcquisitionSidecar.cs`／`LeakMonitorViewModel.cs`（§15） | 批次步驟類別、CSV 與 sidecar 欄位、Leak Monitor 提示條 |
+| `LeakMonitorEngine.cs`／`SecsBridge.cs`／`SecsProfileTemplate.cs`／`SecsViewModel.cs`／`SecsPanel.xaml`（§5.2、§5.3） | `SlotTable`／`SlotIdentityChanged`；250 個槽位綁定與 CEID 507；範本的槽位列與 `events` 區段；補列按鈕 |
 | `CLAUDE.md` | 補 SECS 段落 |
 
 > 註：`整合指南` §一.1 說「不要加 `<clear />`」，那是針對全新專案的建議。本專案的
@@ -505,13 +579,13 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 
 `dotnet test tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug` —
 SECS 部分當初是 38 個測試。整個測試專案（含洩漏引擎、批次、Baseline Builder 等）到 2026-10-23
-為 **216 過、7 略過**（略過的是需要不在 repo 裡的錄檔的那些）。下表列 SECS 與製程事件相關的：
+為 **271 過、7 略過**（略過的是需要不在 repo 裡的錄檔的那些）。下表列 SECS 與製程事件相關的：
 
 | 檔案 | 涵蓋 |
 |---|---|
 | `SecsChamberCodingTests` | 編號運算對照規格範例、腔體表、戳記的冪等與可重戳、錯誤 `ss`／`aa`／腔體被拒、非本系統的 id 不被動到 |
-| `SecsProfileTests` | 範本可載入、範本與 App 供應的 binding 雙向一致（現為 32 個）、`remoteCommands` 只有 `TOOL_EVENT`、既有 profile 永不被覆寫 |
-| `SecsWireTests` | 真的 `SecsBridge` 對真的 `GemHost` 走 loopback：S1F3 回 32 個 SV、S5F5 的 ALID 是 ASCII 且 category 正確、Warning→Alarm→Normal 送出正確的 set/clear 順序、故障警報去抖動 |
+| `SecsProfileTests` | 範本可載入、範本與 App 供應的 binding 雙向一致（現為 282 個）且每個都真的有登錄、`remoteCommands` 只有 `TOOL_EVENT`、既有 profile 永不被覆寫；槽位列逐槽逐位移符合 `100 + (N−1)×30 + 位移`、各位移的格式、`events` 有 507 |
+| `SecsWireTests` | 真的 `SecsBridge` 對真的 `GemHost` 走 loopback：S1F3 回 282 個 SV、S5F5 的 ALID 是 ASCII 且 category 正確、Warning→Alarm→Normal 送出正確的 set/clear 順序、故障警報去抖動 |
 | `SecsEventTests` | 同樣走 loopback 的 **S6F11 事件路徑**：三個 CEID 各自送達且編號正確、`Enqueue` 的順序保證（連續六則）、`reportEvents = false` 只擋事件不擋警報、測試模式閘門預設擋住事件與洩漏警報但**不擋設備故障**、介面關閉時呼叫不拋例外 |
 | `AppSettingsDefaultsTests` | 全新 `settings.json` 的三個覆寫預設（觸發波長 337.1、記錄器預設啟用、`ForceTestMode` 為假），以及「已存檔的決定要被尊重」那半個契約 |
 | `SecsTraceTests` | **S2F23／S6F1 trace**：取樣依 SVID 順序回傳綁定值、`SMPLN` 連號不重複；以及「上報全關時 trace 仍回得到真值」（composite 仍是 Alarm、VID 016 仍是 1，且確實沒送出任何 S5F1／S6F11） |
@@ -520,6 +594,12 @@ SECS 部分當初是 38 個測試。整個測試專案（含洩漏引擎、批�
 | `ToolEventWireTests` | 製程事件在**線路接縫**：S2F41 的 HCACK 0／2／3 與 CPACK、對照表外的 CEID 回 0、`TIME` 格式、CEID 解析、VID 030–032 |
 | `ToolEventOutputTests` | Ratio CSV 的 `ToolContext,ToolWindowClass` 欄（只在使用製程事件時出現）、舊檔照讀、sidecar 的視窗欄位、`ToolEventIgnored` 每個 CEID 只記一次 |
 | `ToolEventUiTests` | SECS 分頁設定的存取（staged 與立即生效的欄位、`MaxWindowSeconds` 範圍檢查、CEID 表帶過存檔）、「尚未生效」提示、狀態列文字、Leak Monitor 提示條 |
+| `RatioSlotTableTests` | 引擎槽位表：建構後即有、校正後波長且 `settings.json` 不變、`u` 前綴、重排後 Key→槽位正確；只改門檻／平滑不通知，改譜線／模式／擷取／啟用／名稱／增刪／重排／波長校正各通知一次；第 11 列不算槽位 |
+| `SecsRatioSlotTests` | 槽位綁定（經 `SvBindings`，與 S1F3 同一條路）：沒有幀時身分正確、空槽位、重排前的快照以 Key 對應不錯槽、無值與非數字送 0、絕對模式 07／09 = 0、`PerRatio` 依 Key |
+| `SecsRatioSlotWireTests` | loopback：S1F3 讀槽位 1～3 的身分（沒有任何幀）與即時量、重排後收到 CEID 507 且讀得到新身分、只改門檻收不到、S2F23 能追蹤槽位 VID（不需升級 `Aqusen.Secs`） |
+| `SecsProfileRowsTests` | 補列：以 2026-09-04 的真實範本（`SecsProfileFixtures`）為舊 profile，既有每一行逐字保留、改號改名的列不動、刪掉的列補回、編號衝突拒絕且其他照補、尾逗號、行尾註解、CRLF、非清單的區段 |
+| `RatioSetupReorderTests` | Ratio Setup 的 ▲／▼：Guest／Operator 不能按、首列不能上移末列不能下移、移動是暫存（Save 才寫入、Revert 還原順序）、Save + `ReloadRatios` 後槽位表依新順序且只通知一次、每組比值 `MeasuresSameAs` 不變、鎖存警報與基準在移動後保留 |
+| `SecsProfileRowsButtonTests` | 補列按鈕：Guest／Operator 不能按、沒有可補時停用並說明、`.bak` 與補列前相同、`SecsProfileRowsAdded`、保留 BOM、同秒備份不覆蓋；loopback 的 `SecsProfileRowsWireTests`：舊 profile 對 `TOOL_EVENT` 回 HCACK 1，補列並重啟後不再是 1 |
 | `BatchToolClassTests` | 批次步驟的類別取自取樣區間：區間內出現兩種類別時不取樣也不起批、`Unknown` 不取樣、功能關閉時與以前相同 |
 
 ### 13.3 實機錄檔重放（`RecordedRunTests`）
@@ -554,6 +634,9 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 | 3 | 拔掉光譜儀 → ALID `1cc27012` set；插回 → clear | ⬜ 未驗收 |
 | 4 | 在 Host 端做一次 S2F23 Trace，確認 S6F1 依週期回傳 | ✅ 已自動化（`SecsTraceTests`，走 loopback）。仍建議在真實 Host 上做一次，因為對方的 DSPER／REPGSZ 慣例才是驗收標的 |
 | 5 | 全程比對 `secs_YYYYMMDD.log` 與 `Test_SECS` 兩邊的收送紀錄 | ⬜ 未驗收 |
+| 6 | 重播 2026-08-14 錄檔（勾「Raise leak alarms during replay」），Host 追蹤槽位 1～3 的位移 05（SVID `1cc2700105`／`135`／`165`）→ 隨重播走 0 → 1 → 2 | ⬜ 未驗收（線上讀值已由 `SecsRatioSlotWireTests` 涵蓋；剩真實重播流程） |
+| 7 | 在 Ratio Setup 把第 1 列往下移一列（▼）、存檔、Stop → Start → Host 收到 CEID `1cc27507`，重讀位移 25 得到新順序；只改門檻再重啟則收不到 | ⬜ 未驗收（線上行為已由 `SecsRatioSlotWireTests`、▲／▼ → Save → `ReloadRatios` 已由 `RatioSetupReorderTests` 涵蓋；剩 `MainViewModel` 在 Stop → Start 時呼叫 `ReloadRatios` 的那一段） |
+| 8 | 以 2026-10-15 之前的 profile 啟動 → 按「Add missing rows」→ Restart interface → Host 用 S1F3 查得到槽位 VID，`TOOL_EVENT` 不再回 HCACK 1 | ⬜ 未驗收（已由 `SecsProfileRowsWireTests` 涵蓋；剩真實按鈕與真實 profile） |
 
 第 1 項的 S5F1 那半已由 §13.3 自動化，三個 CEID 的線上行為則由 `SecsEventTests` 自動化；
 它真正剩下要驗的是 **Replay 分頁到引擎、以及 UI 按鈕到 bridge 的接線**。
@@ -600,10 +683,10 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 | 1 | ALID 型別 | 已決定改函式庫（§10）。若 Satellite 其他感測器實際送的是 U4，則要反過來改規格——上線前應向 Host 端確認一次實測封包 |
 | 2 | 列舉順序的隱性契約 | 見 §5.1。三處宣告（`LeakAlarmLevel`／`CalibrationStatus`／`RatioState`）已加註解指回本文件；仍應列入 code review 清單 |
 | 3 | 斷線期間的資料 | 本期不做 spooling。客戶若要求「MES 重開後資料不能掉」，需 Host 送 S2F43，並評估 `MaxSpooledMessages`（預設 100）是否夠 |
-| 4 | 比值槽位 VID | 本期不做。做之前要先解決槽位↔ratio key 的對應穩定性，以及位移 22 填 Key 或 `DisplayName`（§5.3） |
+| 4 | 比值槽位 VID | **已關閉（2026-10-23）**：已實作，槽位對應與位移 22／25 的決定見 §5.3 |
 | 5 | 設備故障的來源 | 已定案：綁在 `IsConnected`／`Status`／`ErrorOccurred` 三個明確轉態上（§6.1），不依賴框架未公開的事件。012 是轉態非狀態，刻意如此 |
 | 6 | 多腔體 | 一個 App 執行個體對一個 `cc`。同一台 PC 跑兩套監測不同腔體時，port 必須分開 |
-| 7 | 舊 profile 沒有 `TOOL_EVENT` | profile 永不被覆寫（§5.2），所以升級前就啟用過 SECS 的機台，profile 裡沒有 `TOOL_EVENT` 這個 RCMD、也沒有 VID 030–032：函式庫會對 `TOOL_EVENT` 回 **HCACK 1**，啟動時記 `SecsProfileMissingBinds`。處理：在 `profiles\*.json` 補上 `"remoteCommands": { "TOOL_EVENT": [ "CEID", "TIME" ] }` 與 030–032 三列，或備份後刪掉該檔讓程式依新範本重寫（站點修改會一併消失），再 Restart interface |
+| 7 | 舊 profile 沒有 `TOOL_EVENT` | profile 永不被覆寫（§5.2），所以升級前就啟用過 SECS 的機台，profile 裡沒有 `TOOL_EVENT` 這個 RCMD、也沒有 VID 030–032：函式庫會對 `TOOL_EVENT` 回 **HCACK 1**，啟動時記 `SecsProfileMissingBinds`。處理：按 SECS 分頁的 **Add missing rows**（§5.2）——會一併補上 `TOOL_EVENT`、030–032、槽位 VID 與 `events`，既有列不動、先備份——再 Restart interface |
 | 8 | 製程事件的時間基準 | 視窗逾時以光譜幀的時間戳計算；`TIME` 只用於日誌與狀態。OES PC 與 EAP 的時鐘若差很多，`ToolEventClassMismatch` 是第一個看得到的徵兆 |
 
 ---

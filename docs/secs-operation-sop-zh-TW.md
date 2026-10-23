@@ -39,7 +39,7 @@
 | 你要做的事 | 需要的角色 |
 |---|---|
 | 看連線狀態、控制狀態、腔體號、profile 路徑、收送日誌 | 任何人（含 Guest） |
-| 改任何一項設定、按 **Save & apply** 或 **Restart interface** | **Engineer 以上** |
+| 改任何一項設定、按 **Save & apply**、**Restart interface** 或 **Add missing rows** | **Engineer 以上** |
 
 未登入或角色不足時，設定區整塊是灰的——**這不是故障**。要改設定請先用右上角登入 Engineer 帳號。
 
@@ -188,6 +188,7 @@ ALID 012（連線中斷）／013（擷取錯誤）／014（寫檔失敗）**在�
 |---|---|---|
 | 分頁上的任何欄位（腔體、位址、開關、T 值…） | **`Save & apply`** | 寫進 `settings.json`，然後整個介面重建 |
 | 用文字編輯器手改了 profile JSON | **`Restart interface`** | 重新讀 profile 檔、重新戳腔體號、重新啟動 |
+| 升級後 profile 少了新版的列（見 7.3） | **`Add missing rows`**，再 **`Restart interface`** | 先備份、只附加缺的列，下次啟動介面才生效 |
 
 兩顆按鍵都會**先存檔再重建**——正在跑的一定等於磁碟上的那份，所以下次重開 App 不會悄悄變成別的行為。
 
@@ -210,23 +211,38 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 
 > 檔案不小心刪掉沒關係：下次啟動會自動寫回一份預設範本（Traffic 會出現 `[CFG] wrote the default profile to …`）。
 
-> ### ⚠️ 升級之後：新版新增的 SVID 不會自己出現在你的 profile 裡
->
-> 既有的 profile **永遠不會被覆寫**（它可能帶著你改過的編號與文字），所以新版新增的狀態變數
-> 不會自動加進去，Host 查那幾個 VID 會什麼都讀不到。
->
-> 每次啟動時 App 會自己比對並在 Traffic 裡說出來：
->
-> ```
-> [CFG] 3 status variable(s) this build can serve are not in the profile: oes.processClass, ...
-> ```
->
-> 系統記錄裡對應的是 `SecsProfileMissingBinds`。**升級後請看一次這行**。要補的話兩種做法：
-> 照 [`secs-integration.md`](secs-integration.md) §4 把缺的幾列貼進 profile，
-> 或把 profile 檔刪掉讓它重新產生（**你改過的內容會一起不見**，所以先看清楚 log 列出的名字）。
->
-> **遠端命令也一樣。** 支援主機台製程事件（§12）之前產生的 profile，`remoteCommands` 是空的，
-> EAP 送 `TOOL_EVENT` 會收到 **HCACK 1**（命令不存在）。補法見 §12.5。
+### 7.3 升級之後：補上缺少的列（Add missing rows）
+
+既有的 profile **永遠不會被覆寫**（它可能帶著你改過的編號與文字），所以新版新增的狀態變數、事件、遠端命令
+不會自動加進去：Host 查那幾個 VID 什麼都讀不到，EAP 送 `TOOL_EVENT` 會收到 **HCACK 1**（命令不存在）。
+每次啟動時 App 會在 Traffic 裡說出來（系統記錄對應 `SecsProfileMissingBinds`）：
+
+```
+[CFG] 250 status variable(s) this build can serve are not in the profile: oes.slot1.monitoredValue, ...
+```
+
+**時機：** 每次升級 App 之後看一次 SECS 分頁。按鈕右邊的說明會寫「The profile is missing N row(s) …」，
+有寫就要補；寫「The profile has every row this build ships.」就不用。
+
+**步驟（Engineer 以上）：**
+
+1. 先通知 Host 端：補完重啟介面時連線會斷一下，且 S1F11 的名單會變長。
+2. SECS 分頁，`Profile (edit this)` 那一列下面按 **`Add missing rows`**。
+3. 看按鈕下方的結果：`Added N row(s), refused M — they take effect the next time the SECS interface starts`。
+4. 按 **`Restart interface`**（或下次重開 App）才生效。
+5. Host 再查一次（S1F11 或 S1F3），確認新的 VID 讀得到；用 `TOOL_EVENT` 的機台，送一次應不再回 HCACK 1。
+
+**它做什麼、不做什麼：**
+
+- 只**附加**缺的列：狀態變數（以 `bind` 比對）、事件（CEID）、警報（ALID）、遠端命令（名稱）。
+  **你改過的編號、名稱、單位、警報文字與註解一律不動**。
+- 動手前先備份成 `oes-leak-monitor.json.bak-yyyyMMddHHmmss`，放在同一個資料夾；要還原就把它改回原名再 Restart interface。
+- **你刻意刪掉的列也會被補回來**——光看檔案分不出「刻意刪掉」與「舊版沒寫」。補完若有不要的列，再手動刪掉即可（刪了之後說明會再列出它，那是提醒，不用理會）。
+- 要補的列若**編號已被你的其他列佔用**，那一列會被拒絕並列在說明裡（`Cannot be added: SVID … — already used …`），其他照補。要它的話，手動把其中一列改號再按一次。
+- 執行結果寫進系統記錄 `SecsProfileRowsAdded`，含每個區段補了幾列與被拒絕的列。
+
+**另一個做法**是關閉 App、備份並刪除該 profile，重開 App 會依新範本整份重寫——**你改過的內容會一起不見**，
+只在 profile 本來就沒有改過時才建議這樣做。
 
 ---
 
@@ -301,7 +317,7 @@ TCP 通了，但通訊建立（S1F13/S1F14）沒完成。先看 Traffic 裡設�
 2. 啟動 `Test_SECS` 的 Host 端，連到 `127.0.0.1:5000`，並按 **Enable Comm**（Connect 之前或之後按都可以）。
    **沒按這一步，App 會一直停在橘色 `SELECTED`**，Traffic 每 10 秒出現一次 `COMMACK=1 (host not ready), will retry`。
 3. 確認兩邊都到 **`COMMUNICATING`**。
-4. Host 送 **S1F3**（查狀態）→ 應回 **S1F4，29 個 SV**，SVID 為 `1{cc}2700001`…`1{cc}2700029`。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
+4. Host 送 **S1F3**（查狀態）→ 應回 **S1F4，282 個 SV**：全域 `1{cc}2700001`…`1{cc}2700032`，加上比值槽位 `1{cc}2700101`…`1{cc}2700395`（10 槽 × 位移 01～25）。少了的話先做 7.3。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。
    用 `Test_SECS` 時，Device profile 要選 **OES Leak Monitor acceptance (chamber 02)**（選單只能在未連線時改），再按 **Request All SV** 或 **Request VID 001/007/016/024/025**。內建 `Satellite OES`／`Demo` 的 **Request Status** 查的是 Demo 的 SVID 1～4，本設備沒有這些號碼，S1F4 會回四個空清單——不是設備沒回值。腔體不是 02 時，複製該 profile 並把編號裡的 `02` 換掉。
 5. Host 送 **S1F17** → 回 `ONLACK`（已在 online 時為 2）。
 6. Host 送 **S5F5**（查警報清單）→ 應回 **5 條**，ALID 為 **ASCII**（`<A[8] "1{cc}27002">`），category 依序 6/4/5/5/8。
@@ -339,7 +355,13 @@ TCP 通了，但通訊建立（S1F13/S1F14）沒完成。先看 Traffic 裡設�
 8. **反向驗證**：取消 `Report test / replay data too`，重播同一段 → 除了設備故障警報（ALID `1{cc}27012`／`013`／`014`，見 6.3）之外，**不應再收到任何 S5F1／S6F11**；但 Host 送 S1F3 查 `1{cc}2700016` 仍讀得到值，且 **VID 016 = 1**（Test_SECS 的查法見 9.1 步驟 4）。
 9. **測完把 `Report test / replay data too` 取消勾選並 `Save & apply`**；若第 2 步換過比值組，關閉 App 後還原備份的 `settings.json`。
 
-### 9.4 收尾
+### 9.4 比值槽位 VID 與 CEID 507
+
+1. **槽位狀態隨重播變化：** 照 9.3 的準備（出廠比值組、勾 `Report test / replay data too` 與 `Raise leak alarms during replay`）播 `P_OES1_0814220358.csv`。Host 以 S2F23 追蹤槽位 1～3 的位移 05（`1{cc}2700105`、`135`、`165`），每 1 秒取樣。→ 三者依序走過 **0（Normal）→ 1（Warning）→ 2（Alarm）**；同時查位移 25（`1{cc}2700125`、`155`、`185`）應為 `R_N2Ar`、`R_NOAr`、`R_N2357Ar`。
+2. **重排後收到 507：** Ratio Setup 分頁選第 1 列（`R_N2Ar`）→ 按 **▼**（Move down）一次 → Save → Monitor 分頁 Stop → Start。→ Host 收到 **CEID `1{cc}27507`**；再查位移 25，槽位 1 = `R_NOAr`、槽位 2 = `R_N2Ar`。Leak Monitor 分頁兩者的基準仍在（移動不改 Key）。接著**只改一個門檻**（例如 Sigma Warn）存檔、Stop → Start → **不應**收到 507。測完把 `R_N2Ar` 按 **▲** 移回第 1 列、存檔、Stop → Start（這一步也會送一次 507）。
+3. **舊 profile 補列：** 關閉 App，把 `Profile (edit this)` 換成舊版的 profile（先備份現用的那份）——2026-10-23 之前寫出的都缺槽位列；用 2026-10-15 之前、還沒有 `TOOL_EVENT` 的版本，可以順便驗 HCACK 1 → 0，重開 App。→ Traffic 出現 `… not in the profile …`，Host 查 `1{cc}2700125` 讀不到、送 `TOOL_EVENT` 回 HCACK 1。照 7.3 按 **Add missing rows** → **Restart interface** → Host 查得到 `1{cc}2700125`，`TOOL_EVENT` 不再回 HCACK 1；資料夾裡有 `.bak-…`，內容與換上的舊版相同。測完關閉 App，還原備份的 profile。
+
+### 9.5 收尾
 
 - 比對 `secs_YYYYMMDD.log` 與 Host 端的收送紀錄，逐則對上。
 - 把上報開關切回正式生產該有的狀態（alarms on、events on、test/replay off）。
@@ -376,10 +398,11 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | CEID `1{cc}27nnn` | 事件 |
 |---|---|
 | 502 | 操作者確認（Acknowledge）了洩漏警報 |
+| 507 | 比值設定重新載入後槽位的身分改變（調整順序、增刪比值、改譜線／監測方式／擷取方式／啟用／名稱／波長修正後重新開始擷取）——收到後重讀槽位位移 16～25。只改門檻不送 |
 | 508 | 開始擷取 |
 | 509 | 停止擷取 |
 
-### 10.4 狀態變數重點（完整 32 項見 [`secs-integration.md`](secs-integration.md) §5）
+### 10.4 狀態變數重點（全域 32 項見 [`secs-integration.md`](secs-integration.md) §5，比值槽位見 10.5）
 
 | VID | 意義 | 備註 |
 |---|---|---|
@@ -395,6 +418,15 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | **027–029** | **製程類別、類別狀態、步驟序號** | **028 才是能讀的那一個**：027 在「沒設分類器」「沒有電漿步驟」「還沒判定」三種情況下都是空字串。028 = 0/1/2/3/4 分別對應這三種、已分類、判定為無法分類。使用主機台製程事件時改由事件決定（§12） |
 | **030–032** | **主機台製程事件：狀態、視窗類別、最後收到的 CEID** | 030 = 0 未使用 / 1 狀態不明 / 2 在視窗內 / 3 不在任何視窗內（與電漿有無無關，電漿看 021）。032 用來確認 EAP 的轉送有到 |
 
+### 10.5 比值槽位（VID 101～400）
+
+`vvv = 100 + (N − 1) × 30 + 位移`，N = Ratio Setup 的第 N 列（1～10）。完整位移表與範例見
+[`secs-ratio-svid-example-zh-TW.md`](secs-ratio-svid-example-zh-TW.md)。給 Host 的三句話：
+
+- **讀位移 03 前先讀 18**：0 = 基準百分比、1 = σ 分數。
+- **收到 CEID 507 就重讀位移 16～25**：槽位換了比值或改了定義。
+- **以位移 25（Key）追蹤比值**，不要以槽位號或位移 22（顯示名稱，非 ASCII 字元會變成 `?`）。
+
 ---
 
 ## 11. 檢核表（可列印）
@@ -408,6 +440,8 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 - [ ] 第 9.1 節的基本連線七步全部通過
 - [ ] 第 9.2 節的設備故障警報已實測
 - [ ] 第 9.3 節的洩漏警報全路徑已用錄檔驗證，**且測試模式閘門已關回**
+- [ ] 第 9.4 節的比值槽位與 CEID 507 已驗證
+- [ ] 升級後：SECS 分頁顯示「The profile has every row this build ships.」（否則先做 7.3）
 - [ ] 上報開關為正式狀態：alarms **on**、events **on**、test/replay **off**
 - [ ] 日誌保留天數 ≥ 30，驗收日誌已存檔
 
@@ -484,12 +518,9 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 
 ### 12.5 升級後補 profile（`TOOL_EVENT` 收到 HCACK 1）
 
-舊 profile 不會被覆寫，所以沒有 `TOOL_EVENT`、也沒有 VID 030～032（Traffic 會出現 `[CFG] … not in the profile: oes.toolEventState, …`）。二擇一：
+舊 profile 不會被覆寫，所以沒有 `TOOL_EVENT`、也沒有 VID 030～032（Traffic 會出現 `[CFG] … not in the profile: oes.toolEventState, …`）。照 **7.3** 按 **Add missing rows**，再按 **Restart interface**。用 Host 再送一次 `TOOL_EVENT`，應回 HCACK 0。
 
-- **補三處**到 `Profile (edit this)` 那份（§7.2）：`statusVariables` 加 030～032 三列（從 [`secs-integration.md`](secs-integration.md) §4 的範本複製，編號維持 `cc=00`），並把 `"remoteCommands": {}` 改成 `"remoteCommands": { "TOOL_EVENT": [ "CEID", "TIME" ] }`。
-- **或重新產生**：關閉 App，備份並刪除該 profile，重開 App 會依新範本寫一份（Traffic 出現 `[CFG] wrote the default profile to …`）。**你改過的內容會一起不見。**
-
-改完按 **Restart interface**。用 Host 再送一次 `TOOL_EVENT`，應回 HCACK 0。
+> 舊 profile 裡「No remote commands … answered HCACK=1」那段註解補列後仍會留著（補列不動既有內容），內容已過時，可以手動刪掉。
 
 ### 12.6 檢核
 

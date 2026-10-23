@@ -191,7 +191,7 @@ td code{white-space:nowrap;}
 <tr><td>2</td><td>S1F1 → S1F2</td><td>確認型號與軟體版本</td></tr>
 <tr><td>2a</td><td>S1F17 → S1F18</td><td>依平台慣例要求 ON-LINE（設備端支援；ONLACK 0 = 接受、2 = 已在線上，兩者皆可）</td></tr>
 <tr><td>3</td><td>S2F31 → S2F32</td><td>對時（見下方注意）</td></tr>
-<tr><td>4</td><td>S1F11 → S1F12</td><td>讀 SVID 名單，和第 4.1 節比對；<strong>缺項要告警</strong>，不要默默略過</td></tr>
+<tr><td>4</td><td>S1F11 → S1F12</td><td>讀 SVID 名單，和第 4.1 節比對（全域 32 項 + 槽位 250 項）；<strong>缺項要告警</strong>，不要默默略過</td></tr>
 <tr><td>5</td><td>S5F5 → S5F6</td><td>讀警報清單，應有 5 條，ALID 為 ASCII</td></tr>
 <tr><td>6</td><td>S5F3 → S5F4</td><td>啟用全部警報</td></tr>
 <tr><td>7</td><td>S2F43 → S2F44</td><td><strong>開啟 S5、S6 的暫存（spooling）</strong>，斷線期間的警報與事件才不會遺失</td></tr>
@@ -199,6 +199,7 @@ td code{white-space:nowrap;}
 <tr><td>9</td><td>S2F23 → S2F24</td><td>訂閱 Trace（第 4.1 節）</td></tr>
 <tr><td>10</td><td>S6F23 → S6F24</td><td>取回斷線期間暫存的訊息</td></tr>
 <tr><td>11</td><td>S1F3 → S1F4</td><td>讀一次 VID 007／010／016／030，重建目前狀態（規則 R6、R9）</td></tr>
+<tr><td>11a</td><td>S1F3 → S1F4</td><td>讀 10 個槽位的位移 16～25，建立「槽位號 → Key」對照（規則 R11、R12）。重連後也要讀——斷線期間可能錯過 CEID 507</td></tr>
 <tr><td>12</td><td>S2F41 → S2F42</td><td><strong>（建議，非必要；待平台方確認是否採用）補送目前的製程視窗</strong>：若平台知道 PM3 此刻在某個製程視窗內（已收到 Start、尚未收到 End），而步驟 11 讀到的 VID 030 ≠ 2，就把那個 Start 的 CEID 以 <code>TOOL_EVENT</code> 再送一次（§6.5）。OES 重新啟動後在下一個視窗邊界之前都是「狀態不明」，補送可以縮短這段時間</td></tr>
 </tbody></table></div>
 <blockquote><p><strong>對時的注意事項：</strong> S2F31 只會設定 OES 回報給 Host 的 SECS 時鐘，<strong>不會改 OES PC 的系統時間</strong>。OES 寫的 CSV 與日誌用的是 PC 時鐘，所以 <strong>OES PC 要另外接廠內 NTP</strong>，否則事後拿 CSV 和 EAP 的紀錄對時會對不上。</p></blockquote>
@@ -228,6 +229,22 @@ td code{white-space:nowrap;}
 <tr><td>032</td><td><code>1032700032</code></td><td>Last tool CEID</td><td>U4</td><td></td><td>OES 最後收到的 <code>TOOL_EVENT</code> CEID；用來確認平台的轉送確實到達</td></tr>
 </tbody></table></div>
 <p>完整的 VID 001～032 定義見 <code>Satellite_SECS_Specification_v2.md</code> §1.4(a)；數值範例見 <code>secs-global-vid-example-zh-TW.html</code>。</p>
+<p><strong>比值槽位 VID 101～400。</strong> 每組比值（OES 的 Ratio Setup 第 N 列，N = 1～10）佔 30 個號碼：</p>
+<pre><code>SVID = 1032700000 + 100 + (N − 1) × 30 + 位移        （cc = 03）
+例：槽位 2 的位移 03 = 1032700133；槽位 1 的位移 25 = 1032700125</code></pre>
+<div class="tablewrap"><table>
+<thead><tr><th>位移</th><th>項目</th><th>型別</th><th>Trace</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td>03</td><td>Percent of baseline / σ score</td><td>F4</td><td>✔</td><td>該比值偏離基準多少；<strong>單位看 18</strong>（規則 R10）</td></tr>
+<tr><td>05</td><td>Ratio state</td><td>U4</td><td>✔</td><td>0 Normal、1 Warning、2 Alarm、3 NoPlasma、4 LowSignal、5 NoBaseline、6 Disabled、7 Observing、8 NotApplicable</td></tr>
+<tr><td>14／15</td><td>Ratio leak rate／Used in fusion</td><td>F4／U4</td><td></td><td>只由該比值推得的漏率；15 = 0 時 14 不採用</td></tr>
+<tr><td>16</td><td>Slot enabled</td><td>U4</td><td></td><td>1 = 啟用</td></tr>
+<tr><td>18</td><td>Value semantics</td><td>U4</td><td></td><td>0 = 03 是基準百分比、1 = σ 分數</td></tr>
+<tr><td>20／23</td><td>Signal wavelength／species</td><td>F4／A</td><td></td><td>在看哪條譜線（例：337.1 nm、<code>N2</code>）</td></tr>
+<tr><td>22</td><td>Slot display name</td><td>A</td><td></td><td>給人看的名稱；非 ASCII 字元會變成 <code>?</code>（例：<code>N? 337 / Ar 750</code>）</td></tr>
+<tr><td>25</td><td>Ratio key</td><td>A</td><td></td><td><strong>不變的識別碼</strong>，用來追蹤同一組比值（規則 R12）；空字串 = 空槽位</td></tr>
+</tbody></table></div>
+<p>其餘位移（01～02、04、06～13、17、19、21、24）見規格 §1.4(b)。沒有值時 F4 一律送 0、不送 NaN（規則 R13）。Trace 建議只訂閱啟用槽位的 03 與 05；10 個槽位全訂是 20 項，仍在一般 Trace 的負荷內。</p>
 <h3 id="42-alid警報">4.2 ALID（警報）</h3>
 <p>S5F1 的 ALID 以 <strong>ASCII</strong> 送出（<code>&lt;A[8] "10327002"&gt;</code>）。ALCD bit7 = 1 為發生、0 為解除。</p>
 <div class="tablewrap"><table>
@@ -245,9 +262,11 @@ td code{white-space:nowrap;}
 <thead><tr><th>CEID</th><th>事件</th><th>建議連結的報告</th></tr></thead>
 <tbody>
 <tr><td><code>10327502</code></td><td>Operator acknowledged（操作者解除鎖存警報）</td><td>RPTID 1：VID 007、010、013</td></tr>
+<tr><td><code>10327507</code></td><td>Ratio configuration reloaded（比值槽位身分改變）</td><td>RPTID 3：槽位 1～10 的位移 25（或收到後直接以 S1F3 重讀 10 槽的 16～25）</td></tr>
 <tr><td><code>10327508</code></td><td>Acquisition started（OES 開始採集）</td><td>RPTID 2：VID 013、015、016</td></tr>
 <tr><td><code>10327509</code></td><td>Acquisition stopped（OES 停止採集）</td><td>RPTID 2</td></tr>
 </tbody></table></div>
+<blockquote><p>507 <strong>只在槽位身分（位移 16～25）真的改變時</strong>送出：工程師在 OES 調整比值順序、增刪比值（其後的比值會移到別的槽位）、改譜線、監測方式、擷取方式、啟用、名稱或波長修正，並重新開始採集之後。只改門檻、平滑不會送。</p></blockquote>
 <blockquote><p>OES 的 508／509 是<strong>光譜儀開始／停止採集</strong>，不是電漿開啟／關閉。電漿有無看 VID 021。</p></blockquote>
 <h2 id="5-判讀規則必須實作">5. 判讀規則（必須實作）</h2>
 <p>以下行為都已對照設備端程式碼確認。EAP 的語意層必須處理，否則會產生假警報或漏報。</p>
@@ -263,6 +282,10 @@ td code{white-space:nowrap;}
 <tr><td>R7</td><td><strong>VID 008 和 009 不可相加或相減。</strong> 008 只排除停用的比值；009 只算 Warning（Alarm 算在 010）。要判斷「有沒有異常」，看 007</td><td>鎖存 Alarm 時讀到 009 = 0，誤判為正常</td></tr>
 <tr><td>R8</td><td><strong>讀 027 前先看 028。</strong> 027 空字串有三種原因，只有 028 分得出來（0 未設分類器、1 無電漿步驟、2 尚未判定、3 已分類、4 無法分類）</td><td>把「還沒判定」當成「不是製程 A」</td></tr>
 <tr><td>R9</td><td><strong>VID 030 = 1 不只是「還沒收到事件」。</strong> 也包括視窗逾時（超過 OES 端的上限仍未收到 End）、以及事件暫不套用（OES 回放錄檔時一律如此；測試模式預設如此——此時 016 也是 1）。030 = 1 時 OES 照未使用製程事件時的方式判定。<strong>030 = 3 只表示不在任何視窗內，與有沒有電漿無關</strong>，有沒有電漿看 021</td><td>把逾時當成平台沒轉送；把「視窗外」當成「沒有電漿」</td></tr>
+<tr><td>R10</td><td><strong>讀槽位的位移 03 前先讀 18。</strong> 18 = 0 時 03 是基準百分比（100 = 基準）；= 1 時是 σ 分數（100 = 基準、120 = 警告、150 = 警報）。兩者刻度相同但意義不同，不可混算、不可畫在同一條軸上當同一個量</td><td>把 σ 分數 126 讀成「高出基準 26 %」</td></tr>
+<tr><td>R11</td><td><strong>收到 CEID <code>10327507</code> 後，先重讀 10 個槽位的位移 16～25，再相信下一筆槽位數值。</strong> 507 代表至少有一個槽位換了比值或改了定義</td><td>重排後把新比值的數值記到舊比值名下</td></tr>
+<tr><td>R12</td><td><strong>以位移 25（Key）追蹤比值，不要以槽位號或位移 22。</strong> 槽位號在重排後會換人；22 是可以隨時改的顯示名稱。25 建立後永不改變，改名、重排都不變。25 為空字串表示空槽位（與「有設定但停用」的 16 = 0 不同）</td><td>歷史資料接錯比值；改名後同一組比值變成兩條趨勢</td></tr>
+<tr><td>R13</td><td><strong>槽位的 F4 沒有值時送 0，不是「量到 0」。</strong> 05 = 3 或 6 時 01～15 都無意義；05 = 5 時 10～13 無意義；19 = 2 時 06 無意義；17 = 1（絕對強度）時 07、09、21 為 0、24 為空字串；VID 006 ≠ 1 時 14、15 為 0。完整對照見規格 §1.4(b)</td><td>把停判期間的 0 畫進趨勢，看起來像比值掉到零</td></tr>
 </tbody></table></div>
 <h2 id="6-與主機台製程事件的關聯">6. 與主機台製程事件的關聯</h2>
 <h3 id="61-使用的主機台事件pm3">6.1 使用的主機台事件（PM3）</h3>
@@ -399,6 +422,8 @@ OES：CH3 OES LEAK ALARM composite=3, 2 alarm / 0 warning of 3 ratios
 <tr><td>7</td><td>在主機台跑一次 PM3 Chamber Process</td><td>EAP 建立 PROCESS_A 視窗，並把 Start／End 以 <code>TOOL_EVENT</code> 轉送：HCACK 0；視窗內 VID 030 = 2、031 = <code>A</code>，End 之後 030 = 3；032 為最後送出的 CEID</td></tr>
 <tr><td>8</td><td>轉送一個 OES 對照表沒有的 CEID（例如 slit door）</td><td>HCACK 0；VID 032 更新、030 不變</td></tr>
 <tr><td>9</td><td>送一筆 <code>TIME</code> 格式錯誤的 <code>TOOL_EVENT</code></td><td>HCACK 3，該事件不採用</td></tr>
+<tr><td>10</td><td>步驟 2 播放漏氣錄檔期間，Trace 追蹤槽位 1～3 的位移 05</td><td>依序走過 0（Normal）→ 1（Warning）→ 2（Alarm）；以出廠比值組驗收時，位移 25 為 <code>R_N2Ar</code>、<code>R_NOAr</code>、<code>R_N2357Ar</code>（現場比值組則以 OES Ratio Setup 畫面為準）</td></tr>
+<tr><td>11</td><td>請設備工程師在 OES Ratio Setup 把第 1 列往下移一列（▼）、存檔，Stop → Start（之後移回）</td><td>收到 CEID <code>10327507</code>；重讀後槽位 1、2 的位移 25 對調（驗證 R11、R12）。只改門檻再重啟則<strong>不會</strong>收到 507</td></tr>
 </tbody></table></div>
 <h2 id="10-待補需求與已知限制">10. 待補需求與已知限制</h2>
 <h3 id="101-待補需求">10.1 待補需求</h3>
@@ -417,9 +442,10 @@ OES：CH3 OES LEAK ALARM composite=3, 2 alarm / 0 warning of 3 ratios
 <thead><tr><th>項目</th><th>狀態</th><th>EAP 的因應</th></tr></thead>
 <tbody>
 <tr><td>CEID 501（洩漏狀態改變）</td><td>未實作</td><td>狀態變化靠 ALID 與 Trace 的 007 推得</td></tr>
-<tr><td>比值槽位 VID 101～400</td><td>未實作</td><td>只有整機結論，看不到逐比值細節</td></tr>
+<tr><td>比值槽位 VID 101～400</td><td>已實作（2026-10-23）</td><td>見 §4.1 與規則 R10～R13</td></tr>
+<tr><td>槽位警報 ALID 101～130</td><td>未實作</td><td>逐比值的警報狀態看槽位位移 05</td></tr>
 <tr><td>遠端命令 S2F41</td><td>只有 <code>TOOL_EVENT</code>（§6.5）；沒有任何控制命令</td><td>EAP 不能遠端解除警報；一律由操作者在 OES 畫面按 Acknowledge</td></tr>
-<tr><td>舊版 profile</td><td>升級前就啟用過 SECS 的 OES，profile 不會自動加入 <code>TOOL_EVENT</code> 與 VID 030～032</td><td><code>TOOL_EVENT</code> 會收到 HCACK 1、S1F11 名單少三項；由設備工程師補 profile（<code>secs-operation-sop-zh-TW</code> 有步驟）</td></tr>
+<tr><td>舊版 profile</td><td>升級前就啟用過 SECS 的 OES，profile 不會自動加入新的列（<code>TOOL_EVENT</code>、VID 030～032、槽位 VID 101～400）</td><td><code>TOOL_EVENT</code> 會收到 HCACK 1、S1F11 名單少列；請設備工程師在 OES 的 SECS 分頁按 <strong>Add missing rows</strong> 並重啟介面（<code>secs-operation-sop-zh-TW</code> 有步驟）</td></tr>
 <tr><td>設備端時間戳</td><td>S6F11／S5F1 不帶</td><td>用 EAP 收到的時間；OES PC 要接 NTP</td></tr>
 <tr><td>一個 OES App 對一個 <code>cc</code></td><td>設計如此</td><td>將來 PM2 也加裝時，是另一條連線、另一組編號（<code>cc</code> = 02）</td></tr>
 </tbody></table></div>

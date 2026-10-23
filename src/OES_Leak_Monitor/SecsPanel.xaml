@@ -246,6 +246,21 @@
                     <TextBlock Text="{Binding LogFilePath}" Style="{StaticResource PathText}"
                                MaxWidth="620" ToolTip="{Binding LogFilePath}"/>
                 </StackPanel>
+                <!-- A profile is never overwritten, so rows a later build adds reach this machine
+                     only through here. Engineer+ (the command checks CanEdit). -->
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Content="Add missing rows" Command="{Binding AddMissingRowsCommand}"
+                            Padding="12,3" MinWidth="130" Margin="0,0,12,0" VerticalAlignment="Top"
+                            AutomationProperties.Name="Add missing rows"
+                            ToolTip="Appends to the profile above the status variables, events, alarms and remote commands this build ships and the file lacks. Rows already there are not touched, renumbered or renamed ones included; a row whose number is already taken is refused and listed. The profile is backed up first ({profile}.bak-yyyyMMddHHmmss). Takes effect the next time the interface starts. Engineer and above."/>
+                    <StackPanel>
+                        <TextBlock Text="{Binding MissingRowsText}" TextWrapping="Wrap" MaxWidth="620"
+                                   Foreground="#555" AutomationProperties.Name="Missing rows"/>
+                        <TextBlock Text="{Binding AddMissingRowsResultText}" TextWrapping="Wrap" MaxWidth="620"
+                                   Foreground="#B8860B" FontWeight="SemiBold" Margin="0,2,0,0"
+                                   AutomationProperties.Name="Add missing rows result"/>
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
         </Border>
 

@@ -121,6 +121,7 @@ td code{white-space:nowrap;}
 <a class="l2" href="#7-變更設定的正確做法">7. 變更設定的正確做法</a>
 <a class="l3" href="#71-改腔體代號-cc">7.1 改腔體代號 cc</a>
 <a class="l3" href="#72-改-profilesvid-名稱單位警報文字">7.2 改 profile（SVID 名稱、單位、警報文字）</a>
+<a class="l3" href="#73-升級之後補上缺少的列add-missing-rows">7.3 升級之後：補上缺少的列（Add missing rows）</a>
 <a class="l2" href="#8-故障排除">8. 故障排除</a>
 <a class="l3" href="#81-狀態是紅色-failed">8.1 狀態是紅色 FAILED</a>
 <a class="l3" href="#82-一直停在藍色-listeninghost-連不進來">8.2 一直停在藍色 LISTENING，Host 連不進來</a>
@@ -134,12 +135,14 @@ td code{white-space:nowrap;}
 <a class="l3" href="#91-基本連線必做">9.1 基本連線（必做）</a>
 <a class="l3" href="#92-設備故障警報必做">9.2 設備故障警報（必做）</a>
 <a class="l3" href="#93-洩漏警報全路徑用錄檔驗證">9.3 洩漏警報全路徑（用錄檔驗證）</a>
-<a class="l3" href="#94-收尾">9.4 收尾</a>
+<a class="l3" href="#94-比值槽位-vid-與-ceid-507">9.4 比值槽位 VID 與 CEID 507</a>
+<a class="l3" href="#95-收尾">9.5 收尾</a>
 <a class="l2" href="#10-交給-host-端的對照表">10. 交給 Host 端的對照表</a>
 <a class="l3" href="#101-編碼規則">10.1 編碼規則</a>
 <a class="l3" href="#102-警報s5f1">10.2 警報（S5F1）</a>
 <a class="l3" href="#103-事件s6f11">10.3 事件（S6F11）</a>
-<a class="l3" href="#104-狀態變數重點完整-32-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 32 項見 [secs-integration.md](secs-integration.md) §5）</a>
+<a class="l3" href="#104-狀態變數重點全域-32-項見-secs-integrationmdsecs-integrationmd-5比值槽位見-105">10.4 狀態變數重點（全域 32 項見 [secs-integration.md](secs-integration.md) §5，比值槽位見 10.5）</a>
+<a class="l3" href="#105-比值槽位vid-101400">10.5 比值槽位（VID 101～400）</a>
 <a class="l2" href="#11-檢核表可列印">11. 檢核表（可列印）</a>
 <a class="l3" href="#111-上線前engineer">11.1 上線前（Engineer）</a>
 <a class="l3" href="#112-每班operator">11.2 每班（Operator）</a>
@@ -213,7 +216,7 @@ td code{white-space:nowrap;}
 <thead><tr><th>你要做的事</th><th>需要的角色</th></tr></thead>
 <tbody>
 <tr><td>看連線狀態、控制狀態、腔體號、profile 路徑、收送日誌</td><td>任何人（含 Guest）</td></tr>
-<tr><td>改任何一項設定、按 <strong>Save &amp; apply</strong> 或 <strong>Restart interface</strong></td><td><strong>Engineer 以上</strong></td></tr>
+<tr><td>改任何一項設定、按 <strong>Save &amp; apply</strong>、<strong>Restart interface</strong> 或 <strong>Add missing rows</strong></td><td><strong>Engineer 以上</strong></td></tr>
 </tbody></table></div>
 <p>未登入或角色不足時，設定區整塊是灰的——<strong>這不是故障</strong>。要改設定請先用右上角登入 Engineer 帳號。</p>
 <blockquote><p>⚠️ 設定區的每一個欄位都會改變 Host 看到的東西。Operator 在沒有工程師在場時，<strong>只看不改</strong>。</p></blockquote>
@@ -344,6 +347,7 @@ td code{white-space:nowrap;}
 <tbody>
 <tr><td>分頁上的任何欄位（腔體、位址、開關、T 值…）</td><td><strong><code>Save &amp; apply</code></strong></td><td>寫進 <code>settings.json</code>，然後整個介面重建</td></tr>
 <tr><td>用文字編輯器手改了 profile JSON</td><td><strong><code>Restart interface</code></strong></td><td>重新讀 profile 檔、重新戳腔體號、重新啟動</td></tr>
+<tr><td>升級後 profile 少了新版的列（見 7.3）</td><td><strong><code>Add missing rows</code></strong>，再 <strong><code>Restart interface</code></strong></td><td>先備份、只附加缺的列，下次啟動介面才生效</td></tr>
 </tbody></table></div>
 <p>兩顆按鍵都會<strong>先存檔再重建</strong>——正在跑的一定等於磁碟上的那份，所以下次重開 App 不會悄悄變成別的行為。</p>
 <h3 id="71-改腔體代號-cc">7.1 改腔體代號 <code>cc</code></h3>
@@ -355,12 +359,37 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 <p>範本檔裡的編號一律以 <strong><code>cc=00</code></strong> 書寫，App 啟動時才把第 2–3 位換成你設定的腔體號。<strong>手改時不要把 <code>00</code> 換成真正的腔體號</strong>，那會被當成錯誤而拒絕啟動。</p>
 <p>改完按 <strong><code>Restart interface</code></strong>。如果 JSON 打錯（位數不對、<code>ss</code> 不是 27、<code>aa</code> 不是 00），介面會直接變 <code>FAILED</code> 並在旁邊說明原因——這是刻意的，寧可起不來，也不要送出屬於別種感測器的編號。</p>
 <blockquote><p>檔案不小心刪掉沒關係：下次啟動會自動寫回一份預設範本（Traffic 會出現 <code>[CFG] wrote the default profile to …</code>）。</p></blockquote>
-<blockquote><h3 id="升級之後新版新增的-svid-不會自己出現在你的-profile-裡">⚠️ 升級之後：新版新增的 SVID 不會自己出現在你的 profile 裡</h3>
-<p>既有的 profile <strong>永遠不會被覆寫</strong>（它可能帶著你改過的編號與文字），所以新版新增的狀態變數 不會自動加進去，Host 查那幾個 VID 會什麼都讀不到。</p>
-<p>每次啟動時 App 會自己比對並在 Traffic 裡說出來：</p>
-<pre><code>[CFG] 3 status variable(s) this build can serve are not in the profile: oes.processClass, ...</code></pre>
-<p>系統記錄裡對應的是 <code>SecsProfileMissingBinds</code>。<strong>升級後請看一次這行</strong>。要補的話兩種做法： 照 <a href="secs-integration.md"><code>secs-integration.md</code></a> §4 把缺的幾列貼進 profile， 或把 profile 檔刪掉讓它重新產生（<strong>你改過的內容會一起不見</strong>，所以先看清楚 log 列出的名字）。</p>
-<p><strong>遠端命令也一樣。</strong> 支援主機台製程事件（§12）之前產生的 profile，<code>remoteCommands</code> 是空的， EAP 送 <code>TOOL_EVENT</code> 會收到 <strong>HCACK 1</strong>（命令不存在）。補法見 §12.5。</p></blockquote>
+<h3 id="73-升級之後補上缺少的列add-missing-rows">7.3 升級之後：補上缺少的列（Add missing rows）</h3>
+<p>既有的 profile <strong>永遠不會被覆寫</strong>（它可能帶著你改過的編號與文字），所以新版新增的狀態變數、事件、遠端命令 不會自動加進去：Host 查那幾個 VID 什麼都讀不到，EAP 送 <code>TOOL_EVENT</code> 會收到 <strong>HCACK 1</strong>（命令不存在）。 每次啟動時 App 會在 Traffic 裡說出來（系統記錄對應 <code>SecsProfileMissingBinds</code>）：</p>
+<pre><code>[CFG] 250 status variable(s) this build can serve are not in the profile: oes.slot1.monitoredValue, ...</code></pre>
+<p><strong>時機：</strong> 每次升級 App 之後看一次 SECS 分頁。按鈕右邊的說明會寫「The profile is missing N row(s) …」， 有寫就要補；寫「The profile has every row this build ships.」就不用。</p>
+<p><strong>步驟（Engineer 以上）：</strong></p>
+<ol>
+<li>先通知 Host 端：補完重啟介面時連線會斷一下，且 S1F11 的名單會變長。
+</li>
+<li>SECS 分頁，<code>Profile (edit this)</code> 那一列下面按 <strong><code>Add missing rows</code></strong>。
+</li>
+<li>看按鈕下方的結果：<code>Added N row(s), refused M — they take effect the next time the SECS interface starts</code>。
+</li>
+<li>按 <strong><code>Restart interface</code></strong>（或下次重開 App）才生效。
+</li>
+<li>Host 再查一次（S1F11 或 S1F3），確認新的 VID 讀得到；用 <code>TOOL_EVENT</code> 的機台，送一次應不再回 HCACK 1。
+</li>
+</ol>
+<p><strong>它做什麼、不做什麼：</strong></p>
+<ul>
+<li>只<strong>附加</strong>缺的列：狀態變數（以 <code>bind</code> 比對）、事件（CEID）、警報（ALID）、遠端命令（名稱）。 <strong>你改過的編號、名稱、單位、警報文字與註解一律不動</strong>。
+</li>
+<li>動手前先備份成 <code>oes-leak-monitor.json.bak-yyyyMMddHHmmss</code>，放在同一個資料夾；要還原就把它改回原名再 Restart interface。
+</li>
+<li><strong>你刻意刪掉的列也會被補回來</strong>——光看檔案分不出「刻意刪掉」與「舊版沒寫」。補完若有不要的列，再手動刪掉即可（刪了之後說明會再列出它，那是提醒，不用理會）。
+</li>
+<li>要補的列若<strong>編號已被你的其他列佔用</strong>，那一列會被拒絕並列在說明裡（<code>Cannot be added: SVID … — already used …</code>），其他照補。要它的話，手動把其中一列改號再按一次。
+</li>
+<li>執行結果寫進系統記錄 <code>SecsProfileRowsAdded</code>，含每個區段補了幾列與被拒絕的列。
+</li>
+</ul>
+<p><strong>另一個做法</strong>是關閉 App、備份並刪除該 profile，重開 App 會依新範本整份重寫——<strong>你改過的內容會一起不見</strong>， 只在 profile 本來就沒有改過時才建議這樣做。</p>
 <hr>
 <h2 id="8-故障排除">8. 故障排除</h2>
 <h3 id="81-狀態是紅色-failed">8.1 狀態是紅色 <code>FAILED</code></h3>
@@ -430,7 +459,7 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 </li>
 <li>確認兩邊都到 <strong><code>COMMUNICATING</code></strong>。
 </li>
-<li>Host 送 <strong>S1F3</strong>（查狀態）→ 應回 <strong>S1F4，29 個 SV</strong>，SVID 為 <code>1{cc}2700001</code>…<code>1{cc}2700029</code>。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。 用 <code>Test_SECS</code> 時，Device profile 要選 <strong>OES Leak Monitor acceptance (chamber 02)</strong>（選單只能在未連線時改），再按 <strong>Request All SV</strong> 或 <strong>Request VID 001/007/016/024/025</strong>。內建 <code>Satellite OES</code>／<code>Demo</code> 的 <strong>Request Status</strong> 查的是 Demo 的 SVID 1～4，本設備沒有這些號碼，S1F4 會回四個空清單——不是設備沒回值。腔體不是 02 時，複製該 profile 並把編號裡的 <code>02</code> 換掉。
+<li>Host 送 <strong>S1F3</strong>（查狀態）→ 應回 <strong>S1F4，282 個 SV</strong>：全域 <code>1{cc}2700001</code>…<code>1{cc}2700032</code>，加上比值槽位 <code>1{cc}2700101</code>…<code>1{cc}2700395</code>（10 槽 × 位移 01～25）。少了的話先做 7.3。抽驗 VID 024/025 是否等於裝置目前的積分時間與平均次數。 用 <code>Test_SECS</code> 時，Device profile 要選 <strong>OES Leak Monitor acceptance (chamber 02)</strong>（選單只能在未連線時改），再按 <strong>Request All SV</strong> 或 <strong>Request VID 001/007/016/024/025</strong>。內建 <code>Satellite OES</code>／<code>Demo</code> 的 <strong>Request Status</strong> 查的是 Demo 的 SVID 1～4，本設備沒有這些號碼，S1F4 會回四個空清單——不是設備沒回值。腔體不是 02 時，複製該 profile 並把編號裡的 <code>02</code> 換掉。
 </li>
 <li>Host 送 <strong>S1F17</strong> → 回 <code>ONLACK</code>（已在 online 時為 2）。
 </li>
@@ -482,7 +511,16 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 <li><strong>測完把 <code>Report test / replay data too</code> 取消勾選並 <code>Save &amp; apply</code></strong>；若第 2 步換過比值組，關閉 App 後還原備份的 <code>settings.json</code>。
 </li>
 </ol>
-<h3 id="94-收尾">9.4 收尾</h3>
+<h3 id="94-比值槽位-vid-與-ceid-507">9.4 比值槽位 VID 與 CEID 507</h3>
+<ol>
+<li><strong>槽位狀態隨重播變化：</strong> 照 9.3 的準備（出廠比值組、勾 <code>Report test / replay data too</code> 與 <code>Raise leak alarms during replay</code>）播 <code>P_OES1_0814220358.csv</code>。Host 以 S2F23 追蹤槽位 1～3 的位移 05（<code>1{cc}2700105</code>、<code>135</code>、<code>165</code>），每 1 秒取樣。→ 三者依序走過 <strong>0（Normal）→ 1（Warning）→ 2（Alarm）</strong>；同時查位移 25（<code>1{cc}2700125</code>、<code>155</code>、<code>185</code>）應為 <code>R_N2Ar</code>、<code>R_NOAr</code>、<code>R_N2357Ar</code>。
+</li>
+<li><strong>重排後收到 507：</strong> Ratio Setup 分頁選第 1 列（<code>R_N2Ar</code>）→ 按 <strong>▼</strong>（Move down）一次 → Save → Monitor 分頁 Stop → Start。→ Host 收到 <strong>CEID <code>1{cc}27507</code></strong>；再查位移 25，槽位 1 = <code>R_NOAr</code>、槽位 2 = <code>R_N2Ar</code>。Leak Monitor 分頁兩者的基準仍在（移動不改 Key）。接著<strong>只改一個門檻</strong>（例如 Sigma Warn）存檔、Stop → Start → <strong>不應</strong>收到 507。測完把 <code>R_N2Ar</code> 按 <strong>▲</strong> 移回第 1 列、存檔、Stop → Start（這一步也會送一次 507）。
+</li>
+<li><strong>舊 profile 補列：</strong> 關閉 App，把 <code>Profile (edit this)</code> 換成舊版的 profile（先備份現用的那份）——2026-10-23 之前寫出的都缺槽位列；用 2026-10-15 之前、還沒有 <code>TOOL_EVENT</code> 的版本，可以順便驗 HCACK 1 → 0，重開 App。→ Traffic 出現 <code>… not in the profile …</code>，Host 查 <code>1{cc}2700125</code> 讀不到、送 <code>TOOL_EVENT</code> 回 HCACK 1。照 7.3 按 <strong>Add missing rows</strong> → <strong>Restart interface</strong> → Host 查得到 <code>1{cc}2700125</code>，<code>TOOL_EVENT</code> 不再回 HCACK 1；資料夾裡有 <code>.bak-…</code>，內容與換上的舊版相同。測完關閉 App，還原備份的 profile。
+</li>
+</ol>
+<h3 id="95-收尾">9.5 收尾</h3>
 <ul>
 <li>比對 <code>secs_YYYYMMDD.log</code> 與 Host 端的收送紀錄，逐則對上。
 </li>
@@ -514,10 +552,11 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <thead><tr><th>CEID <code>1{cc}27nnn</code></th><th>事件</th></tr></thead>
 <tbody>
 <tr><td>502</td><td>操作者確認（Acknowledge）了洩漏警報</td></tr>
+<tr><td>507</td><td>比值設定重新載入後槽位的身分改變（調整順序、增刪比值、改譜線／監測方式／擷取方式／啟用／名稱／波長修正後重新開始擷取）——收到後重讀槽位位移 16～25。只改門檻不送</td></tr>
 <tr><td>508</td><td>開始擷取</td></tr>
 <tr><td>509</td><td>停止擷取</td></tr>
 </tbody></table></div>
-<h3 id="104-狀態變數重點完整-32-項見-secs-integrationmdsecs-integrationmd-5">10.4 狀態變數重點（完整 32 項見 <a href="secs-integration.md"><code>secs-integration.md</code></a> §5）</h3>
+<h3 id="104-狀態變數重點全域-32-項見-secs-integrationmdsecs-integrationmd-5比值槽位見-105">10.4 狀態變數重點（全域 32 項見 <a href="secs-integration.md"><code>secs-integration.md</code></a> §5，比值槽位見 10.5）</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>VID</th><th>意義</th><th>備註</th></tr></thead>
 <tbody>
@@ -533,6 +572,16 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <tr><td><strong>027–029</strong></td><td><strong>製程類別、類別狀態、步驟序號</strong></td><td><strong>028 才是能讀的那一個</strong>：027 在「沒設分類器」「沒有電漿步驟」「還沒判定」三種情況下都是空字串。028 = 0/1/2/3/4 分別對應這三種、已分類、判定為無法分類。使用主機台製程事件時改由事件決定（§12）</td></tr>
 <tr><td><strong>030–032</strong></td><td><strong>主機台製程事件：狀態、視窗類別、最後收到的 CEID</strong></td><td>030 = 0 未使用 / 1 狀態不明 / 2 在視窗內 / 3 不在任何視窗內（與電漿有無無關，電漿看 021）。032 用來確認 EAP 的轉送有到</td></tr>
 </tbody></table></div>
+<h3 id="105-比值槽位vid-101400">10.5 比值槽位（VID 101～400）</h3>
+<p><code>vvv = 100 + (N − 1) × 30 + 位移</code>，N = Ratio Setup 的第 N 列（1～10）。完整位移表與範例見 <a href="secs-ratio-svid-example-zh-TW.md"><code>secs-ratio-svid-example-zh-TW.md</code></a>。給 Host 的三句話：</p>
+<ul>
+<li><strong>讀位移 03 前先讀 18</strong>：0 = 基準百分比、1 = σ 分數。
+</li>
+<li><strong>收到 CEID 507 就重讀位移 16～25</strong>：槽位換了比值或改了定義。
+</li>
+<li><strong>以位移 25（Key）追蹤比值</strong>，不要以槽位號或位移 22（顯示名稱，非 ASCII 字元會變成 <code>?</code>）。
+</li>
+</ul>
 <hr>
 <h2 id="11-檢核表可列印">11. 檢核表（可列印）</h2>
 <h3 id="111-上線前engineer">11.1 上線前（Engineer）</h3>
@@ -550,6 +599,10 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <li>[ ] 第 9.2 節的設備故障警報已實測
 </li>
 <li>[ ] 第 9.3 節的洩漏警報全路徑已用錄檔驗證，<strong>且測試模式閘門已關回</strong>
+</li>
+<li>[ ] 第 9.4 節的比值槽位與 CEID 507 已驗證
+</li>
+<li>[ ] 升級後：SECS 分頁顯示「The profile has every row this build ships.」（否則先做 7.3）
 </li>
 <li>[ ] 上報開關為正式狀態：alarms <strong>on</strong>、events <strong>on</strong>、test/replay <strong>off</strong>
 </li>
@@ -632,14 +685,8 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 </li>
 </ul>
 <h3 id="125-升級後補-profiletool_event-收到-hcack-1">12.5 升級後補 profile（<code>TOOL_EVENT</code> 收到 HCACK 1）</h3>
-<p>舊 profile 不會被覆寫，所以沒有 <code>TOOL_EVENT</code>、也沒有 VID 030～032（Traffic 會出現 <code>[CFG] … not in the profile: oes.toolEventState, …</code>）。二擇一：</p>
-<ul>
-<li><strong>補三處</strong>到 <code>Profile (edit this)</code> 那份（§7.2）：<code>statusVariables</code> 加 030～032 三列（從 <a href="secs-integration.md"><code>secs-integration.md</code></a> §4 的範本複製，編號維持 <code>cc=00</code>），並把 <code>"remoteCommands": {}</code> 改成 <code>"remoteCommands": { "TOOL_EVENT": [ "CEID", "TIME" ] }</code>。
-</li>
-<li><strong>或重新產生</strong>：關閉 App，備份並刪除該 profile，重開 App 會依新範本寫一份（Traffic 出現 <code>[CFG] wrote the default profile to …</code>）。<strong>你改過的內容會一起不見。</strong>
-</li>
-</ul>
-<p>改完按 <strong>Restart interface</strong>。用 Host 再送一次 <code>TOOL_EVENT</code>，應回 HCACK 0。</p>
+<p>舊 profile 不會被覆寫，所以沒有 <code>TOOL_EVENT</code>、也沒有 VID 030～032（Traffic 會出現 <code>[CFG] … not in the profile: oes.toolEventState, …</code>）。照 <strong>7.3</strong> 按 <strong>Add missing rows</strong>，再按 <strong>Restart interface</strong>。用 Host 再送一次 <code>TOOL_EVENT</code>，應回 HCACK 0。</p>
+<blockquote><p>舊 profile 裡「No remote commands … answered HCACK=1」那段註解補列後仍會留著（補列不動既有內容），內容已過時，可以手動刪掉。</p></blockquote>
 <h3 id="126-檢核">12.6 檢核</h3>
 <ul>
 <li>[ ] Ratio Setup：要在製程 A 判定的比值，Process class = <code>A</code>

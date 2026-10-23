@@ -55,6 +55,8 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
 
         AddRatioCommand    = new RelayCommand(AddRatio,    () => _engineerPlus && Ratios.Count < MaxRatios);
         RemoveRatioCommand = new RelayCommand(RemoveRatio, () => _engineerPlus && _selectedRatio is not null && Ratios.Count > 1);
+        MoveUpCommand      = new RelayCommand(() => MoveSelected(-1), () => CanMoveSelected(-1));
+        MoveDownCommand    = new RelayCommand(() => MoveSelected(+1), () => CanMoveSelected(+1));
         SaveCommand        = new RelayCommand(Save,        () => _engineerPlus && _isDirty);
         RevertCommand      = new RelayCommand(LoadFromEngine, () => _isDirty);
 
@@ -119,11 +121,21 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
     public RelayCommand SaveCommand        { get; }
     public RelayCommand RevertCommand      { get; }
 
+    /// <summary>
+    /// Move the selected ratio one row up / down. Row N is slot N on the host's SECS slot VIDs,
+    /// so this is how a site chooses which ratio a host sees where. Staged like every other edit
+    /// here — Save, then an acquisition restart, which sends the host CEID 507. The row object
+    /// itself moves, so its key does not change and the Golden Run baseline, calibration and any
+    /// latched alarm keyed on it carry over; deleting and re-adding the ratio would lose all three.
+    /// </summary>
+    public RelayCommand MoveUpCommand      { get; }
+    public RelayCommand MoveDownCommand    { get; }
+
     private RatioEditViewModel? _selectedRatio;
     public RatioEditViewModel? SelectedRatio
     {
         get => _selectedRatio;
-        set { if (Set(ref _selectedRatio, value)) RemoveRatioCommand.RaiseCanExecuteChanged(); }
+        set { if (Set(ref _selectedRatio, value)) RaiseRowCommands(); }
     }
 
     private bool _isDirty;
@@ -143,13 +155,37 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
 
     public string RatioCountText => $"{Ratios.Count} of {MaxRatios} ratios";
 
-    /// <summary>Propagates the signed-in role: only Engineer+ may add / remove / save.</summary>
+    /// <summary>Propagates the signed-in role: only Engineer+ may add / remove / move / save.</summary>
     public void SetRole(bool engineerOrHigher)
     {
         _engineerPlus = engineerOrHigher;
         AddRatioCommand.RaiseCanExecuteChanged();
-        RemoveRatioCommand.RaiseCanExecuteChanged();
+        RaiseRowCommands();
         SaveCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseRowCommands()
+    {
+        RemoveRatioCommand.RaiseCanExecuteChanged();
+        MoveUpCommand.RaiseCanExecuteChanged();
+        MoveDownCommand.RaiseCanExecuteChanged();
+    }
+
+    private bool CanMoveSelected(int step)
+    {
+        if (!_engineerPlus || _selectedRatio is null) return false;
+        int to = Ratios.IndexOf(_selectedRatio) + step;
+        return to >= 0 && to < Ratios.Count;
+    }
+
+    private void MoveSelected(int step)
+    {
+        if (!CanMoveSelected(step)) return;
+        var row = _selectedRatio!;
+        int from = Ratios.IndexOf(row);
+        Ratios.Move(from, from + step);
+        SelectedRatio = row;   // a no-op unless the bound ListBox cleared its selection during the Move
+        IsDirty = true;
     }
 
     // --- load / edit ---------------------------------------------------------
@@ -208,7 +244,7 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(RatioCountText));
         AddRatioCommand.RaiseCanExecuteChanged();
-        RemoveRatioCommand.RaiseCanExecuteChanged();
+        RaiseRowCommands();
     }
 
     private void OnRatioEdited(object? sender, PropertyChangedEventArgs e)

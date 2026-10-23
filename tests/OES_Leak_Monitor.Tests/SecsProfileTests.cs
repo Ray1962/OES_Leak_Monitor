@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Aqusen.Secs;
 using OES_Leak_Monitor;
 using Xunit;
@@ -27,7 +28,8 @@ public class SecsProfileTests : IDisposable
         var profile = LoadStamped(2);
 
         Assert.Equal("OES Leak Monitor (ss=27)", profile.Name);
-        Assert.Equal(32, profile.RequiredBindings.Count());
+        // 001-032 global, plus 10 ratio slots x 25 offsets.
+        Assert.Equal(32 + 250, profile.RequiredBindings.Count());
         Assert.Equal(5, profile.Alarms.Count());
         // One command, and it informs rather than drives: the EAP forwards the main tool's
         // process events. Its parameter names are what the library checks before the app sees it.
@@ -95,6 +97,73 @@ public class SecsProfileTests : IDisposable
         File.WriteAllText(path, "{ \"name\": \"edited on site\", \"statusVariables\": [] }");
         Assert.False(SecsProfileTemplate.EnsureExists(path));
         Assert.Contains("edited on site", File.ReadAllText(path));
+    }
+
+    // ---- the ratio slot rows (#47) -------------------------------------------
+
+    [Fact]
+    public void The_template_numbers_every_slot_offset_by_the_specification_formula()
+    {
+        using var doc = JsonDocument.Parse(SecsChamberCoding.ApplyChamber(SecsProfileTemplate.Json, 2));
+        var byBind = doc.RootElement.GetProperty("statusVariables").EnumerateArray()
+            .ToDictionary(sv => sv.GetProperty("bind").GetString()!, sv => sv);
+
+        // Worked from the specification's own examples (§1.4(b)): Ratio 1 offset 01 = 101,
+        // Ratio 2 offset 01 = 131, Ratio 10 offset 30 = 400.
+        Assert.Equal(1022700101, byBind["oes.slot1.monitoredValue"].GetProperty("svid").GetInt64());
+        Assert.Equal(1022700131, byBind["oes.slot2.monitoredValue"].GetProperty("svid").GetInt64());
+        Assert.Equal(1022700118, byBind["oes.slot1.valueSemantics"].GetProperty("svid").GetInt64());
+        Assert.Equal(1022700395, byBind["oes.slot10.key"].GetProperty("svid").GetInt64());
+
+        for (int n = 1; n <= 10; n++)
+        {
+            var slot = byBind.Where(kv => kv.Key.StartsWith($"oes.slot{n}.", StringComparison.Ordinal))
+                .Select(kv => kv.Value.GetProperty("svid").GetInt64())
+                .OrderBy(x => x).ToArray();
+            long first = 1022700000 + 100 + (n - 1) * 30;
+            Assert.Equal(Enumerable.Range(1, 25).Select(o => first + o), slot);
+        }
+    }
+
+    [Fact]
+    public void The_template_gives_each_offset_the_format_the_specification_names()
+    {
+        using var doc = JsonDocument.Parse(SecsChamberCoding.ApplyChamber(SecsProfileTemplate.Json, 2));
+        var formats = doc.RootElement.GetProperty("statusVariables").EnumerateArray()
+            .Where(sv => sv.GetProperty("bind").GetString()!.StartsWith("oes.slot3.", StringComparison.Ordinal))
+            .ToDictionary(sv => (int)(sv.GetProperty("svid").GetInt64() - 1022700160),
+                          sv => sv.GetProperty("format").GetString());
+
+        var u4 = new[] { 5, 15, 16, 17, 18, 19 };
+        var ascii = new[] { 22, 23, 24, 25 };
+        for (int o = 1; o <= 25; o++)
+        {
+            string expected = u4.Contains(o) ? "U4" : ascii.Contains(o) ? "A" : "F4";
+            Assert.True(expected == formats[o], $"offset {o:00}: expected {expected}, got {formats[o]}");
+        }
+    }
+
+    [Fact]
+    public void The_template_lists_CEID_507()
+    {
+        using var doc = JsonDocument.Parse(SecsChamberCoding.ApplyChamber(SecsProfileTemplate.Json, 2));
+        var ceids = doc.RootElement.GetProperty("events").EnumerateArray()
+            .Select(e => e.GetProperty("ceid").GetInt64()).ToArray();
+
+        Assert.Contains(10227507L, ceids);
+    }
+
+    [Fact]
+    public void Every_supplied_bind_name_is_really_registered()
+    {
+        var bridge = new SecsBridge(null, _folder, _folder, () => default);
+        var registered = bridge.CreateBindings();
+
+        var missing = SecsBridge.SuppliedBindNames.Where(n => !registered.Contains(n)).ToList();
+        var unlisted = registered.Names.Except(SecsBridge.SuppliedBindNames, StringComparer.OrdinalIgnoreCase).ToList();
+
+        Assert.True(missing.Count == 0, "listed but not registered: " + string.Join(", ", missing));
+        Assert.True(unlisted.Count == 0, "registered but not listed: " + string.Join(", ", unlisted));
     }
 
     private IDeviceProfile LoadStamped(int chamber)

@@ -26,6 +26,7 @@ internal sealed class SecsHarness : IAsyncDisposable
     private readonly List<TraceSample> _traces = new();
 
     private GemHost _host = null!;
+    private SecsSettings _settings = null!;
 
     public SecsBridge Bridge { get; private set; } = null!;
 
@@ -47,12 +48,15 @@ internal sealed class SecsHarness : IAsyncDisposable
 
     public int Samples { get { lock (_traces) { return _traces.Count; } } }
 
+    /// <param name="prepare">Called with the config folder before the interface first starts —
+    /// for a test that needs a site profile already there.</param>
     public static async Task<SecsHarness> StartAsync(Action<SecsSettings>? configure = null,
-        SystemLogger? log = null)
+        SystemLogger? log = null, Action<string>? prepare = null)
     {
         var h = new SecsHarness();
         var port = SecsTestPort.Free();
         Directory.CreateDirectory(h._folder);
+        prepare?.Invoke(h._folder);
 
         var settings = new SecsSettings
         {
@@ -65,6 +69,7 @@ internal sealed class SecsHarness : IAsyncDisposable
             ReportInTestMode = true,
         };
         configure?.Invoke(settings);
+        h._settings = settings;
 
         h.Bridge = new SecsBridge(log, h._folder, h._folder,
             () => new SecsBridge.AcquisitionInfo(120f, 4u));
@@ -108,6 +113,17 @@ internal sealed class SecsHarness : IAsyncDisposable
             () => h._host.CommunicationState == CommunicationState.Communicating, 20),
             "the host and the equipment never reached Communicating");
         return h;
+    }
+
+    /// <summary>What Restart interface does — re-reads the profile — then waits for the host to
+    /// be talking to the new instance.</summary>
+    public async Task RestartAsync()
+    {
+        Bridge.Configure(_settings);
+        Assert.True(await SecsTestPort.WaitAsync(
+            () => _host.CommunicationState == CommunicationState.Communicating
+                  && Bridge.State == SecsRunState.Communicating, 20),
+            $"never got back to Communicating after a restart (\"{Bridge.LastError}\")");
     }
 
     /// <summary>The host end, for the requests a test drives itself (S2F23, S5F5, S1F3).</summary>
