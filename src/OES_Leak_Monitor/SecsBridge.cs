@@ -304,6 +304,78 @@ public sealed class SecsBridge : IDisposable
 
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
 
+    // ---- bringing an old profile up to date ----------------------------------
+
+    /// <summary>The site-editable profile the settings name — the cc = 00 one, not the stamped
+    /// copy — whether or not the interface is running.</summary>
+    public string SiteProfilePath =>
+        Path.Combine(_configDirectory, SecsProfileTemplate.FolderName, _settings.ProfileFileName);
+
+    /// <summary>
+    /// What <see cref="AddMissingProfileRows"/> would do now, without writing anything: the rows
+    /// it would add and the ones it would refuse. Null when there is no profile yet (the first
+    /// start writes the whole template). Throws if the file cannot be read or parsed.
+    /// </summary>
+    public SecsProfileRowsResult? PreviewMissingProfileRows()
+    {
+        var path = SiteProfilePath;
+        return File.Exists(path)
+            ? SecsProfileRows.AddMissing(ReadProfile(path).Text, SecsProfileTemplate.Json)
+            : null;
+    }
+
+    /// <summary>
+    /// Appends the missing rows to the site profile (<see cref="SecsProfileRows.AddMissing"/>),
+    /// having first copied it to <c>{profile}.bak-{yyyyMMddHHmmss}</c>. Takes effect the next
+    /// time the interface starts — the running one keeps the profile it loaded. Nothing is
+    /// written when nothing would be added. Logged as <c>SecsProfileRowsAdded</c>.
+    /// </summary>
+    public SecsProfileRowsResult AddMissingProfileRows()
+    {
+        var path = SiteProfilePath;
+        var (before, encoding) = ReadProfile(path);
+        var result = SecsProfileRows.AddMissing(before, SecsProfileTemplate.Json);
+        if (result.Added.Count > 0)
+        {
+            File.Copy(path, BackupPath(path), overwrite: false);
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, result.Json, encoding);
+            File.Move(temp, path, overwrite: true);
+        }
+
+        var counts = SecsProfileRows.Describe(result.Added);
+        var refused = string.Join("; ", result.Rejected.Select(r => $"{r.Row}: {r.Reason}"));
+        Emit($"[CFG] added {result.Added.Count} missing row(s) to {path}" +
+             (result.Rejected.Count > 0 ? $", refused {result.Rejected.Count}: {refused}" : ""));
+        _log?.LogSystemEvent(result.Rejected.Count > 0 ? LogSeverity.Warning : LogSeverity.Information,
+            "SecsProfileRowsAdded",
+            $"Added {result.Added.Count} row(s) the SECS profile was missing ({(counts.Length > 0 ? counts : "none")}); " +
+            $"refused {result.Rejected.Count}{(refused.Length > 0 ? " — " + refused : "")}. " +
+            "They take effect the next time the SECS interface starts.",
+            value: counts, related: path);
+        return result;
+    }
+
+    /// <summary>The profile's text, and the encoding to write it back in — with a byte-order
+    /// mark if it had one, so the only bytes that change are the rows added.</summary>
+    private static (string Text, System.Text.Encoding Encoding) ReadProfile(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        bool bom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+        var encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: bom);
+        return (encoding.GetString(bytes, bom ? 3 : 0, bytes.Length - (bom ? 3 : 0)), encoding);
+    }
+
+    /// <summary><c>{profile}.bak-{yyyyMMddHHmmss}</c>, with <c>_N</c> appended rather than
+    /// replacing an earlier backup taken within the same second.</summary>
+    private static string BackupPath(string path)
+    {
+        var stem = $"{path}.bak-{DateTime.Now:yyyyMMddHHmmss}";
+        var candidate = stem;
+        for (int n = 1; File.Exists(candidate); n++) candidate = $"{stem}_{n}";
+        return candidate;
+    }
+
     // ---- inbound: TOOL_EVENT ------------------------------------------------
 
     /// <summary>

@@ -44,9 +44,11 @@ public sealed class SecsViewModel : INotifyPropertyChanged
 
         SaveCommand = new RelayCommand(Save, () => CanEdit);
         RestartCommand = new RelayCommand(Restart, () => CanEdit);
+        AddMissingRowsCommand = new RelayCommand(AddMissingRows, () => CanEdit && _missingRows > 0);
         ClearTrafficCommand = new RelayCommand(() => Traffic.Clear());
 
         LoadFrom(settings);
+        RefreshMissingRows();
 
         _bridge.StateChanged += (_, _) => _dispatcher.BeginInvoke(RaiseStatus);
         _bridge.Traffic += (_, line) => _dispatcher.BeginInvoke(() => AppendTraffic(line));
@@ -58,6 +60,10 @@ public sealed class SecsViewModel : INotifyPropertyChanged
     public RelayCommand SaveCommand { get; }
     public RelayCommand RestartCommand { get; }
     public RelayCommand ClearTrafficCommand { get; }
+
+    /// <summary>Appends the rows this build ships and the site profile lacks. Engineer+, and only
+    /// while there is something to add.</summary>
+    public RelayCommand AddMissingRowsCommand { get; }
 
     /// <summary>The most recent traffic lines, newest last.</summary>
     public ObservableCollection<string> Traffic { get; } = new();
@@ -179,6 +185,7 @@ public sealed class SecsViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             SaveCommand.RaiseCanExecuteChanged();
             RestartCommand.RaiseCanExecuteChanged();
+            AddMissingRowsCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -371,6 +378,74 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         Persist();
     }
 
+    // ---- missing profile rows -------------------------------------------------
+
+    private int _missingRows;
+
+    /// <summary>
+    /// Whether the site profile lacks rows this build ships, and what pressing the button would
+    /// do about it. Deleted rows are named in the same breath, because from the file alone a row
+    /// removed on site and one an older build never wrote look the same — and both come back.
+    /// </summary>
+    public string MissingRowsText { get; private set; } = "";
+
+    /// <summary>What the last press did. Empty until pressed.</summary>
+    public string AddMissingRowsResultText { get; private set; } = "";
+
+    private void RefreshMissingRows()
+    {
+        try
+        {
+            var preview = _bridge.PreviewMissingProfileRows();
+            _missingRows = preview?.Added.Count ?? 0;
+            if (preview is null)
+            {
+                MissingRowsText = "No profile yet — the whole template is written when the interface first starts.";
+            }
+            else if (preview.Added.Count == 0 && preview.Rejected.Count == 0)
+            {
+                MissingRowsText = "The profile has every row this build ships.";
+            }
+            else
+            {
+                var text = new List<string>();
+                if (preview.Added.Count > 0)
+                    text.Add($"The profile is missing {preview.Added.Count} row(s) this build ships " +
+                             $"({SecsProfileRows.Describe(preview.Added)}). Adding them also restores any row " +
+                             "deleted from the profile on purpose — delete it again afterwards if it is not wanted.");
+                // A row whose number the site has taken stays missing however often this is
+                // pressed; it is listed so that it can be renumbered by hand, not re-tried.
+                text.AddRange(preview.Rejected.Select(r => $"Cannot be added: {r.Row} — {r.Reason}."));
+                MissingRowsText = string.Join("\n", text);
+            }
+        }
+        catch (Exception ex)
+        {
+            _missingRows = 0;
+            MissingRowsText = "The profile could not be read: " + ex.Message;
+        }
+        OnPropertyChanged(nameof(MissingRowsText));
+        AddMissingRowsCommand.RaiseCanExecuteChanged();
+    }
+
+    private void AddMissingRows()
+    {
+        try
+        {
+            var result = _bridge.AddMissingProfileRows();
+            AddMissingRowsResultText =
+                $"Added {result.Added.Count} row(s), refused {result.Rejected.Count} — " +
+                "they take effect the next time the SECS interface starts (Restart interface)." +
+                string.Concat(result.Rejected.Select(r => $"\nRefused {r.Row}: {r.Reason}"));
+        }
+        catch (Exception ex)
+        {
+            AddMissingRowsResultText = "Could not add the rows: " + ex.Message;
+        }
+        OnPropertyChanged(nameof(AddMissingRowsResultText));
+        RefreshMissingRows();
+    }
+
     private void Restart()
     {
         // Restart runs what is *saved*, not what is typed — otherwise the interface and
@@ -448,6 +523,7 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ProfileTemplatePath));
         OnPropertyChanged(nameof(EffectiveProfilePath));
         OnPropertyChanged(nameof(LogFilePath));
+        RefreshMissingRows();   // a start may have written the profile, or a save named another
     }
 
     private void RaiseToolStatus()
