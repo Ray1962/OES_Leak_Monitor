@@ -328,6 +328,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // otherwise, so an upgrade opens no port until someone asks for one.
         _leakMonitorEngine.SampleProcessed += (_, snap) => _secs.OnSample(snap);
         _leakMonitorEngine.Acknowledged += (_, e) => _secs.OnAcknowledged(e);
+        // What each ratio slot measures (slot offsets 16-25): held from now, so a host asking
+        // before the first frame gets the truth; a later change sends CEID 507.
+        _secs.OnSlotTable(_leakMonitorEngine.SlotTable);
+        _leakMonitorEngine.SlotIdentityChanged += _secs.OnSlotIdentityChanged;
         Secs = new SecsViewModel(_secs, settings.Secs, PersistSecsSettings);
         // Main-tool process events forwarded by the EAP (S2F41 TOOL_EVENT) go straight to the
         // engine; the bridge only parses and answers. The table is adopted now — start-up is an

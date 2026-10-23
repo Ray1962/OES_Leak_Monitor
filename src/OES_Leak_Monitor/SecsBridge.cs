@@ -55,8 +55,9 @@ public enum SecsFault
 /// </summary>
 public sealed class SecsBridge : IDisposable
 {
-    // CEID nnn, specification §6.1. Only the three this app raises.
+    // CEID nnn, specification §6.1. Only the four this app raises.
     private const int CeidAlarmAcknowledged = 502;
+    private const int CeidRatioConfigReloaded = 507;
     private const int CeidAcquisitionStarted = 508;
     private const int CeidAcquisitionStopped = 509;
 
@@ -79,6 +80,11 @@ public sealed class SecsBridge : IDisposable
 
     // The only shared measurement state. Immutable object, single reference — see the class note.
     private volatile LeakMonitorSnapshot? _snapshot;
+
+    // What each ratio slot measures (slot offsets 16-25), as the engine last published it. Its own
+    // reference rather than a snapshot field for the reason _toolStatus is: it is set when the
+    // ratio set is built, before any frame, and must answer while none are flowing.
+    private volatile RatioSlotTable _slots = RatioSlotTable.Empty;
 
     // Frame rate, measured off the snapshot stream (VID 026). Written on the acquisition
     // thread, read by bindings; a double torn across threads would at worst report one
@@ -222,7 +228,7 @@ public sealed class SecsBridge : IDisposable
                     AlarmIdFormat = AlarmIdFormat.Ascii,
                 },
                 profile,
-                BuildBindings());
+                CreateBindings());
 
             equipment.Log += Emit;
             // The library has already checked the command and its parameter names against the
@@ -582,6 +588,24 @@ public sealed class SecsBridge : IDisposable
         SendEvent(acquiring ? CeidAcquisitionStarted : CeidAcquisitionStopped,
             acquiring ? "acquisition started" : "acquisition stopped");
 
+    /// <summary>The ratio slot table as the engine has it now — at start-up, before any frame.
+    /// Stores it; sends nothing.</summary>
+    public void OnSlotTable(RatioSlotTable table) => _slots = table;
+
+    /// <summary>
+    /// The engine's <see cref="LeakMonitorEngine.SlotIdentityChanged"/>: a slot now measures
+    /// something else, so a host that labelled its history by slot must re-read offsets 16–25
+    /// before trusting the next value — CEID 507. Stored before it is sent, so a host reacting
+    /// to the event reads the new identity.
+    /// </summary>
+    public void OnSlotIdentityChanged(RatioSlotTable table)
+    {
+        _slots = table;
+        SendEvent(CeidRatioConfigReloaded,
+            $"ratio slots changed ({Math.Min(table.Slots.Count, RatioSlotTable.SlotCount)} of " +
+            $"{RatioSlotTable.SlotCount} in use) — re-read slot identity");
+    }
+
     /// <summary>An operator ended a confirmed leak alarm — CEID 502.</summary>
     public void OnAcknowledged(LeakAcknowledgedEventArgs e) =>
         SendEvent(CeidAlarmAcknowledged,
@@ -652,8 +676,9 @@ public sealed class SecsBridge : IDisposable
     /// a site that removes an SV from its profile has removed it, and a site that adds one back
     /// should not have to restart the app. The library checks the other direction at construction
     /// — a profile naming a binding that does not exist here fails immediately, by name.
+    /// Public so a test can read a value exactly as S1F3 would, without a host.
     /// </summary>
-    private SvBindings BuildBindings()
+    public SvBindings CreateBindings()
     {
         var b = new SvBindings();
 
@@ -720,11 +745,101 @@ public sealed class SecsBridge : IDisposable
         b.Bind("oes.toolWindowClass", () => _toolStatus.WindowClass);
         b.Bind("oes.lastToolCeid", () => _toolStatus.LastCeid);
 
+        // 101-400: the ratio slots (§1.4(b)). Slot N is row N of Ratio Setup.
+        for (int n = 1; n <= RatioSlotTable.SlotCount; n++)
+        {
+            foreach (var field in SecsRatioSlots.Fields)
+            {
+                b.Bind(SecsRatioSlots.BindName(n, field), SlotReader(n, field.Offset));
+            }
+        }
+
         return b;
     }
 
     /// <summary>
-    /// Every bind name <see cref="BuildBindings"/> registers.
+    /// The value behind one slot offset. 16–25 read the slot table; 01–15 read the last snapshot's
+    /// row <em>for the slot's key</em>, never by position — after a reorder the snapshot still in
+    /// hand lists the ratios in the old order until the next frame. Nothing to read gives 0 (and
+    /// "" for a name): F4 never carries NaN, and a host tells meaningful from not by 05, 18, 19.
+    /// </summary>
+    private Func<object> SlotReader(int n, int offset) => offset switch
+    {
+        1 => () => F4(LiveRow(n)?.RawRatio),
+        2 => () => F4(LiveRow(n)?.SmoothedRatio),
+        3 => () => F4(LiveRow(n)?.PercentOfBaseline),
+        4 => () => F4(LiveRow(n)?.SlopePerMinute),
+        5 => () => (uint)SlotState(n),
+        6 => () => F4(LiveRow(n)?.NumeratorSnr),
+        // Absolute intensity still reads its reference for the plasma gate, but the slot names
+        // no reference (21 = 0, 24 = ""), so it reports none either. Decided by the slot table's
+        // mode, as 17 is — not the row's, which until the next frame may predate a reload.
+        7 => () => F4(IsRatioSlot(n) ? LiveRow(n)?.DenominatorSnr : null),
+        8 => () => F4(LiveRow(n)?.NumeratorIntensity),
+        9 => () => F4(IsRatioSlot(n) ? LiveRow(n)?.DenominatorIntensity : null),
+        10 => () => F4(LiveRow(n)?.BaselineMean),
+        11 => () => F4(LiveRow(n)?.BaselineSigma),
+        12 => () => F4(LiveRow(n)?.WarnThreshold),
+        13 => () => F4(LiveRow(n)?.AlarmThreshold),
+        14 => () => F4(SlotLeakEstimate(n)?.LeakRate),
+        15 => () => Flag(SlotLeakEstimate(n)?.Used == true),
+        16 => () => Flag(_slots.Slot(n)?.Enabled == true),
+        17 => () => (uint)(_slots.Slot(n)?.MonitorMode ?? MonitorMode.Ratio),
+        // Read straight off ValueHasPedestal. Re-deriving it from 17 and 19 is the step
+        // specification v2.1 got wrong (secs-ratio-svid-example-zh-TW.md §7).
+        18 => () => Flag(_slots.Slot(n)?.ValueHasPedestal == true),
+        19 => () => (uint)(_slots.Slot(n)?.ExtractMode ?? LineExtractMode.PeakHeight),
+        20 => () => F4(_slots.Slot(n)?.SignalWavelengthNm),
+        21 => () => F4(_slots.Slot(n)?.ReferenceWavelengthNm),
+        22 => () => _slots.Slot(n)?.DisplayName ?? "",
+        23 => () => _slots.Slot(n)?.SignalSpecies ?? "",
+        24 => () => _slots.Slot(n)?.ReferenceSpecies ?? "",
+        25 => () => _slots.Slot(n)?.Key ?? "",
+        _ => throw new ArgumentOutOfRangeException(nameof(offset), offset, "not a slot offset"),
+    };
+
+    private bool IsRatioSlot(int n) => _slots.Slot(n)?.MonitorMode == MonitorMode.Ratio;
+
+    /// <summary>The last snapshot's row for slot <paramref name="n"/>'s key, or null for an
+    /// empty slot or a key that snapshot does not carry.</summary>
+    private RatioSnapshot? LiveRow(int n)
+    {
+        var key = _slots.Slot(n)?.Key;
+        var ratios = _snapshot?.Ratios;
+        if (key is null || ratios is null) return null;
+        for (int i = 0; i < ratios.Count; i++)
+        {
+            if (ratios[i].Key == key) return ratios[i];
+        }
+        return null;
+    }
+
+    /// <summary>Offset 05. No row to read — an empty slot, or the first frame after a reload has
+    /// not arrived — is Disabled for a slot that is switched off or absent and NoPlasma for one
+    /// that is on: "nothing measured yet", which is what a host must not judge.</summary>
+    private RatioState SlotState(int n) =>
+        LiveRow(n)?.State
+        ?? (_slots.Slot(n)?.Enabled == true ? RatioState.NoPlasma : RatioState.Disabled);
+
+    private RatioLeakEstimate? SlotLeakEstimate(int n)
+    {
+        var key = _slots.Slot(n)?.Key;
+        var perRatio = Estimate()?.PerRatio;
+        if (key is null || perRatio is null) return null;
+        for (int i = 0; i < perRatio.Count; i++)
+        {
+            if (perRatio[i].Key == key) return perRatio[i];
+        }
+        return null;
+    }
+
+    /// <summary>An F4 value, with "no value" and any non-number sent as 0.</summary>
+    private static float F4(double? value) =>
+        value is { } v && float.IsFinite((float)v) ? (float)v : 0f;
+
+    /// <summary>
+    /// Every bind name <see cref="CreateBindings"/> registers — the global ones written out, the
+    /// 250 slot ones generated from <see cref="SecsRatioSlots"/>.
     ///
     /// <para>It exists for one direction the library cannot check. A profile naming a binding
     /// this build does not supply fails at start-up, by name; a build supplying one the profile
@@ -734,7 +849,7 @@ public sealed class SecsBridge : IDisposable
     /// anywhere to say so. <c>SecsProfileTests</c> checks each name here is really registered, so
     /// the list cannot claim a binding that does not exist.</para>
     /// </summary>
-    public static readonly string[] SuppliedBindNames =
+    public static readonly string[] SuppliedBindNames = new[]
     {
         "oes.leakRate", "oes.leakRateSigma", "oes.leakRateConfidence", "oes.leakRateValid",
         "oes.outOfCalibratedRange", "oes.calibrationStatus", "oes.compositeLevel",
@@ -745,7 +860,7 @@ public sealed class SecsBridge : IDisposable
         "oes.plasmaGateAvailable", "oes.dropoutCount", "oes.integrationTime", "oes.averageCount",
         "oes.frameRate", "oes.processClass", "oes.processClassState", "oes.processStepIndex",
         "oes.toolEventState", "oes.toolWindowClass", "oes.lastToolCeid",
-    };
+    }.Concat(SecsRatioSlots.BindNames()).ToArray();
 
     /// <summary>
     /// Bind names this build serves that <paramref name="profileJson"/> does not ask for. Not an

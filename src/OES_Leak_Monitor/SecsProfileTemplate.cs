@@ -44,9 +44,14 @@ public static class SecsProfileTemplate
     /// <summary>
     /// The template, with <c>cc = 00</c> throughout. 00 is not a chamber
     /// (<see cref="SecsChamberCoding.IsValidChamber"/> rejects it), which is the point:
-    /// a profile that was never stamped cannot be mistaken for a stamped one.
+    /// a profile that was never stamped cannot be mistaken for a stamped one. The 250 ratio
+    /// slot rows are generated from <see cref="SecsRatioSlots"/> into <see cref="SlotRowsMarker"/>.
     /// </summary>
-    public const string Json = """
+    public static readonly string Json = Body.Replace(SlotRowsMarker, SecsRatioSlots.ProfileRows());
+
+    private const string SlotRowsMarker = "    //@ratio-slot-rows\n";
+
+    private const string Body = """
 {
   // OES Leak Monitor SECS device profile.
   //
@@ -97,7 +102,12 @@ public static class SecsProfileTemplate
     // 030: 0 not in use, 1 unknown (judging as without them), 2 in a window, 3 outside any.
     { "svid": 1002700030, "name": "Tool event context state",    "units": "",         "format": "U4", "bind": "oes.toolEventState" },
     { "svid": 1002700031, "name": "Tool event window class",     "units": "",         "format": "A",  "bind": "oes.toolWindowClass" },
-    { "svid": 1002700032, "name": "Last tool CEID",              "units": "",         "format": "U4", "bind": "oes.lastToolCeid" }
+    { "svid": 1002700032, "name": "Last tool CEID",              "units": "",         "format": "U4", "bind": "oes.lastToolCeid" },
+
+    // 101-400: ten ratio slots, VID = 100 + (N-1) x 30 + offset (specification §1.4(b)).
+    // Slot N is row N of Ratio Setup; 01-15 are per-frame values, 16-25 what the slot measures.
+    // After a reorder or any change to 16-25 the equipment sends CEID 507: re-read 16-25.
+    //@ratio-slot-rows
   ],
 
   // category follows SEMI E5: 4 = parameter control error, 5 = irrecoverable error,
@@ -109,6 +119,15 @@ public static class SecsProfileTemplate
     { "alid": 10027012, "category": 5, "text": "OES CONNECTION LOST" },
     { "alid": 10027013, "category": 5, "text": "OES ACQUISITION ERROR" },
     { "alid": 10027014, "category": 8, "text": "OES DATA WRITE FAILURE" }
+  ],
+
+  // CEIDs this app sends (S6F11). Listed for whoever reads the profile; the program raises
+  // them by number, and a host links reports to them with S2F33/S2F35/S2F37.
+  "events": [
+    { "ceid": 10027502, "name": "Alarm acknowledged" },
+    { "ceid": 10027507, "name": "Ratio configuration reloaded -- re-read slot offsets 16-25" },
+    { "ceid": 10027508, "name": "Acquisition started" },
+    { "ceid": 10027509, "name": "Acquisition stopped" }
   ],
 
   // One remote command, and it is information rather than control: the EAP forwards the main

@@ -101,8 +101,8 @@ public class SecsWireTests : IAsyncLifetime
 
         await _host.RequestStatusAsync(Array.Empty<uint>());
 
-        Assert.True(await SecsTestPort.WaitAsync(() => log.Contains("(32 SV)"), 10),
-            "equipment did not answer S1F3 with all 32 status variables; last line: " + log);
+        Assert.True(await SecsTestPort.WaitAsync(() => log.Contains("(282 SV)"), 10),
+            "equipment did not answer S1F3 with all 282 status variables; last line: " + log);
     }
 
     [Fact]
