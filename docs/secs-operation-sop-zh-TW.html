@@ -515,7 +515,7 @@ In use (generated):    ...\profiles\.effective\oes-leak-monitor.json  ← 不要
 <ol>
 <li><strong>槽位狀態隨重播變化：</strong> 照 9.3 的準備（出廠比值組、勾 <code>Report test / replay data too</code> 與 <code>Raise leak alarms during replay</code>）播 <code>P_OES1_0814220358.csv</code>。Host 以 S2F23 追蹤槽位 1～3 的位移 05（<code>1{cc}2700105</code>、<code>135</code>、<code>165</code>），每 1 秒取樣。→ 三者依序走過 <strong>0（Normal）→ 1（Warning）→ 2（Alarm）</strong>；同時查位移 25（<code>1{cc}2700125</code>、<code>155</code>、<code>185</code>）應為 <code>R_N2Ar</code>、<code>R_NOAr</code>、<code>R_N2357Ar</code>。
 </li>
-<li><strong>槽位移動後收到 507：</strong> Ratio Setup 分頁沒有「移動列」的按鈕，槽位是靠刪除／新增列改變的。先<strong>關閉 App、備份 <code>settings.json</code></strong>，重開後在 Ratio Setup 選第 1 列（<code>R_N2Ar</code>）按 <strong>Remove</strong> → Save → Monitor 分頁 Stop → Start。→ Host 收到 <strong>CEID <code>1{cc}27507</code></strong>；再查位移 25，槽位 1 = <code>R_NOAr</code>、槽位 2 = <code>R_N2357Ar</code>、槽位 3 = <code>R_N2357Abs</code>、槽位 4 為空字串（空槽位，16 = 0、05 = 6）。接著<strong>只改一個門檻</strong>（例如 Sigma Warn）存檔、Stop → Start → <strong>不應</strong>收到 507。測完關閉 App，還原備份的 <code>settings.json</code>。
+<li><strong>重排後收到 507：</strong> Ratio Setup 分頁選第 1 列（<code>R_N2Ar</code>）→ 按 <strong>▼</strong>（Move down）一次 → Save → Monitor 分頁 Stop → Start。→ Host 收到 <strong>CEID <code>1{cc}27507</code></strong>；再查位移 25，槽位 1 = <code>R_NOAr</code>、槽位 2 = <code>R_N2Ar</code>。Leak Monitor 分頁兩者的基準仍在（移動不改 Key）。接著<strong>只改一個門檻</strong>（例如 Sigma Warn）存檔、Stop → Start → <strong>不應</strong>收到 507。測完把 <code>R_N2Ar</code> 按 <strong>▲</strong> 移回第 1 列、存檔、Stop → Start（這一步也會送一次 507）。
 </li>
 <li><strong>舊 profile 補列：</strong> 關閉 App，把 <code>Profile (edit this)</code> 換成舊版的 profile（先備份現用的那份）——2026-10-23 之前寫出的都缺槽位列；用 2026-10-15 之前、還沒有 <code>TOOL_EVENT</code> 的版本，可以順便驗 HCACK 1 → 0，重開 App。→ Traffic 出現 <code>… not in the profile …</code>，Host 查 <code>1{cc}2700125</code> 讀不到、送 <code>TOOL_EVENT</code> 回 HCACK 1。照 7.3 按 <strong>Add missing rows</strong> → <strong>Restart interface</strong> → Host 查得到 <code>1{cc}2700125</code>，<code>TOOL_EVENT</code> 不再回 HCACK 1；資料夾裡有 <code>.bak-…</code>，內容與換上的舊版相同。測完關閉 App，還原備份的 profile。
 </li>
@@ -552,7 +552,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <thead><tr><th>CEID <code>1{cc}27nnn</code></th><th>事件</th></tr></thead>
 <tbody>
 <tr><td>502</td><td>操作者確認（Acknowledge）了洩漏警報</td></tr>
-<tr><td>507</td><td>比值設定重新載入後槽位的身分改變（增刪比值、改譜線／監測方式／擷取方式／啟用／名稱／波長修正後重新開始擷取）——收到後重讀槽位位移 16～25。只改門檻不送</td></tr>
+<tr><td>507</td><td>比值設定重新載入後槽位的身分改變（調整順序、增刪比值、改譜線／監測方式／擷取方式／啟用／名稱／波長修正後重新開始擷取）——收到後重讀槽位位移 16～25。只改門檻不送</td></tr>
 <tr><td>508</td><td>開始擷取</td></tr>
 <tr><td>509</td><td>停止擷取</td></tr>
 </tbody></table></div>

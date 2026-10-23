@@ -358,7 +358,7 @@ TCP 通了，但通訊建立（S1F13/S1F14）沒完成。先看 Traffic 裡設�
 ### 9.4 比值槽位 VID 與 CEID 507
 
 1. **槽位狀態隨重播變化：** 照 9.3 的準備（出廠比值組、勾 `Report test / replay data too` 與 `Raise leak alarms during replay`）播 `P_OES1_0814220358.csv`。Host 以 S2F23 追蹤槽位 1～3 的位移 05（`1{cc}2700105`、`135`、`165`），每 1 秒取樣。→ 三者依序走過 **0（Normal）→ 1（Warning）→ 2（Alarm）**；同時查位移 25（`1{cc}2700125`、`155`、`185`）應為 `R_N2Ar`、`R_NOAr`、`R_N2357Ar`。
-2. **槽位移動後收到 507：** Ratio Setup 分頁沒有「移動列」的按鈕，槽位是靠刪除／新增列改變的。先**關閉 App、備份 `settings.json`**，重開後在 Ratio Setup 選第 1 列（`R_N2Ar`）按 **Remove** → Save → Monitor 分頁 Stop → Start。→ Host 收到 **CEID `1{cc}27507`**；再查位移 25，槽位 1 = `R_NOAr`、槽位 2 = `R_N2357Ar`、槽位 3 = `R_N2357Abs`、槽位 4 為空字串（空槽位，16 = 0、05 = 6）。接著**只改一個門檻**（例如 Sigma Warn）存檔、Stop → Start → **不應**收到 507。測完關閉 App，還原備份的 `settings.json`。
+2. **重排後收到 507：** Ratio Setup 分頁選第 1 列（`R_N2Ar`）→ 按 **▼**（Move down）一次 → Save → Monitor 分頁 Stop → Start。→ Host 收到 **CEID `1{cc}27507`**；再查位移 25，槽位 1 = `R_NOAr`、槽位 2 = `R_N2Ar`。Leak Monitor 分頁兩者的基準仍在（移動不改 Key）。接著**只改一個門檻**（例如 Sigma Warn）存檔、Stop → Start → **不應**收到 507。測完把 `R_N2Ar` 按 **▲** 移回第 1 列、存檔、Stop → Start（這一步也會送一次 507）。
 3. **舊 profile 補列：** 關閉 App，把 `Profile (edit this)` 換成舊版的 profile（先備份現用的那份）——2026-10-23 之前寫出的都缺槽位列；用 2026-10-15 之前、還沒有 `TOOL_EVENT` 的版本，可以順便驗 HCACK 1 → 0，重開 App。→ Traffic 出現 `… not in the profile …`，Host 查 `1{cc}2700125` 讀不到、送 `TOOL_EVENT` 回 HCACK 1。照 7.3 按 **Add missing rows** → **Restart interface** → Host 查得到 `1{cc}2700125`，`TOOL_EVENT` 不再回 HCACK 1；資料夾裡有 `.bak-…`，內容與換上的舊版相同。測完關閉 App，還原備份的 profile。
 
 ### 9.5 收尾
@@ -398,7 +398,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | CEID `1{cc}27nnn` | 事件 |
 |---|---|
 | 502 | 操作者確認（Acknowledge）了洩漏警報 |
-| 507 | 比值設定重新載入後槽位的身分改變（增刪比值、改譜線／監測方式／擷取方式／啟用／名稱／波長修正後重新開始擷取）——收到後重讀槽位位移 16～25。只改門檻不送 |
+| 507 | 比值設定重新載入後槽位的身分改變（調整順序、增刪比值、改譜線／監測方式／擷取方式／啟用／名稱／波長修正後重新開始擷取）——收到後重讀槽位位移 16～25。只改門檻不送 |
 | 508 | 開始擷取 |
 | 509 | 停止擷取 |
 

@@ -266,7 +266,7 @@ td code{white-space:nowrap;}
 <tr><td><code>10327508</code></td><td>Acquisition started（OES 開始採集）</td><td>RPTID 2：VID 013、015、016</td></tr>
 <tr><td><code>10327509</code></td><td>Acquisition stopped（OES 停止採集）</td><td>RPTID 2</td></tr>
 </tbody></table></div>
-<blockquote><p>507 <strong>只在槽位身分（位移 16～25）真的改變時</strong>送出：工程師在 OES 增刪比值（其後的比值會移到別的槽位）、改譜線、監測方式、擷取方式、啟用、名稱或波長修正，並重新開始採集之後。只改門檻、平滑不會送。</p></blockquote>
+<blockquote><p>507 <strong>只在槽位身分（位移 16～25）真的改變時</strong>送出：工程師在 OES 調整比值順序、增刪比值（其後的比值會移到別的槽位）、改譜線、監測方式、擷取方式、啟用、名稱或波長修正，並重新開始採集之後。只改門檻、平滑不會送。</p></blockquote>
 <blockquote><p>OES 的 508／509 是<strong>光譜儀開始／停止採集</strong>，不是電漿開啟／關閉。電漿有無看 VID 021。</p></blockquote>
 <h2 id="5-判讀規則必須實作">5. 判讀規則（必須實作）</h2>
 <p>以下行為都已對照設備端程式碼確認。EAP 的語意層必須處理，否則會產生假警報或漏報。</p>
@@ -423,7 +423,7 @@ OES：CH3 OES LEAK ALARM composite=3, 2 alarm / 0 warning of 3 ratios
 <tr><td>8</td><td>轉送一個 OES 對照表沒有的 CEID（例如 slit door）</td><td>HCACK 0；VID 032 更新、030 不變</td></tr>
 <tr><td>9</td><td>送一筆 <code>TIME</code> 格式錯誤的 <code>TOOL_EVENT</code></td><td>HCACK 3，該事件不採用</td></tr>
 <tr><td>10</td><td>步驟 2 播放漏氣錄檔期間，Trace 追蹤槽位 1～3 的位移 05</td><td>依序走過 0（Normal）→ 1（Warning）→ 2（Alarm）；以出廠比值組驗收時，位移 25 為 <code>R_N2Ar</code>、<code>R_NOAr</code>、<code>R_N2357Ar</code>（現場比值組則以 OES Ratio Setup 畫面為準）</td></tr>
-<tr><td>11</td><td>請設備工程師在 OES Ratio Setup 刪除第 1 列（之後還原）、存檔，Stop → Start</td><td>收到 CEID <code>10327507</code>；重讀後原本第 2 列以後的比值各往前移一個槽位，位移 25 跟著移動，最後一個槽位變空（驗證 R11、R12）。只改門檻再重啟則<strong>不會</strong>收到 507</td></tr>
+<tr><td>11</td><td>請設備工程師在 OES Ratio Setup 把第 1 列往下移一列（▼）、存檔，Stop → Start（之後移回）</td><td>收到 CEID <code>10327507</code>；重讀後槽位 1、2 的位移 25 對調（驗證 R11、R12）。只改門檻再重啟則<strong>不會</strong>收到 507</td></tr>
 </tbody></table></div>
 <h2 id="10-待補需求與已知限制">10. 待補需求與已知限制</h2>
 <h3 id="101-待補需求">10.1 待補需求</h3>

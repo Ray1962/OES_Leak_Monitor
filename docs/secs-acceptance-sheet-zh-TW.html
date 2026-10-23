@@ -423,17 +423,19 @@
   <section>
     <div class="head">
       <span class="num">7</span>
-      <h2>比值槽位改變時收到 CEID 507</h2>
+      <h2>重排比值後收到 CEID 507</h2>
       <span class="ref">§13.4-7</span>
     </div>
-    <p class="lead">Ratio Setup 沒有「移動列」的按鈕，槽位是靠刪除／新增列改變的。動手前先關閉 App、備份 <code>settings.json</code>（若事前準備已備份可沿用）。</p>
+    <p class="lead">槽位 N 就是 Ratio Setup 的第 N 列。用 <b>▲／▼</b> 移動列不改 Key，所以基準與校正都會跟著走；這一項驗的是移動之後 Host 收得到 507、讀得到新順序。</p>
     <ul class="checks">
-      <li><span class="box"></span><span class="what">Ratio Setup 選第 1 列（<code>R_N2Ar</code>）→ <b>Remove</b> → <b>Save</b>；Monitor 分頁 <b>Stop</b> → <b>Start</b>
+      <li><span class="box"></span><span class="what">Ratio Setup 選第 1 列（<code>R_N2Ar</code>）→ 按 <b>▼</b> 一次 → <b>Save</b>；Monitor 分頁 <b>Stop</b> → <b>Start</b>
         <span class="expect">Host 收到 CEID <span class="id">1cc27507</span>（Report events 須勾著）</span></span><span class="time"></span></li>
-      <li><span class="box"></span><span class="what">Host 重查槽位 1～4 的位移 25
-        <span class="expect">槽位 1 = <code>R_NOAr</code>、2 = <code>R_N2357Ar</code>、3 = <code>R_N2357Abs</code>、4 = 空字串（空槽位：位移 16 = 0、05 = 6）</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">Host 重查槽位 1、2 的位移 25
+        <span class="expect">槽位 1 = <code>R_NOAr</code>、2 = <code>R_N2Ar</code>；Leak Monitor 分頁兩者仍有基準</span></span><span class="time"></span></li>
       <li><span class="box"></span><span class="what">只改一個門檻（例如第 1 列的 Sigma Warn）→ Save → Stop → Start
         <span class="expect"><b>不應</b>收到 <span class="id">1cc27507</span>（508／509 照常）</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">把 <code>R_N2Ar</code> 按 <b>▲</b> 移回第 1 列 → Save → Stop → Start
+        <span class="expect">又收到一次 <span class="id">1cc27507</span>，槽位 1 的位移 25 回到 <code>R_N2Ar</code></span></span><span class="time"></span></li>
     </ul>
   </section>
 
@@ -470,7 +472,7 @@
         <span class="expect">留著的話，日後任何測試模式資料都會當成真的送進 MES</span></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">Replay 分頁取消 <b>Raise leak alarms during replay</b></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what"><b>關閉 App</b> 後把事前備份的 <code>settings.json</code> 還原，再重開
-        <span class="expect">還原現場比值組（含項目 7 刪掉的那列）、製程分類器與原本的 Golden Run；App 開著時還原會被它下次存檔蓋掉</span></span><span class="time na"></span></li>
+        <span class="expect">還原現場比值組、製程分類器與原本的 Golden Run；App 開著時還原會被它下次存檔蓋掉</span></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">把項目 8 備份的 profile 放回 <code>profiles\oes-leak-monitor.json</code>
         <span class="expect">若現場本來就要補列，改用補過的那份並保留 <code>.bak-…</code></span></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">確認狀態列回到 <code>alarms on, events on, test/replay data is not reported</code></span><span class="time na"></span></li>

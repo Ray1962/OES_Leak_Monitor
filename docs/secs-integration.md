@@ -311,7 +311,8 @@ VID 033–099 保留（027–029 已用於製程分類、030–032 已用於主�
 | 23／24 | `signalSpecies`／`referenceSpecies` | A | 槽位表，label 開頭的 token 經 `WavelengthCalibration` 別名表（`N₂`→`N2`、`Hα`→`H`），使用者譜線保留 `u` 前綴；絕對強度模式 24 = "" |
 | 25 | `key` | A | 槽位表 `Key`（不變） |
 
-Ratio Setup 分頁沒有「移動列」的按鈕，所以實務上槽位對應改變的時機是**刪除或新增一列**（刪掉第 1 列，其後每組比值都往前移一個槽位）、改譜線／模式／啟用／名稱，或改波長校正；
+槽位對應改變的時機：在 Ratio Setup 用 **▲／▼**（Move up／Move down）**調整列順序**，或**刪除、新增一列**（刪掉第 1 列，其後每組比值都往前移一個槽位）、改譜線／模式／啟用／名稱，或改波長校正。
+移動列是搬動同一個 `RatioEditViewModel`，Key 不變，所以基準、校正與鎖存警報都會延續（`RatioSetupReorderTests`）；刪掉再重建則會拿到新 Key，三者都對不上。
 `settings.json` 裡直接改 `ratios` 的順序要重開 App 才生效，那時沒有「前一份」可比，不送 507。
 
 **槽位表**（`RatioSlotTable`／`RatioSlot`）是引擎在建構子與每次 `ReloadRatios` 建立的不可變記錄，
@@ -578,7 +579,7 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 
 `dotnet test tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug` —
 SECS 部分當初是 38 個測試。整個測試專案（含洩漏引擎、批次、Baseline Builder 等）到 2026-10-23
-為 **265 過、7 略過**（略過的是需要不在 repo 裡的錄檔的那些）。下表列 SECS 與製程事件相關的：
+為 **271 過、7 略過**（略過的是需要不在 repo 裡的錄檔的那些）。下表列 SECS 與製程事件相關的：
 
 | 檔案 | 涵蓋 |
 |---|---|
@@ -597,6 +598,7 @@ SECS 部分當初是 38 個測試。整個測試專案（含洩漏引擎、批�
 | `SecsRatioSlotTests` | 槽位綁定（經 `SvBindings`，與 S1F3 同一條路）：沒有幀時身分正確、空槽位、重排前的快照以 Key 對應不錯槽、無值與非數字送 0、絕對模式 07／09 = 0、`PerRatio` 依 Key |
 | `SecsRatioSlotWireTests` | loopback：S1F3 讀槽位 1～3 的身分（沒有任何幀）與即時量、重排後收到 CEID 507 且讀得到新身分、只改門檻收不到、S2F23 能追蹤槽位 VID（不需升級 `Aqusen.Secs`） |
 | `SecsProfileRowsTests` | 補列：以 2026-09-04 的真實範本（`SecsProfileFixtures`）為舊 profile，既有每一行逐字保留、改號改名的列不動、刪掉的列補回、編號衝突拒絕且其他照補、尾逗號、行尾註解、CRLF、非清單的區段 |
+| `RatioSetupReorderTests` | Ratio Setup 的 ▲／▼：Guest／Operator 不能按、首列不能上移末列不能下移、移動是暫存（Save 才寫入、Revert 還原順序）、Save + `ReloadRatios` 後槽位表依新順序且只通知一次、每組比值 `MeasuresSameAs` 不變、鎖存警報與基準在移動後保留 |
 | `SecsProfileRowsButtonTests` | 補列按鈕：Guest／Operator 不能按、沒有可補時停用並說明、`.bak` 與補列前相同、`SecsProfileRowsAdded`、保留 BOM、同秒備份不覆蓋；loopback 的 `SecsProfileRowsWireTests`：舊 profile 對 `TOOL_EVENT` 回 HCACK 1，補列並重啟後不再是 1 |
 | `BatchToolClassTests` | 批次步驟的類別取自取樣區間：區間內出現兩種類別時不取樣也不起批、`Unknown` 不取樣、功能關閉時與以前相同 |
 
@@ -633,7 +635,7 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 | 4 | 在 Host 端做一次 S2F23 Trace，確認 S6F1 依週期回傳 | ✅ 已自動化（`SecsTraceTests`，走 loopback）。仍建議在真實 Host 上做一次，因為對方的 DSPER／REPGSZ 慣例才是驗收標的 |
 | 5 | 全程比對 `secs_YYYYMMDD.log` 與 `Test_SECS` 兩邊的收送紀錄 | ⬜ 未驗收 |
 | 6 | 重播 2026-08-14 錄檔（勾「Raise leak alarms during replay」），Host 追蹤槽位 1～3 的位移 05（SVID `1cc2700105`／`135`／`165`）→ 隨重播走 0 → 1 → 2 | ⬜ 未驗收（線上讀值已由 `SecsRatioSlotWireTests` 涵蓋；剩真實重播流程） |
-| 7 | 在 Ratio Setup 刪除第 1 列、存檔、Stop → Start → Host 收到 CEID `1cc27507`，重讀位移 25 得到前移後的順序、最後一槽為空；只改門檻再重啟則收不到 | ⬜ 未驗收（線上行為已由 `SecsRatioSlotWireTests` 涵蓋；剩 Ratio Setup 存檔到 `ReloadRatios` 的接線） |
+| 7 | 在 Ratio Setup 把第 1 列往下移一列（▼）、存檔、Stop → Start → Host 收到 CEID `1cc27507`，重讀位移 25 得到新順序；只改門檻再重啟則收不到 | ⬜ 未驗收（線上行為已由 `SecsRatioSlotWireTests`、▲／▼ → Save → `ReloadRatios` 已由 `RatioSetupReorderTests` 涵蓋；剩 `MainViewModel` 在 Stop → Start 時呼叫 `ReloadRatios` 的那一段） |
 | 8 | 以 2026-10-15 之前的 profile 啟動 → 按「Add missing rows」→ Restart interface → Host 用 S1F3 查得到槽位 VID，`TOOL_EVENT` 不再回 HCACK 1 | ⬜ 未驗收（已由 `SecsProfileRowsWireTests` 涵蓋；剩真實按鈕與真實 profile） |
 
 第 1 項的 S5F1 那半已由 §13.3 自動化，三個 CEID 的線上行為則由 `SecsEventTests` 自動化；

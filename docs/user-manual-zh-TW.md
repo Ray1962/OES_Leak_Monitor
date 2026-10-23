@@ -557,6 +557,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 - 勾選框 = 是否納入洩漏監控。
 - **Add** / **Remove** 增刪比值，**最多 10 組**（下方會顯示 `N of 10 ratios`）。
+- **▲** / **▼** 把選取的比值上移／下移一列。**第 N 列就是 SECS 的槽位 N**（§11.1），調整順序就是決定 Host 在哪個槽位看到哪組比值。移動不會改比值的 Key，所以 Golden Run 基準、洩漏率校正與已鎖存的警報都跟著走——要換位置請用這兩顆，不要刪掉重建（重建的比值是新 Key，基準與校正都對不上）。和其他編輯一樣，Save 之後要 Stop → Start 才生效，生效時 Host 會收到 CEID 507。
 
 #### 6.4.2 右側：選定比值的細節
 
@@ -1663,7 +1664,7 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 | nnn | 事件 | 觸發時機 |
 |---|---|---|
 | 502 | Operator acknowledged | 操作者在 Leak Monitor 分頁按 Acknowledge，解除鎖存的洩漏警報 |
-| 507 | Ratio configuration reloaded | 改了 Ratio Setup（刪除／新增比值、改譜線、監測方式、擷取方式、啟用、名稱）或波長修正，並重新開始採集之後，槽位內容與之前不同。只改門檻不送 |
+| 507 | Ratio configuration reloaded | 改了 Ratio Setup（調整順序、刪除／新增比值、改譜線、監測方式、擷取方式、啟用、名稱）或波長修正，並重新開始採集之後，槽位內容與之前不同。只改門檻不送 |
 | 508 | Acquisition started | 開始採集 |
 | 509 | Acquisition stopped | 停止採集 |
 

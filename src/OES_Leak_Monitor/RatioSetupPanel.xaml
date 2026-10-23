@@ -81,8 +81,19 @@
                                         Padding="10,4" MinWidth="64" Margin="0,0,4,0"
                                         ToolTip="Add a new species ratio (up to 10)."/>
                                 <Button Content="Remove" Command="{Binding RemoveRatioCommand}"
-                                        Padding="10,4" MinWidth="64"
+                                        Padding="10,4" MinWidth="64" Margin="0,0,8,0"
                                         ToolTip="Remove the selected ratio."/>
+                                <!-- Row N is SECS slot N: moving a row is how a site chooses
+                                     which ratio a host sees where. Keeps the key, so baselines,
+                                     calibrations and latched alarms carry over. -->
+                                <Button Content="▲" Command="{Binding MoveUpCommand}"
+                                        Padding="8,4" MinWidth="30" Margin="0,0,2,0"
+                                        AutomationProperties.Name="Move up"
+                                        ToolTip="Move the selected ratio up one row. Row N is slot N on the host's SECS slot VIDs; applies after Save and an acquisition restart, which sends the host CEID 507."/>
+                                <Button Content="▼" Command="{Binding MoveDownCommand}"
+                                        Padding="8,4" MinWidth="30"
+                                        AutomationProperties.Name="Move down"
+                                        ToolTip="Move the selected ratio down one row. Row N is slot N on the host's SECS slot VIDs; applies after Save and an acquisition restart, which sends the host CEID 507."/>
                             </StackPanel>
                             <TextBlock Text="{Binding RatioCountText}" Foreground="#888"
                                        FontSize="11" Margin="2,5,0,0"/>
