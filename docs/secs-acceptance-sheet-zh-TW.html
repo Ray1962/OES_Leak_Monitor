@@ -287,7 +287,7 @@
   <p class="kicker">OES Leak Monitor · SECS/GEM 驗收</p>
   <h1>現場人工驗收核對表</h1>
   <p class="sub">
-    <code>docs/secs-integration.md</code> §13.4 剩下的三項。其餘兩項（S2F23 Trace、上報關閉時仍回真值）已由自動化測試涵蓋，不必在機台上重跑。
+    <code>docs/secs-integration.md</code> §13.4 剩下的六項（1、3、5，以及比值槽位的 6、7、8）。其餘兩項（S2F23 Trace、上報關閉時仍回真值）已由自動化測試涵蓋，不必在機台上重跑。
   </p>
 
   <div class="meta">
@@ -311,7 +311,7 @@
       <h2>事前準備</h2>
       <span class="ref">約 5 分鐘</span>
     </div>
-    <p class="lead">三項都要在同一次連線裡完成，全程開著 SECS 分頁的 Traffic 與 Host 端的收送記錄。</p>
+    <p class="lead">各項都要在同一次連線裡完成（項目 8 需要重開 App，另起一次連線即可），全程開著 SECS 分頁的 Traffic 與 Host 端的收送記錄。</p>
     <ul class="checks">
       <li><span class="box"></span><span class="what">以 <b>Engineer</b> 帳號登入 App</span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">Host 已連上，SECS 分頁狀態燈為綠色 <b>COMMUNICATING</b></span><span class="time"></span></li>
@@ -401,6 +401,63 @@
     </ul>
   </section>
 
+  <!-- 項目 6 -->
+  <section>
+    <div class="head">
+      <span class="num">6</span>
+      <h2>比值槽位：狀態隨重播走 0 → 1 → 2</h2>
+      <span class="ref">§13.4-6</span>
+    </div>
+    <p class="lead">與項目 1 同一次重播一起做：Play 之前先讓 Host 開始追蹤。線上讀值已自動化，這裡驗的是真實重播流程裡槽位的數值確實在動。</p>
+    <ul class="checks">
+      <li><span class="box"></span><span class="what">Host 以 S1F3 查槽位 1～3 的位移 25：<span class="id">1cc2700125</span>、<span class="id">1cc2700155</span>、<span class="id">1cc2700185</span>
+        <span class="expect">依序為 <code>R_N2Ar</code>、<code>R_NOAr</code>、<code>R_N2357Ar</code>（出廠比值組）。這一步不需要光譜，Start 之前就讀得到</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">Host 以 S2F23 追蹤槽位 1～3 的位移 05：<span class="id">1cc2700105</span>、<span class="id">1cc2700135</span>、<span class="id">1cc2700165</span>，每 1 秒取樣
+        <span class="expect">TIAACK = 0。Host 工具若只能追蹤自己 profile 裡列出的 SVID（例如 Test_SECS 的 Device profile），先把這三個加進去</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">項目 1 的重播期間觀察三條追蹤
+        <span class="expect">各自走過 <b>0（Normal）→ 1（Warning）→ 2（Alarm）</b>；Golden Run 擷取完成之前是 5（NoBaseline）屬正常。數值依序記在備註欄</span></span><span class="time"></span></li>
+    </ul>
+  </section>
+
+  <!-- 項目 7 -->
+  <section>
+    <div class="head">
+      <span class="num">7</span>
+      <h2>比值槽位改變時收到 CEID 507</h2>
+      <span class="ref">§13.4-7</span>
+    </div>
+    <p class="lead">Ratio Setup 沒有「移動列」的按鈕，槽位是靠刪除／新增列改變的。動手前先關閉 App、備份 <code>settings.json</code>（若事前準備已備份可沿用）。</p>
+    <ul class="checks">
+      <li><span class="box"></span><span class="what">Ratio Setup 選第 1 列（<code>R_N2Ar</code>）→ <b>Remove</b> → <b>Save</b>；Monitor 分頁 <b>Stop</b> → <b>Start</b>
+        <span class="expect">Host 收到 CEID <span class="id">1cc27507</span>（Report events 須勾著）</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">Host 重查槽位 1～4 的位移 25
+        <span class="expect">槽位 1 = <code>R_NOAr</code>、2 = <code>R_N2357Ar</code>、3 = <code>R_N2357Abs</code>、4 = 空字串（空槽位：位移 16 = 0、05 = 6）</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">只改一個門檻（例如第 1 列的 Sigma Warn）→ Save → Stop → Start
+        <span class="expect"><b>不應</b>收到 <span class="id">1cc27507</span>（508／509 照常）</span></span><span class="time"></span></li>
+    </ul>
+  </section>
+
+  <!-- 項目 8 -->
+  <section>
+    <div class="head">
+      <span class="num">8</span>
+      <h2>舊 profile 補列後查得到新 SVID</h2>
+      <span class="ref">§13.4-8</span>
+    </div>
+    <p class="lead">驗的是升級機台的路徑：舊 profile 不會被覆寫，新列靠 SECS 分頁的 <b>Add missing rows</b> 補上。先備份目前的 profile，測完還原。</p>
+    <ul class="checks">
+      <li><span class="box"></span><span class="what">關閉 App，把 <code>profiles\oes-leak-monitor.json</code> 備份後，換成舊版的 profile（2026-10-23 之前寫出的都缺槽位列；用 2026-10-15 之前、還沒有 <code>TOOL_EVENT</code> 的版本才能驗下一步的 HCACK 1），重開 App
+        <span class="expect">Traffic 出現 <code>[CFG] … status variable(s) this build can serve are not in the profile</code>；SECS 分頁的說明寫 <code>The profile is missing … row(s)</code></span></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what">Host 查 <span class="id">1cc2700125</span>、送一次 <code>TOOL_EVENT</code>
+        <span class="expect">查不到該 SVID；<code>TOOL_EVENT</code> 回 <b>HCACK 1</b></span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">以 Engineer 按 <b>Add missing rows</b>
+        <span class="expect">按鈕下方顯示 <code>Added N row(s), refused 0 …</code>；資料夾出現 <code>oes-leak-monitor.json.bak-…</code>，內容與換上的舊版相同</span></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what">按 <b>Restart interface</b>，Host 重新連上後再查一次
+        <span class="expect">查得到 <span class="id">1cc2700125</span>；<code>TOOL_EVENT</code> 不再回 HCACK 1</span></span><span class="time"></span></li>
+      <li><span class="box"></span><span class="what">打開補過的 profile，確認原本的列與註解都還在、只在各區段後面多了新列</span><span class="time na"></span></li>
+    </ul>
+  </section>
+
   <!-- 收尾 -->
   <section>
     <div class="head">
@@ -413,7 +470,9 @@
         <span class="expect">留著的話，日後任何測試模式資料都會當成真的送進 MES</span></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">Replay 分頁取消 <b>Raise leak alarms during replay</b></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what"><b>關閉 App</b> 後把事前備份的 <code>settings.json</code> 還原，再重開
-        <span class="expect">還原現場比值組、製程分類器與原本的 Golden Run；App 開著時還原會被它下次存檔蓋掉</span></span><span class="time na"></span></li>
+        <span class="expect">還原現場比值組（含項目 7 刪掉的那列）、製程分類器與原本的 Golden Run；App 開著時還原會被它下次存檔蓋掉</span></span><span class="time na"></span></li>
+      <li><span class="box"></span><span class="what">把項目 8 備份的 profile 放回 <code>profiles\oes-leak-monitor.json</code>
+        <span class="expect">若現場本來就要補列，改用補過的那份並保留 <code>.bak-…</code></span></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">確認狀態列回到 <code>alarms on, events on, test/replay data is not reported</code></span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">確認光譜儀已接回、擷取正常、狀態燈為 COMMUNICATING</span><span class="time na"></span></li>
       <li><span class="box"></span><span class="what">回填 <code>docs/secs-integration.md</code> §13.4：跑過的 ⬜ 改成 <code>✅ YYYY-MM-DD（執行者）</code></span><span class="time na"></span></li>

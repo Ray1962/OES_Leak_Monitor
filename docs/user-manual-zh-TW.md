@@ -1077,6 +1077,17 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 連線參數、三個報告開關、Save & apply／Restart interface、profile 檔路徑，以及所有收送訊息的 Traffic 清單。設定不合法時 Save 不會生效，Traffic 會出現一行 `[CFG] not saved — …` 寫明原因。
 
+**Add missing rows**（profile 路徑下方，Engineer 以上）：profile 一經產生就不會被程式覆寫（裡面可能有現場改過的編號與文字），所以升級後新版新增的 SVID、事件、遠端命令不會自己出現在舊機台的 profile 裡。按鈕右邊的說明會寫出缺幾列：
+
+| 說明文字 | 意思 |
+|---|---|
+| `The profile has every row this build ships.` | 不用補；按鈕是灰的 |
+| `The profile is missing N row(s) this build ships (…)` | 按下去會補上這 N 列 |
+| `Cannot be added: SVID … — …` | 這一列的編號已被 profile 裡的其他列佔用，不會補；要它就手動改號 |
+| `No profile yet — …` | 介面還沒啟動過；第一次啟動會寫出完整範本 |
+
+按下後先把 profile 備份成 `….bak-年月日時分秒`，再**只附加**缺的列——既有的列（含改過的編號、名稱、註解）一律不動；**現場刻意刪掉的列也會被補回**，不要的話補完再刪。結果顯示在按鈕下方，**要按 Restart interface（或重開 App）才生效**，並記入系統日誌 `SecsProfileRowsAdded`。步驟見 SECS SOP §7.3。
+
 #### 6.13.3 主機台製程事件（Tool events）
 
 PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）以 SECS 命令 `TOOL_EVENT` 轉送過來，OES 依對照表開關「**製程視窗**」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
@@ -1459,7 +1470,7 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 
 ### 9.14 EAP 送 `TOOL_EVENT` 收到 HCACK 1
 
-OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆寫**既有的 profile（裡面可能有現場的修改），所以舊 profile 沒有 `TOOL_EVENT` 這個命令、也沒有 VID 030～032；啟動時系統日誌會有一筆 `SecsProfileMissingBinds`。處理方式見 SECS SOP 的「升級後補 profile」：在 profile 補上那幾列，或備份後刪掉 profile 讓程式重新產生，再按 **Restart interface**。
+OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆寫**既有的 profile（裡面可能有現場的修改），所以舊 profile 沒有 `TOOL_EVENT` 這個命令、也沒有 VID 030～032；啟動時系統日誌會有一筆 `SecsProfileMissingBinds`。處理方式：在 SECS 分頁按 **Add missing rows**（§6.13.2），再按 **Restart interface**。比值槽位 VID 101～400 也是同樣的情形、同樣的處理。
 
 ---
 
@@ -1610,7 +1621,7 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 ```
 
 - **VID 001～032 已實作**：洩漏率、複合狀態、電漿有無、積分時間、製程類別、主機台製程事件的狀態等。
-- **比值槽位 VID 101～400 尚未實作**（規格已定義，每組比值佔 30 個號碼）。
+- **比值槽位 VID 101～400 已實作**：每組比值佔 30 個號碼，`vvv = 100 + (N − 1) × 30 + 位移`，N 是 Ratio Setup 的第 N 列。位移 01～15 是即時量（比值、平滑值、σ 分數或百分比、狀態…），16～25 是這個槽位在看什麼（譜線、物種、監測方式、名稱、Key）。比值設定改變後槽位內容若不同，設備會送 CEID 507（§11.3）。
 - **SVID 的值永遠如實回報**，不受任何報告開關影響。資料來自測試模式或回放時，VID 016 也照實回 1，Host 據此就能判斷這批數據不可用於製程判定。
 
 最常用的幾個：
@@ -1647,11 +1658,12 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 
 事件是「某件事剛剛發生」的通知，以 S6F11 送出，可附帶報告。與警報不同，事件沒有「解除」，發生一次就送一次。
 
-編碼與 ALID 同形式（`1ccss` + 3 碼），自 501 起編，例如 `10227502`。本機已實作三個：
+編碼與 ALID 同形式（`1ccss` + 3 碼），自 501 起編，例如 `10227502`。本機已實作四個：
 
 | nnn | 事件 | 觸發時機 |
 |---|---|---|
 | 502 | Operator acknowledged | 操作者在 Leak Monitor 分頁按 Acknowledge，解除鎖存的洩漏警報 |
+| 507 | Ratio configuration reloaded | 改了 Ratio Setup（刪除／新增比值、改譜線、監測方式、擷取方式、啟用、名稱）或波長修正，並重新開始採集之後，槽位內容與之前不同。只改門檻不送 |
 | 508 | Acquisition started | 開始採集 |
 | 509 | Acquisition stopped | 停止採集 |
 

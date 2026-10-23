@@ -108,25 +108,25 @@ td code{white-space:nowrap;}
 <a class="l2" href="#目錄">目錄</a>
 <a class="l2" href="#1-編碼規則">1. 編碼規則</a>
 <a class="l2" href="#2-範例設定出廠比值組">2. 範例設定：出廠比值組</a>
-<a class="l2" href="#3-身分與門檻類-svid位移-1624">3. 身分與門檻類 SVID（位移 16～24）</a>
+<a class="l2" href="#3-身分類-svid位移-1625">3. 身分類 SVID（位移 16～25）</a>
 <a class="l2" href="#4-即時量-svid以-ratio-2-為例">4. 即時量 SVID：以 Ratio 2 為例</a>
 <a class="l2" href="#5-s1f3-查詢範例">5. S1F3 查詢範例</a>
 <a class="l2" href="#6-host-端建議的讀法">6. Host 端建議的讀法</a>
-<a class="l2" href="#7-規格與程式碼不一致之處v22-處理情形">7. 規格與程式碼不一致之處（v2.2 處理情形）</a>
+<a class="l2" href="#7-規格與程式碼不一致之處v22v24-處理情形">7. 規格與程式碼不一致之處（v2.2／v2.4 處理情形）</a>
 <a class="l2" href="#附錄-a位移總表">附錄 A：位移總表</a>
 <a class="l2" href="#附錄-b列舉值對照">附錄 B：列舉值對照</a>
 </nav>
 <main>
 <h1 id="species-ratio-槽位-svid-範例說明">Species Ratio 槽位 SVID 範例說明</h1>
 <blockquote><p>本文以設備出廠比值組為例，說明 Ratio Setup 中每一組 Species Ratio 對應的 SVID 怎麼算、讀到的值代表什麼。 依據：<code>docs/Satellite_SECS_Specification_v2.md</code> §1.4(b)～(d)、§6.2。</p></blockquote>
-<blockquote><p>⚠️ <strong>實作狀態：</strong> 規格 v2.1 寫明，<strong>比值槽位 VID 101～400 還沒實作</strong>，設備端目前只提供全域 VID 001～032。 本文是依規格「應該長成什麼樣子」的範例，現行版本用 S1F3 查不到這些 SVID。</p></blockquote>
+<blockquote><p><strong>實作狀態：</strong> 比值槽位 VID 101～400（位移 01～25）與 CEID 507 已由設備端實作（規格 v2.4），可用 S1F3 查詢、S2F23 追蹤。 第 3、5 節的身分類數值是出廠比值組實際會送出的值；第 4 節的即時量是虛構的範例值。 舊機台的 profile 若是 2026-10-23（加入槽位 VID）之前寫的，要先在 SECS 分頁按「Add missing rows」並重啟介面，才查得到這些 SVID。</p></blockquote>
 <h2 id="目錄">目錄</h2>
 <ul>
 <li><a href="#1-編碼規則">1. 編碼規則</a>
 </li>
 <li><a href="#2-範例設定出廠比值組">2. 範例設定：出廠比值組</a>
 </li>
-<li><a href="#3-身分與門檻類-svid位移-1624">3. 身分與門檻類 SVID（位移 16～24）</a>
+<li><a href="#3-身分類-svid位移-1625">3. 身分類 SVID（位移 16～25）</a>
 </li>
 <li><a href="#4-即時量-svid以-ratio-2-為例">4. 即時量 SVID：以 Ratio 2 為例</a>
 </li>
@@ -134,7 +134,7 @@ td code{white-space:nowrap;}
 </li>
 <li><a href="#6-host-端建議的讀法">6. Host 端建議的讀法</a>
 </li>
-<li><a href="#7-規格與程式碼不一致之處v22-處理情形">7. 規格與程式碼不一致之處（v2.2 處理情形）</a>
+<li><a href="#7-規格與程式碼不一致之處v22v24-處理情形">7. 規格與程式碼不一致之處（v2.2／v2.4 處理情形）</a>
 </li>
 <li><a href="#附錄-a位移總表">附錄 A：位移總表</a>
 </li>
@@ -167,9 +167,9 @@ vvv  = 100 + (N − 1) × 30 + 位移        （N = Ratio Setup 的第 N 列，1
 <tr><td>Ratio 3</td><td><code>R_N2357Ar</code></td><td>N₂ 357.7 nm</td><td>Ar 750.4 nm</td><td>比值</td><td>PeakHeight</td><td>✔</td></tr>
 <tr><td>Ratio 4</td><td><code>R_N2357Abs</code></td><td>N₂ 357.7 nm</td><td>—（不使用）</td><td>絕對強度</td><td>RawMean</td><td>✘</td></tr>
 </tbody></table></div>
-<p>Ratio 5～10 沒有設定，其 VID 不對應任何比值。</p>
-<h2 id="3-身分與門檻類-svid位移-1624">3. 身分與門檻類 SVID（位移 16～24）</h2>
-<p>這一組 SVID 描述「這個槽位在監測什麼」，只在設定變更時改變。Host 讀這一組就能知道每個槽位對應哪條譜線，不需要取得設備的設定檔。</p>
+<p>Ratio 5～10 沒有設定，是<strong>空槽位</strong>：照常回應，位移 16 = 0、05 = 6（Disabled），數值都是 0，字串（22～25）都是空字串。看位移 25 是否為空，就能分辨「空槽位」與 Ratio 4 這種「有設定但停用」。</p>
+<h2 id="3-身分類-svid位移-1625">3. 身分類 SVID（位移 16～25）</h2>
+<p>這一組 SVID 描述「這個槽位在監測什麼」，只在比值設定重新載入（設備重新開始採集）時可能改變；改變時設備送 CEID <code>10227507</code>。Host 讀這一組就能知道每個槽位對應哪條譜線，不需要取得設備的設定檔。設備剛啟動、還沒有任何光譜時就讀得到。</p>
 <div class="tablewrap"><table>
 <thead><tr><th>位移</th><th>項目</th><th>Ratio 1</th><th>Ratio 2</th><th>Ratio 3</th><th>Ratio 4</th></tr></thead>
 <tbody>
@@ -179,13 +179,16 @@ vvv  = 100 + (N − 1) × 30 + 位移        （N = Ratio Setup 的第 N 列，1
 <tr><td>19</td><td>Extraction mode</td><td><code>1022700119</code> = <strong>2</strong>（RawMean）</td><td><code>1022700149</code> = <strong>2</strong></td><td><code>1022700179</code> = <strong>0</strong>（PeakHeight）</td><td><code>1022700209</code> = <strong>2</strong></td></tr>
 <tr><td>20</td><td>Signal wavelength</td><td><code>1022700120</code> = <strong>337.1</strong></td><td><code>1022700150</code> = <strong>237.0</strong></td><td><code>1022700180</code> = <strong>357.7</strong></td><td><code>1022700210</code> = <strong>357.7</strong></td></tr>
 <tr><td>21</td><td>Reference wavelength</td><td><code>1022700121</code> = <strong>750.4</strong></td><td><code>1022700151</code> = <strong>750.4</strong></td><td><code>1022700181</code> = <strong>750.4</strong></td><td><code>1022700211</code> = <strong>0</strong></td></tr>
-<tr><td>22</td><td>Slot display name</td><td><code>1022700122</code> = <code>R_N2Ar</code></td><td><code>1022700152</code> = <code>R_NOAr</code></td><td><code>1022700182</code> = <code>R_N2357Ar</code></td><td><code>1022700212</code> = <code>R_N2357Abs</code></td></tr>
+<tr><td>22</td><td>Slot display name</td><td><code>1022700122</code> = <code>N? 337 / Ar 750</code> ※※</td><td><code>1022700152</code> = <code>NO 237 / Ar 750</code></td><td><code>1022700182</code> = <code>N? 358 / Ar 750</code> ※※</td><td><code>1022700212</code> = <code>N? 358 absolute</code> ※※</td></tr>
 <tr><td>23</td><td>Signal species</td><td><code>1022700123</code> = <code>N2</code></td><td><code>1022700153</code> = <code>NO</code></td><td><code>1022700183</code> = <code>N2</code></td><td><code>1022700213</code> = <code>N2</code></td></tr>
 <tr><td>24</td><td>Reference species</td><td><code>1022700124</code> = <code>Ar</code></td><td><code>1022700154</code> = <code>Ar</code></td><td><code>1022700184</code> = <code>Ar</code></td><td><code>1022700214</code> = <code>""</code></td></tr>
+<tr><td>25</td><td>Ratio key</td><td><code>1022700125</code> = <code>R_N2Ar</code></td><td><code>1022700155</code> = <code>R_NOAr</code></td><td><code>1022700185</code> = <code>R_N2357Ar</code></td><td><code>1022700215</code> = <code>R_N2357Abs</code></td></tr>
 </tbody></table></div>
 <p>說明：</p>
 <ul>
-<li><strong>※ 位移 18</strong>：分子為 RawMean 即為 σ 分數，比值模式也算。這是規格 v2.2 修正後的寫法，v2.1 原文與此不同，見 <a href="#7-規格與程式碼不一致之處v22-處理情形">§7</a>。
+<li><strong>※ 位移 18</strong>：分子為 RawMean 即為 σ 分數，比值模式也算。這是規格 v2.2 修正後的寫法，v2.1 原文與此不同，見 <a href="#7-規格與程式碼不一致之處v22v24-處理情形">§7</a>。
+</li>
+<li><strong>※※ 位移 22</strong> 是畫面上的顯示名稱（<code>DisplayName</code>，可隨時修改）。出廠名稱是 <code>N₂ 337 / Ar 750</code>，但 SECS 的 A 格式是 ASCII，下標 ₂ 送出時變成 <code>?</code>——Host 收到的就是表中的樣子。要長期追蹤同一組比值請用<strong>位移 25 的 Key</strong>：它建立後永不改變，改名、重排都不變。
 </li>
 <li><strong>位移 20</strong> 是<strong>套用波長校正後</strong>的實際取值。例如在 Wavelength Calibration 分頁對 N₂ 337.1 加 +0.10 nm，<code>1022700120</code> 讀到的就是 <strong>337.2</strong>。
 </li>
@@ -206,7 +209,7 @@ vvv  = 100 + (N − 1) × 30 + 位移        （N = Ratio Setup 的第 N 列，1
 <tr><td>03</td><td>Percent / σ score</td><td><code>1022700133</code></td><td>126.0</td><td>先讀 <code>1022700148</code>：= 1，所以這是 <strong>σ 分數</strong>，不是 126 %，代表比基準高約 1.3 個警告 σ</td></tr>
 <tr><td>04</td><td>Slope</td><td><code>1022700134</code></td><td>4.2</td><td>近兩分鐘斜率；位移 18 = 1，單位為 σ/min</td></tr>
 <tr><td>05</td><td>Ratio state</td><td><code>1022700135</code></td><td>1</td><td>Warning</td></tr>
-<tr><td>06</td><td>Signal SNR</td><td><code>1022700136</code></td><td>（未定）</td><td>RawMean 讀值不帶雜訊估計，SNR 是「未知」而非「很高」；實作時須約定以何值表示</td></tr>
+<tr><td>06</td><td>Signal SNR</td><td><code>1022700136</code></td><td>0</td><td>RawMean 讀值不帶雜訊估計，SNR 是「未知」而非「很高」；設備送 0。位移 19 = 2 時位移 06 沒有意義</td></tr>
 <tr><td>07</td><td>Reference SNR</td><td><code>1022700137</code></td><td>48.5</td><td>Ar 750.4 的訊噪比</td></tr>
 <tr><td>08</td><td>Signal intensity</td><td><code>1022700138</code></td><td>3745</td><td>NO 237 視窗平均強度（counts，含連續光基座）</td></tr>
 <tr><td>09</td><td>Reference intensity</td><td><code>1022700139</code></td><td>90 900</td><td>Ar 750.4 峰高（counts）</td></tr>
@@ -217,6 +220,7 @@ vvv  = 100 + (N − 1) × 30 + 位移        （N = Ratio Setup 的第 N 列，1
 <tr><td>14</td><td>Ratio leak rate</td><td><code>1022700144</code></td><td>3.1E-3</td><td>只由本槽位推得的洩漏率 Qᵢ（mbar·L/s）</td></tr>
 <tr><td>15</td><td>Used in fusion</td><td><code>1022700145</code></td><td>1</td><td>本幀有納入 VID 001 的融合估計</td></tr>
 </tbody></table></div>
+<p>沒有值時一律送 0（不送 NaN）。0 有沒有意義看位移 05／18／19：05 為 3（NoPlasma）或 6（Disabled）時 01～15 都沒有意義；05 = 5（NoBaseline）時 10～13 沒有意義；19 = 2 時 06 沒有意義；洩漏率估計未進行（VID 006 ≠ 1）時 14、15 都是 0。位移 15 = 0 時位移 14 仍可能是非 0 的值（有讀值但沒納入融合），不要當成有效洩漏率。</p>
 <p>同一個項目在四個槽位的 SVID（以位移 03 為例）：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>槽位</th><th>位移 03 SVID</th><th>單位（看位移 18）</th></tr></thead>
@@ -229,45 +233,49 @@ vvv  = 100 + (N − 1) × 30 + 位移        （N = Ratio Setup 的第 N 列，1
 <h2 id="5-s1f3-查詢範例">5. S1F3 查詢範例</h2>
 <p>Host 一次查 Ratio 3 的身分與目前狀態：</p>
 <pre><code>S1F3 W                             # Selected Equipment Status Request
-&lt;L[6]
+&lt;L[7]
   &lt;U4[1] 1022700176&gt;               # Ratio3 slot enabled
   &lt;U4[1] 1022700177&gt;               # Ratio3 monitor mode
   &lt;U4[1] 1022700178&gt;               # Ratio3 value semantics
   &lt;U4[1] 1022700182&gt;               # Ratio3 display name
+  &lt;U4[1] 1022700185&gt;               # Ratio3 key
   &lt;U4[1] 1022700163&gt;               # Ratio3 percent of baseline
   &lt;U4[1] 1022700165&gt;               # Ratio3 state
 &gt;
 
 S1F4                               # 設備回覆
-&lt;L[6]
+&lt;L[7]
   &lt;U4[1] 1&gt;                        # 啟用
   &lt;U4[1] 0&gt;                        # 比值模式
   &lt;U4[1] 0&gt;                        # 位移 03 為基準百分比
-  &lt;A[32] "R_N2357Ar"&gt;
+  &lt;A[15] "N? 358 / Ar 750"&gt;        # 顯示名稱（N₂ 的下標以 ASCII 送出成 ?）
+  &lt;A[9] "R_N2357Ar"&gt;               # Key
   &lt;F4[1] 103.8&gt;                    # 基準的 103.8 %
   &lt;U4[1] 0&gt;                        # Normal
 &gt;</code></pre>
 <h2 id="6-host-端建議的讀法">6. Host 端建議的讀法</h2>
 <ol>
-<li><strong>建立對照表：</strong> 連線後，或收到 CEID <code>10227507</code>（比值設定重載）時，讀每個槽位的位移 16～24，記下「槽位 → 訊號線／參考線／單位」。設定重載後槽位對應可能已改變，必須重讀。
+<li><strong>建立對照表：</strong> 連線後，或收到 CEID <code>10227507</code>（槽位身分改變）時，讀每個槽位的位移 16～25，記下「槽位 → Key／訊號線／參考線／單位」。507 只在身分真的變了才送（增刪比值、改譜線／監測方式／擷取方式／啟用／名稱／波長修正）；只改門檻不送。
+</li>
+<li><strong>以位移 25 的 Key 追蹤比值，不要以槽位號。</strong> 工程師刪除或新增比值後，同一個槽位號可能換成另一組比值；用 Key 對應，才不會把 A 比值的歷史接到 B 比值上。位移 22 只拿來顯示。
 </li>
 <li><strong>追趨勢：</strong> 平常用 S2F23 Trace 追各槽位的位移 03（<code>1022700103</code>、<code>1022700133</code>、<code>1022700163</code>…），不要用事件報告逐幀推送。
 </li>
 <li><strong>先看單位再判讀：</strong> 每次讀位移 03／04 之前先看位移 18。0 是基準百分比、1 是 σ 分數；兩者共用 100／120／150 的刻度（基準／警告／警報），但物理意義不同，不可混算。
 </li>
-<li><strong>停判不等於正常：</strong> 位移 05 為 3（NoPlasma）或 4（LowSignal）的槽位不納入複合警報，Host 不應把它們當成 Normal。
+<li><strong>停判不等於正常：</strong> 位移 05 為 3～8 的槽位都不納入複合警報，Host 不應把它們當成 Normal。
 </li>
 <li><strong>洩漏率要看校正狀態：</strong> 位移 14 只有在 VID 006（Calibration status）= 1 時才有意義。
 </li>
 </ol>
-<h2 id="7-規格與程式碼不一致之處v22-處理情形">7. 規格與程式碼不一致之處（v2.2 處理情形）</h2>
-<p>以下三點是比對規格 v2.1 與設備端程式時發現的。前兩點已在規格 v2.2 修正，第三點仍待決。</p>
+<h2 id="7-規格與程式碼不一致之處v22v24-處理情形">7. 規格與程式碼不一致之處（v2.2／v2.4 處理情形）</h2>
+<p>以下三點是比對規格 v2.1 與設備端程式時發現的。前兩點已在規格 v2.2 修正，第三點在 v2.4 決定。</p>
 <ol>
 <li><strong>位移 18 的判定條件——已修正。</strong> v2.1 §1.4(d) 寫「原始平均 <strong>+ 絕對強度模式</strong>」才改用 σ 分數；程式碼的判定是 <code>RatioDefinition.ValueHasPedestal</code>——分子是 RawMean 就算，<strong>比值模式也算</strong>，因為除以參考線只會等比縮放連續光基座，不會消掉它。照 v2.1 字面，出廠的 Ratio 1、2 會被標成「百分比」，Host 會讀錯。v2.2 改為只看位移 19。
 </li>
 <li><strong>位移 05 的狀態碼——已修正。</strong> v2.1 只列 0～6；程式碼另外還有 <code>Observing</code>（7，TrendOnly／Guard 角色）與 <code>NotApplicable</code>（8，不屬於目前的製程類別）。v2.2 已增列，附加在尾端，0～6 不變。
 </li>
-<li><strong>位移 22 填哪個名稱——待決。</strong> 規格範例填 <code>R_N2Ar</code>，那是 Key。程式碼中 Key 一旦設定就永不改變（改名後基準與校正才不會失效），新增比值時 Key 是隨機 GUID 片段；畫面上顯示的是 <code>DisplayName</code>（如 <code>N₂ 337 / Ar 750</code>）。Host 需要的是哪一個，須先與 Host 端約定；另一個可放進保留位移 25。
+<li><strong>位移 22 填哪個名稱——已決定（v2.4）。</strong> 規格 v2.1 範例填 <code>R_N2Ar</code>，那是 Key。程式碼中 Key 一旦設定就永不改變（改名後基準與校正才不會失效），新增比值時 Key 是隨機 GUID 片段；畫面上顯示的是 <code>DisplayName</code>（如 <code>N₂ 337 / Ar 750</code>）。v2.4 的決定：<strong>位移 22 = <code>DisplayName</code>，原保留的位移 25 = Key</strong>，兩者都送。
 </li>
 </ol>
 <h2 id="附錄-a位移總表">附錄 A：位移總表</h2>
@@ -295,10 +303,11 @@ S1F4                               # 設備回覆
 <tr><td>19</td><td>Extraction mode</td><td>—</td><td>U4</td><td>0 = 峰高、1 = 積分、2 = 原始平均</td></tr>
 <tr><td>20</td><td>Signal wavelength</td><td>nm</td><td>F4</td><td>含波長校正偏移後的實際取值</td></tr>
 <tr><td>21</td><td>Reference wavelength</td><td>nm</td><td>F4</td><td>絕對強度模式固定 0</td></tr>
-<tr><td>22</td><td>Slot display name</td><td>—</td><td>A[32]</td><td>槽位名稱</td></tr>
+<tr><td>22</td><td>Slot display name</td><td>—</td><td>A[32]</td><td>顯示名稱（<code>DisplayName</code>，可修改；非 ASCII 字元送成 <code>?</code>）</td></tr>
 <tr><td>23</td><td>Signal species</td><td>—</td><td>A[16]</td><td>如 <code>N2</code>、<code>NO</code>；<code>u</code> 開頭為現場自訂譜線</td></tr>
 <tr><td>24</td><td>Reference species</td><td>—</td><td>A[16]</td><td>如 <code>Ar</code>；絕對強度模式為空字串</td></tr>
-<tr><td>25～30</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
+<tr><td>25</td><td>Ratio key</td><td>—</td><td>A[32]</td><td>不變的 Key；空槽位為空字串</td></tr>
+<tr><td>26～30</td><td>Reserved</td><td></td><td></td><td>保留</td></tr>
 </tbody></table></div>
 <h2 id="附錄-b列舉值對照">附錄 B：列舉值對照</h2>
 <p><strong>Ratio state（位移 05）</strong></p>

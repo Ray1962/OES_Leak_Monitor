@@ -1,9 +1,9 @@
 # 全域量測項目 VID 001～009 設定與判讀範例
 
 > 本文以 Ch_2 一台裝了出廠比值組的 OES Leak Monitor 為例，說明全域 VID 001～009 怎麼設定（profile）、各項的值從哪裡來，以及在不同機台情境下 Host 會讀到什麼、該怎麼解讀。
-> 依據：`docs/Satellite_SECS_Specification_v2.md` §1.4(a)、(c)、(d)；設備端實作見 `docs/secs-integration.md` §4、§5 與 `SecsBridge.BuildBindings`。
+> 依據：`docs/Satellite_SECS_Specification_v2.md` §1.4(a)、(c)、(d)；設備端實作見 `docs/secs-integration.md` §4、§5 與 `SecsBridge.CreateBindings`。
 
-> ✅ **實作狀態：** VID 001～032 **已實作**，可用 S1F3 查詢、S2F23 追蹤。（比值槽位 VID 101～400 尚未實作，見 `secs-ratio-svid-example-zh-TW.md`。）
+> ✅ **實作狀態：** VID 001～032 **已實作**，可用 S1F3 查詢、S2F23 追蹤。（比值槽位 VID 101～400 也已實作，範例見 `secs-ratio-svid-example-zh-TW.md`。）
 > 本文情境中的數值是示意，用來說明怎麼解讀，不是實測數據。
 
 ## 目錄
