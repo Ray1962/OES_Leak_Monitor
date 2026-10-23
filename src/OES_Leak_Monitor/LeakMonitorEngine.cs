@@ -348,6 +348,24 @@ public sealed class LeakMonitorEngine : IDisposable
     /// </summary>
     public event Action<ToolEventStatus>? ToolStatusChanged;
 
+    private volatile RatioSlotTable _slotTable = RatioSlotTable.Empty;
+
+    /// <summary>
+    /// The ratio list as the host's slot SVIDs see it — slot N is row N of Ratio Setup, with the
+    /// wavelength-corrected lines. Set at construction and on every rebuild of the ratio set, so
+    /// it is right before the first frame and stays right while acquisition is stopped.
+    /// </summary>
+    public RatioSlotTable SlotTable => _slotTable;
+
+    /// <summary>
+    /// Raised when a rebuild leaves any of the <see cref="RatioSlotTable.SlotCount"/> slots
+    /// measuring something else — a reorder, an added or removed row, a different line, mode,
+    /// enable switch or name. This is the host's cue to re-read slot offsets 16–25 (CEID 507);
+    /// a threshold or smoothing edit does not raise it. Raised outside the frame lock, carrying
+    /// the table <see cref="SlotTable"/> now returns.
+    /// </summary>
+    public event Action<RatioSlotTable>? SlotIdentityChanged;
+
     private AcquisitionFingerprint? _acquisition;
     private string _acquisitionWarning = "";  // "" when the active baseline still applies
     private string _acquisitionWarned = "";   // last warning logged, so it is logged once
@@ -400,7 +418,13 @@ public sealed class LeakMonitorEngine : IDisposable
         }
         BuildClassifier();
         ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // also builds the estimator
+        _slotTable = BuildSlotTable();
     }
+
+    /// <summary>The slot table for the current <c>_monitors</c> order and <c>_defs</c>.
+    /// Call under <c>_gate</c> (or from the constructor).</summary>
+    private RatioSlotTable BuildSlotTable() =>
+        new(_monitors.Select(m => RatioSlot.From(_defs[m.Key])));
 
     /// <summary>
     /// Rebuilds the process classifier from settings. Called from the constructor and from
@@ -1583,6 +1607,7 @@ public sealed class LeakMonitorEngine : IDisposable
     /// </summary>
     public void ReloadRatios()
     {
+        RatioSlotTable? identityChanged;
         lock (_gate)
         {
             var latched = _monitors.Where(m => m.HasLatchedAlarm).Select(m => m.Key).ToHashSet();
@@ -1620,7 +1645,12 @@ public sealed class LeakMonitorEngine : IDisposable
             }
             // Recompute rather than assume Idle: a carried-over latch must still read Alarm.
             _overall = ComputeOverall();
+
+            var table = BuildSlotTable();
+            identityChanged = table.SameIdentityAs(_slotTable) ? null : table;
+            _slotTable = table;
         }
+        if (identityChanged is not null) SlotIdentityChanged?.Invoke(identityChanged);
         RatiosReloaded?.Invoke(this, EventArgs.Empty);
     }
 
@@ -2320,6 +2350,7 @@ public sealed class LeakMonitorEngine : IDisposable
         CalibrationPointCaptured = null;
         ConfigurationChanged = null;
         RatiosReloaded = null;
+        SlotIdentityChanged = null;
     }
 
     /// <summary>Per-ratio tally of why frames were or weren't usable during a Golden Run capture.</summary>
