@@ -241,7 +241,7 @@ EAP 方不需要實作本節，但了解它有助於判讀雙方的日誌。
 
 ## 10. 若平台無法扮演 equipment
 
-如果 Q1 的答案是否定的，替代做法是**角色反過來**：OES 另開第二個 port 當 equipment，EAP 以 host 身分連入，把 PM3 事件用 S2F41 `TOOL_EVENT` 推送給 OES。訊息格式已經定義在 `eap-integration-spec-zh-TW.md` §6.5，OES 端也已實作接收邏輯，只需要再加開第二個 port。
+如果 Q1 的答案是否定的，替代做法是**角色反過來**：OES 另開第二個 port 當 equipment，EAP 以 host 身分連入，把 PM3 事件用 S2F41 `TOOL_EVENT` 推送給 OES。訊息格式已經定義在 `Satellite_SECS_Specification_v2.md` §7，OES 端也已實作接收邏輯，只需要再加開第二個 port。
 
 兩種方案的差別：
 

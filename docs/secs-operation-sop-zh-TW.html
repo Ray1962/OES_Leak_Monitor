@@ -634,7 +634,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <h2 id="12-主機台製程事件tool_event">12. 主機台製程事件（TOOL_EVENT）</h2>
 <p><strong>目的：</strong> 讓洩漏判定只在正確的製程裡運作。PM3 交替跑 Chamber Process／precoat（製程 A）與 Chamber Clean（製程 B）等不同電漿；OES 只看光譜，主機台才確切知道此刻是哪一個。廠內 EAP 把主機台的 PM3 ProcessStart／ProcessEnd CEID 以 S2F41 <code>TOOL_EVENT</code> 轉送給 OES，OES 依對照表開關「製程視窗」，指定了製程類別的比值只在該類別的視窗內判定。</p>
 <p><strong>誰做：</strong> Engineer／設備工程師。Operator 只看 SECS 分頁的狀態列（§12.4）。</p>
-<p><strong>先跟 EAP 平台確認：</strong> 平台會轉送 PM3 的 CEID（給平台方的介面規格在 <code>eap-integration-spec-zh-TW</code>）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。</p>
+<p><strong>先跟 EAP 平台確認：</strong> 平台會轉送 PM3 的 CEID。現場 OES 的 SECS host 是 FDC，所以轉送走 TCP（§12.7，給平台方的規格在 <code>eap-tool-event-tcp-spec-zh-TW</code>）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。FDC 讀 VID 030／031 標記製程，規格在 <code>fdc-integration-spec-zh-TW</code>。</p>
 <h3 id="121-確認比值已指定製程類別">12.1 確認比值已指定製程類別</h3>
 <p>到 <strong>Ratio Setup</strong>，要在製程 A 判定的比值，把 <strong>Process class</strong> 填 <code>A</code>（Clean 用 <code>B</code>）。<strong>沒填類別的比值不受製程事件影響，每一段電漿都判定。</strong> 存檔後要重新開始採集才生效。</p>
 <h3 id="122-填-ceid-對照表">12.2 填 CEID 對照表</h3>
@@ -645,13 +645,17 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
     { "ceid": 3100439529, "className": "A", "edge": "Start", "name": "PM3 Chamber Process/precoat start", "plasmaThreshold": 0 },
     { "ceid": 3100439530, "className": "A", "edge": "End",   "name": "PM3 Chamber Process/precoat end",   "plasmaThreshold": 0 },
     { "ceid": 3099591660, "className": "B", "edge": "Start", "name": "PM3 Chamber Clean start",           "plasmaThreshold": 0 },
-    { "ceid": 3099591661, "className": "B", "edge": "End",   "name": "PM3 Chamber Clean end",             "plasmaThreshold": 0 }
+    { "ceid": 3099591661, "className": "B", "edge": "End",   "name": "PM3 Chamber Clean end",             "plasmaThreshold": 0 },
+    { "ceid": 3100167145, "className": "LEAK_CHECK", "edge": "Start", "name": "PM3 Auto Leak check start", "plasmaThreshold": 0 },
+    { "ceid": 3100167146, "className": "LEAK_CHECK", "edge": "End",   "name": "PM3 Auto Leak check end",   "plasmaThreshold": 0 }
   ],
   "maxWindowSeconds": 600,
   "applyInTestMode": false
 }</code></pre>
 <ul>
-<li><code>className</code> 要和 Ratio Setup 的 Process class 拼法一致。留空表示只記錄、不開關視窗（例如 Auto Leak check 若想留紀錄）。
+<li><code>className</code> 要和 Ratio Setup 的 Process class 拼法一致。留空表示只記錄、不開關視窗。
+</li>
+<li><code>LEAK_CHECK</code> 這兩列沒有比值會指定，不影響任何判定；它讓主機台測漏期間 VID 031 顯示 <code>LEAK_CHECK</code>，FDC 才能把 OES 讀值和主機台的測漏結果對齊（<code>fdc-integration-spec-zh-TW</code> §6.4）。
 </li>
 <li><code>plasmaThreshold</code> ≤ 0 表示沿用（製程分類器設定裡同名類別的門檻，否則用記錄器的觸發門檻）。
 </li>

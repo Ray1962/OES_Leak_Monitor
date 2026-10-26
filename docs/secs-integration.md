@@ -694,8 +694,9 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 
 ## 15. 主機台製程事件（S2F41 `TOOL_EVENT`，2026-10-23）
 
-設計與取捨見 GitHub issue #25（spec）與子 ticket #26–#35；給 EAP 平台方看的介面在
-[`eap-integration-spec-zh-TW.md`](eap-integration-spec-zh-TW.md)，Host 端欄位語意在規格 §7。
+設計與取捨見 GitHub issue #25（spec）與子 ticket #26–#35；Host 端欄位語意在規格 §7。
+現場 OES 的 SECS host 是 FDC，所以 `TOOL_EVENT` 實際上不會有人送：事件改由 EAP 經 TCP 轉送（§15.9），
+FDC 讀 VID 030／031 的方式在 [`fdc-integration-spec-zh-TW.md`](fdc-integration-spec-zh-TW.md)（原 `eap-integration-spec-zh-TW.md`）。
 
 ### 15.1 為什麼要有
 

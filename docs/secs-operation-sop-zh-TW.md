@@ -466,7 +466,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 
 **誰做：** Engineer／設備工程師。Operator 只看 SECS 分頁的狀態列（§12.4）。
 
-**先跟 EAP 平台確認：** 平台會轉送 PM3 的 CEID（給平台方的介面規格在 `eap-integration-spec-zh-TW`）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。
+**先跟 EAP 平台確認：** 平台會轉送 PM3 的 CEID。現場 OES 的 SECS host 是 FDC，所以轉送走 TCP（§12.7，給平台方的規格在 `eap-tool-event-tcp-spec-zh-TW`）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。FDC 讀 VID 030／031 標記製程，規格在 `fdc-integration-spec-zh-TW`。
 
 ### 12.1 確認比值已指定製程類別
 
@@ -483,14 +483,17 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
     { "ceid": 3100439529, "className": "A", "edge": "Start", "name": "PM3 Chamber Process/precoat start", "plasmaThreshold": 0 },
     { "ceid": 3100439530, "className": "A", "edge": "End",   "name": "PM3 Chamber Process/precoat end",   "plasmaThreshold": 0 },
     { "ceid": 3099591660, "className": "B", "edge": "Start", "name": "PM3 Chamber Clean start",           "plasmaThreshold": 0 },
-    { "ceid": 3099591661, "className": "B", "edge": "End",   "name": "PM3 Chamber Clean end",             "plasmaThreshold": 0 }
+    { "ceid": 3099591661, "className": "B", "edge": "End",   "name": "PM3 Chamber Clean end",             "plasmaThreshold": 0 },
+    { "ceid": 3100167145, "className": "LEAK_CHECK", "edge": "Start", "name": "PM3 Auto Leak check start", "plasmaThreshold": 0 },
+    { "ceid": 3100167146, "className": "LEAK_CHECK", "edge": "End",   "name": "PM3 Auto Leak check end",   "plasmaThreshold": 0 }
   ],
   "maxWindowSeconds": 600,
   "applyInTestMode": false
 }
 ```
 
-- `className` 要和 Ratio Setup 的 Process class 拼法一致。留空表示只記錄、不開關視窗（例如 Auto Leak check 若想留紀錄）。
+- `className` 要和 Ratio Setup 的 Process class 拼法一致。留空表示只記錄、不開關視窗。
+- `LEAK_CHECK` 這兩列沒有比值會指定，不影響任何判定；它讓主機台測漏期間 VID 031 顯示 `LEAK_CHECK`，FDC 才能把 OES 讀值和主機台的測漏結果對齊（`fdc-integration-spec-zh-TW` §6.4）。
 - `plasmaThreshold` ≤ 0 表示沿用（製程分類器設定裡同名類別的門檻，否則用記錄器的觸發門檻）。
 - CEID 以主機台的事件表（`EAP ceid-events.md`）為準；上面是 PM3 的值。
 
