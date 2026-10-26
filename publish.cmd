@@ -7,10 +7,10 @@ rem  The target PC needs NO .NET install.
 rem
 rem  Just double-click this file (or run it from a command prompt).
 rem  Prerequisite: the versions pinned in OES_Leak_Monitor.csproj must already
-rem  be in ..\LocalPackages - at the time of writing Aqst.OesApp.Core 0.1.9 and
-rem  Aqst.OesApp.Wpf 0.1.15 (pack them from the DualOes_PlasmaMonitor repo),
-rem  Aqst.OesSpectrometer 0.4.6 (the Aqst.OesSpectrometer repo) and
-rem  Aqusen.Secs 0.6.0 (the Test_SECS repo). The csproj is the source of truth
+rem  be in ..\LocalPackages - at the time of writing Aqst.OesApp.Core 0.1.10 and
+rem  Aqst.OesApp.Wpf 0.1.16 (pack them from the DualOes_PlasmaMonitor repo),
+rem  Aqst.OesSpectrometer 0.6.2 (the Aqst.OesSpectrometer repo) and
+rem  Aqusen.Secs 0.7.0 (the Test_SECS repo). The csproj is the source of truth
 rem  for these numbers; they move.
 rem ===========================================================================
 
