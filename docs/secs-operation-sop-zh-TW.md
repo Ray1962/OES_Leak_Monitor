@@ -553,13 +553,13 @@ OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 `T
 
 **沒有 EAP 也能先驗 OES（同一台電腦）：**
 
-1. 開 PowerShell，在放 `eap-link-sim.ps1` 的資料夾執行：
+1. 開 PowerShell，在 App 的資料夾（交付資料夾裡就有 `eap-link-sim.ps1`）執行：
    `powershell -ExecutionPolicy Bypass -File .\eap-link-sim.ps1 -Mode Eap -Bind 127.0.0.1 -Port 20347`
 2. SECS 分頁的 `EAP address` 暫時改成 `127.0.0.1`，Save & apply → 狀態列轉綠。
 3. 在模擬器視窗輸入 `start`／`end`／`clean-start`／`link-down`／`silent 90` 等指令（腳本開頭有完整清單），對照狀態列與系統日誌。
 4. 測完把 `EAP address` 改回 `10.2.3.120`，Save & apply。
 
-**給 EAP 廠商自測：** 同一支腳本以 `-Mode Oes -RemoteHost 10.2.3.120 -Port 20347` 執行，就會假扮 OES 連過去，每一行都照 OES 的規則回覆並印出來。
+**給 EAP 廠商自測：** 把交付資料夾裡的 `eap-link-sim.ps1` 交給對方，同一支腳本以 `-Mode Oes -RemoteHost 10.2.3.120 -Port 20347` 執行，就會假扮 OES 連過去，每一行都照 OES 的規則回覆並印出來。
 
 **檢核：**
 

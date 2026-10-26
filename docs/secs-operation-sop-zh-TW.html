@@ -724,7 +724,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <p>有問題時依操作手冊 §9.15 檢查。收送的每一行都在 <code>Logs\eap_YYYYMMDD.log</code>。</p>
 <p><strong>沒有 EAP 也能先驗 OES（同一台電腦）：</strong></p>
 <ol>
-<li>開 PowerShell，在放 <code>eap-link-sim.ps1</code> 的資料夾執行： <code>powershell -ExecutionPolicy Bypass -File .\eap-link-sim.ps1 -Mode Eap -Bind 127.0.0.1 -Port 20347</code>
+<li>開 PowerShell，在 App 的資料夾（交付資料夾裡就有 <code>eap-link-sim.ps1</code>）執行： <code>powershell -ExecutionPolicy Bypass -File .\eap-link-sim.ps1 -Mode Eap -Bind 127.0.0.1 -Port 20347</code>
 </li>
 <li>SECS 分頁的 <code>EAP address</code> 暫時改成 <code>127.0.0.1</code>，Save &amp; apply → 狀態列轉綠。
 </li>
@@ -733,7 +733,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <li>測完把 <code>EAP address</code> 改回 <code>10.2.3.120</code>，Save &amp; apply。
 </li>
 </ol>
-<p><strong>給 EAP 廠商自測：</strong> 同一支腳本以 <code>-Mode Oes -RemoteHost 10.2.3.120 -Port 20347</code> 執行，就會假扮 OES 連過去，每一行都照 OES 的規則回覆並印出來。</p>
+<p><strong>給 EAP 廠商自測：</strong> 把交付資料夾裡的 <code>eap-link-sim.ps1</code> 交給對方，同一支腳本以 <code>-Mode Oes -RemoteHost 10.2.3.120 -Port 20347</code> 執行，就會假扮 OES 連過去，每一行都照 OES 的規則回覆並印出來。</p>
 <p><strong>檢核：</strong></p>
 <ul>
 <li>[ ] <code>EAP link</code> 綠色，<code>Last line</code> 每 30 秒更新
