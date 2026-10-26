@@ -29,6 +29,7 @@ public sealed class SecsViewModel : INotifyPropertyChanged
     public const int MaxTrafficLines = 500;
 
     private readonly SecsBridge _bridge;
+    private readonly EapEventLink? _eapLink;
     private readonly Action<SecsSettings> _save;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
@@ -37,9 +38,11 @@ public sealed class SecsViewModel : INotifyPropertyChanged
     private bool _canEdit;
     private bool _dirty;
 
-    public SecsViewModel(SecsBridge bridge, SecsSettings settings, Action<SecsSettings> save)
+    public SecsViewModel(SecsBridge bridge, SecsSettings settings, Action<SecsSettings> save,
+        EapEventLink? eapLink = null)
     {
         _bridge = bridge;
+        _eapLink = eapLink;
         _save = save;
 
         SaveCommand = new RelayCommand(Save, () => CanEdit);
@@ -53,6 +56,8 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         _bridge.StateChanged += (_, _) => _dispatcher.BeginInvoke(RaiseStatus);
         _bridge.Traffic += (_, line) => _dispatcher.BeginInvoke(() => AppendTraffic(line));
         _bridge.ToolContextChanged += (_, _) => _dispatcher.BeginInvoke(RaiseToolStatus);
+        if (_eapLink is not null)
+            _eapLink.StatusChanged += _ => _dispatcher.BeginInvoke(RaiseEapStatus);
     }
 
     // ---- commands ----------------------------------------------------------
@@ -351,6 +356,91 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         ? "Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it."
         : "";
 
+    // ---- the EAP's TCP event link ------------------------------------------
+    //
+    // Status is ungated like the rest of the tool-event status: "is the EAP talking to us" is an
+    // Operator's question. The four settings are hot-applied on save.
+
+    private ToolEventTcpSettings Tcp => Tools.Tcp ??= new ToolEventTcpSettings();
+
+    public bool EapEnabled
+    {
+        get => Tcp.Enabled;
+        set => Set(v => Tcp.Enabled = v, Tcp.Enabled, value);
+    }
+
+    public string EapHost
+    {
+        get => Tcp.RemoteHost;
+        set => Set(v => Tcp.RemoteHost = v, Tcp.RemoteHost, value);
+    }
+
+    public int EapPort
+    {
+        get => Tcp.RemotePort;
+        set => Set(v => Tcp.RemotePort = v, Tcp.RemotePort, value);
+    }
+
+    public double EapHeartbeatTimeoutSeconds
+    {
+        get => Tcp.HeartbeatTimeoutSeconds;
+        set => Set(v => Tcp.HeartbeatTimeoutSeconds = v, Tcp.HeartbeatTimeoutSeconds, value);
+    }
+
+    private EapLinkStatus EapStatus => _eapLink?.Status ?? EapLinkStatus.Disabled;
+
+    /// <summary>First status line: whether the link is up, and to where.</summary>
+    public string EapLinkText
+    {
+        get
+        {
+            var s = EapStatus;
+            return s.State switch
+            {
+                EapLinkState.Disabled => "EAP link: not in use",
+                EapLinkState.Connected => $"EAP link: connected to {s.Endpoint}" +
+                                          (s.ConnectedSince is { } c ? $" (since {c:HH:mm:ss})" : ""),
+                EapLinkState.Connecting => $"EAP link: connecting to {s.Endpoint}…",
+                _ => $"EAP link: not connected to {s.Endpoint} — retrying every 10 s ({s.Detail})",
+            };
+        }
+    }
+
+    /// <summary>Second status line: what was last heard, or why the window is no longer trusted.</summary>
+    public string EapDetailText
+    {
+        get
+        {
+            var s = EapStatus;
+            if (s.State == EapLinkState.Disabled) return "";
+            if (s.Silent)
+                return $"No line from the EAP for {EapHeartbeatTimeoutSeconds:0} s — the process window has been set to unknown.";
+            if (s.LastLineAt is not { } last) return "Nothing received yet.";
+            string text = $"Last line {last:HH:mm:ss}";
+            if (s.LastHeartbeat is { } hb)
+            {
+                string state = hb.State switch
+                {
+                    ToolContextReportState.InWindow => $"in window (CEID {hb.WindowCeid})",
+                    ToolContextReportState.Outside => "outside any window",
+                    _ => "state unknown",
+                };
+                text += $" · heartbeat: PM3 {state} · tool link {(hb.ToolLink ? "up" : "DOWN")} · SEQ {hb.Seq}";
+            }
+            return text;
+        }
+    }
+
+    public Brush EapLinkBrush => EapStatus switch
+    {
+        { State: EapLinkState.Disabled } => Brushes.Gray,
+        { Silent: true } => Brushes.DarkOrange,
+        { State: EapLinkState.Connected } => Brushes.ForestGreen,
+        _ => Brushes.Firebrick,
+    };
+
+    public string EapLogFilePath => _eapLink?.LogFilePath ?? "";
+
     // ---- operations --------------------------------------------------------
 
     /// <summary>Replaces the edit buffer with what is on disk. Called at construction and after
@@ -499,6 +589,22 @@ public sealed class SecsViewModel : INotifyPropertyChanged
             return $"tool-event max window = {window} s is out of range ({MinWindowSeconds:0}–{MaxWindowSecondsLimit:0}). " +
                    "A process A step is 38–63 s; a limit shorter than a step closes every window mid-step.";
         }
+        if (Tcp.Enabled && string.IsNullOrWhiteSpace(Tcp.RemoteHost))
+        {
+            return "the EAP link needs the EAP's address.";
+        }
+        if (Tcp.RemotePort is < 1 or > 65535)
+        {
+            return $"EAP port {Tcp.RemotePort} is out of range.";
+        }
+        double hb = Tcp.HeartbeatTimeoutSeconds;
+        if (double.IsNaN(hb) || hb < ToolEventTcpSettings.MinHeartbeatTimeoutSeconds ||
+            hb > ToolEventTcpSettings.MaxHeartbeatTimeoutSeconds)
+        {
+            return $"EAP heartbeat timeout = {hb} s is out of range " +
+                   $"({ToolEventTcpSettings.MinHeartbeatTimeoutSeconds:0}–{ToolEventTcpSettings.MaxHeartbeatTimeoutSeconds:0}). " +
+                   "The EAP sends a heartbeat every 30 s; a shorter timeout fires on a healthy link.";
+        }
         return "";
     }
 
@@ -534,6 +640,14 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ToolEventCountText));
     }
 
+    private void RaiseEapStatus()
+    {
+        OnPropertyChanged(nameof(EapLinkText));
+        OnPropertyChanged(nameof(EapDetailText));
+        OnPropertyChanged(nameof(EapLinkBrush));
+        OnPropertyChanged(nameof(EapLogFilePath));
+    }
+
     private void RaiseToolPending()
     {
         OnPropertyChanged(nameof(ToolTablePending));
@@ -545,6 +659,7 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         RaiseStatus();
         RaiseToolStatus();
         RaiseToolPending();
+        RaiseEapStatus();
         foreach (var name in new[]
                  {
                      nameof(Enabled), nameof(ReportAlarms), nameof(ReportEvents), nameof(ReportInTestMode),
@@ -554,6 +669,7 @@ public sealed class SecsViewModel : INotifyPropertyChanged
                      nameof(LogRetentionDays), nameof(ReportingSummary), nameof(HasUnsavedChanges),
                      nameof(ToolEventsEnabled), nameof(ToolMaxWindowSeconds), nameof(ToolApplyInTestMode),
                      nameof(ToolEventMappings),
+                     nameof(EapEnabled), nameof(EapHost), nameof(EapPort), nameof(EapHeartbeatTimeoutSeconds),
                  })
         {
             OnPropertyChanged(name);

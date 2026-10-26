@@ -60,6 +60,58 @@ public sealed class ToolEventUiTests : IDisposable
     // ---------------------------------------------------------------- settings
 
     /// <summary>
+    /// The EAP link's four fields reach settings.json through the same Save, and the CEID table
+    /// rides along untouched.
+    /// </summary>
+    [Fact]
+    public void Saving_CarriesTheEapLinkFields()
+    {
+        var (vm, saved) = Tab(Pm3());
+
+        vm.EapEnabled = true;
+        vm.EapHost = "10.2.3.121";
+        vm.EapPort = 20348;
+        vm.EapHeartbeatTimeoutSeconds = 90;
+        vm.SaveCommand.Execute(null);
+
+        var tools = Assert.Single(saved).ToolEvents;
+        Assert.True(tools.Tcp.Enabled);
+        Assert.Equal("10.2.3.121", tools.Tcp.RemoteHost);
+        Assert.Equal(20348, tools.Tcp.RemotePort);
+        Assert.Equal(90, tools.Tcp.HeartbeatTimeoutSeconds);
+        Assert.Equal(2, tools.Mappings.Count);
+    }
+
+    /// <summary>
+    /// A heartbeat timeout shorter than 35 s fires on a healthy link (the EAP sends one every
+    /// 30 s), and an enabled link with no address has nowhere to go: neither is saved.
+    /// </summary>
+    [Theory]
+    [InlineData(30, "10.2.3.120")]
+    [InlineData(601, "10.2.3.120")]
+    [InlineData(75, " ")]
+    public void AnUnusableEapLink_IsNotSaved(double timeout, string host)
+    {
+        var (vm, saved) = Tab(Pm3());
+
+        vm.EapEnabled = true;
+        vm.EapHost = host;
+        vm.EapHeartbeatTimeoutSeconds = timeout;
+        vm.SaveCommand.Execute(null);
+
+        Assert.Empty(saved);
+        Assert.Contains(vm.Traffic, l => l.Contains("not saved") && l.Contains("EAP"));
+    }
+
+    [Fact]
+    public void WithNoLink_TheStatusSaysNotInUse()
+    {
+        var (vm, _) = Tab(Pm3());
+        Assert.Equal("EAP link: not in use", vm.EapLinkText);
+        Assert.Equal("", vm.EapDetailText);
+    }
+
+    /// <summary>
     /// The three editable fields reach settings.json through the tab's own Save, and the CEID
     /// table — which the tab does not edit — rides along untouched.
     /// </summary>

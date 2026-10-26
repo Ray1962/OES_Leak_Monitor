@@ -291,7 +291,7 @@ public static class DiagnosticBundle
 
     /// <summary>
     /// The day a log file belongs to: <c>yyMMddHH.csv</c> for the audit log,
-    /// <c>secs_yyyyMMdd.log</c> for the traffic log. Anything else in the folder is somebody
+    /// <c>secs_yyyyMMdd.log</c> / <c>eap_yyyyMMdd.log</c> for the two traffic logs. Anything else in the folder is somebody
     /// else's and is left alone -- the same rule <c>SecsLogFile.Prune</c> keeps.
     /// </summary>
     internal static DateTime? LogDayOf(string fileName)
@@ -301,11 +301,12 @@ public static class DiagnosticBundle
             DateTime.TryParseExact(stem[..6], "yyMMdd", null,
                 System.Globalization.DateTimeStyles.None, out var audit))
             return audit.Date;
-        if (fileName.StartsWith("secs_", StringComparison.OrdinalIgnoreCase) &&
-            fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase) && stem.Length == 13 &&
-            DateTime.TryParseExact(stem[5..], "yyyyMMdd", null,
-                System.Globalization.DateTimeStyles.None, out var secs))
-            return secs.Date;
+        foreach (var prefix in new[] { "secs_", "eap_" })
+            if (fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase) && stem.Length == prefix.Length + 8 &&
+                DateTime.TryParseExact(stem[prefix.Length..], "yyyyMMdd", null,
+                    System.Globalization.DateTimeStyles.None, out var traffic))
+                return traffic.Date;
         return null;
     }
 
