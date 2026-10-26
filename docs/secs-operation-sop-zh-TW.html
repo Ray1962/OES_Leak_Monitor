@@ -154,6 +154,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#124-確認有在運作">12.4 確認有在運作</a>
 <a class="l3" href="#125-升級後補-profiletool_event-收到-hcack-1">12.5 升級後補 profile（TOOL_EVENT 收到 HCACK 1）</a>
 <a class="l3" href="#126-檢核">12.6 檢核</a>
+<a class="l3" href="#127-改用-tcp-接收-eap-事件oes-的-secs-host-是-fdc-時">12.7 改用 TCP 接收 EAP 事件（OES 的 SECS host 是 FDC 時）</a>
 <a class="l2" href="#附錄-a檔案位置">附錄 A：檔案位置</a>
 <a class="l2" href="#附錄-bsettingsjson-的-secs-區塊">附錄 B：settings.json 的 secs 區塊</a>
 <a class="l3" href="#合法的腔體代號">合法的腔體代號</a>
@@ -700,6 +701,48 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <li>[ ] 主機台跑一次 Chamber Process：狀態列顯示 <code>in window A</code>，結束後 <code>outside any window</code>
 </li>
 </ul>
+<h3 id="127-改用-tcp-接收-eap-事件oes-的-secs-host-是-fdc-時">12.7 改用 TCP 接收 EAP 事件（OES 的 SECS host 是 FDC 時）</h3>
+<p>OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 <code>TOOL_EVENT</code>，改由 <strong>OES 主動以 TCP 連到 EAP</strong>，接收 <code>EVT</code>（主機台事件）與每 30 秒一筆的 <code>HB</code>（心跳）。通訊規格交給 EAP 平台的是 <code>eap-tool-event-tcp-spec-zh-TW</code>。12.1～12.3 的比值類別、CEID 對照表、<code>Use tool events</code> 照做，只是事件改從這條連線進來。</p>
+<p><strong>設定（Engineer）：</strong></p>
+<ol>
+<li>跟 EAP 平台確認監聽位址（現場為 <code>10.2.3.120:20347</code>），並把 <strong>OES PC 的 IP</strong> 交給對方，讓 EAP 主機的防火牆放行。
+</li>
+<li>SECS 分頁的 <code>EAP link (TCP) — applies on save</code>：勾 <code>Connect to the EAP</code>，填 <code>EAP address</code>、<code>Port</code>，<code>Heartbeat timeout (s)</code> 用預設 75。
+</li>
+<li>按 <strong>Save &amp; apply</strong>，<strong>立即生效</strong>，不用重新開始採集。
+</li>
+</ol>
+<p><strong>確認：</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>看哪裡</th><th>正常</th></tr></thead>
+<tbody>
+<tr><td><code>EAP link</code> 第一行</td><td>綠色 <code>connected to 10.2.3.120:20347 (since …)</code></td></tr>
+<tr><td><code>EAP link</code> 第二行</td><td><code>Last line</code> 的時間每 30 秒更新一次；<code>heartbeat: PM3 …</code> 與主機台狀態一致；<code>tool link up</code></td></tr>
+<tr><td><code>Tool events</code> 那一行</td><td>主機台跑 Chamber Process 時是 <code>in window A</code></td></tr>
+<tr><td>系統日誌</td><td>有 <code>EapLinkConnected</code>；沒有 <code>ToolEventResync</code></td></tr>
+</tbody></table></div>
+<p>有問題時依操作手冊 §9.15 檢查。收送的每一行都在 <code>Logs\eap_YYYYMMDD.log</code>。</p>
+<p><strong>沒有 EAP 也能先驗 OES（同一台電腦）：</strong></p>
+<ol>
+<li>開 PowerShell，在放 <code>eap-link-sim.ps1</code> 的資料夾執行： <code>powershell -ExecutionPolicy Bypass -File .\eap-link-sim.ps1 -Mode Eap -Bind 127.0.0.1 -Port 20347</code>
+</li>
+<li>SECS 分頁的 <code>EAP address</code> 暫時改成 <code>127.0.0.1</code>，Save &amp; apply → 狀態列轉綠。
+</li>
+<li>在模擬器視窗輸入 <code>start</code>／<code>end</code>／<code>clean-start</code>／<code>link-down</code>／<code>silent 90</code> 等指令（腳本開頭有完整清單），對照狀態列與系統日誌。
+</li>
+<li>測完把 <code>EAP address</code> 改回 <code>10.2.3.120</code>，Save &amp; apply。
+</li>
+</ol>
+<p><strong>給 EAP 廠商自測：</strong> 同一支腳本以 <code>-Mode Oes -RemoteHost 10.2.3.120 -Port 20347</code> 執行，就會假扮 OES 連過去，每一行都照 OES 的規則回覆並印出來。</p>
+<p><strong>檢核：</strong></p>
+<ul>
+<li>[ ] <code>EAP link</code> 綠色，<code>Last line</code> 每 30 秒更新
+</li>
+<li>[ ] 主機台跑一次 Chamber Process：<code>in window A</code>，結束後 <code>outside any window</code>
+</li>
+<li>[ ] 拔掉 OES 網路線 90 秒後接回：75 秒時轉橘、視窗不明；接回後自動恢復
+</li>
+</ul>
 <hr>
 <h2 id="附錄-a檔案位置">附錄 A：檔案位置</h2>
 <p><code>{Config}</code> = <code>C:\Users\&lt;登入帳號&gt;\AppData\Roaming\OES_Leak_Monitor</code></p>
@@ -710,6 +753,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <tr><td><strong>Profile 範本（要改的是這份）</strong></td><td><code>{Config}\profiles\oes-leak-monitor.json</code></td><td>編號一律以 <code>cc=00</code> 書寫</td></tr>
 <tr><td>有效 profile（產生物，不要改）</td><td><code>{Config}\profiles\.effective\oes-leak-monitor.json</code></td><td>每次啟動依腔體號重寫</td></tr>
 <tr><td>SECS 收送日誌</td><td><code>{Config}\Logs\secs_YYYYMMDD.log</code></td><td>每日一檔，保留 <code>logRetentionDays</code> 天</td></tr>
+<tr><td>EAP 連線收送日誌</td><td><code>{Config}\Logs\eap_YYYYMMDD.log</code></td><td>§12.7 的 TCP 連線；保留天數同上</td></tr>
 <tr><td>系統稽核日誌</td><td><code>{Config}\Logs\{YYMMDDHH}.csv</code></td><td><code>SecsStarted</code>／<code>SecsStopped</code>／<code>SecsSettingsSaved</code> 等記在這裡</td></tr>
 </tbody></table></div>
 <p>分頁中段會直接顯示前三個路徑的實際值——<strong>現場找檔案看那裡就好，不用背。</strong></p>

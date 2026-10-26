@@ -165,6 +165,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#912-重播的結果和實機當時不一樣">9.12 重播的結果和實機當時不一樣</a>
 <a class="l3" href="#913-leak-monitor-一直顯示-process-context-unknown">9.13 Leak Monitor 一直顯示 PROCESS CONTEXT UNKNOWN</a>
 <a class="l3" href="#914-eap-送-tool_event-收到-hcack-1">9.14 EAP 送 TOOL_EVENT 收到 HCACK 1</a>
+<a class="l3" href="#915-eap-link-不是綠色">9.15 EAP link 不是綠色</a>
 <a class="l2" href="#10-附錄參數預設值">10. 附錄：參數預設值</a>
 <a class="l3" href="#101-硬體參數">10.1 硬體參數</a>
 <a class="l3" href="#102-記錄器觸發建議值">10.2 記錄器觸發（建議值）</a>
@@ -1174,6 +1175,20 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <p><strong>CEID 對照表</strong>（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 <code>(record only)</code>，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（<code>inherit</code> 表示沿用製程分類器設定或記錄器的門檻）。對照表要在 <code>settings.json</code> 的 <code>secs.toolEvents.mappings</code> 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。</p>
 <p>已存檔的開關或對照表和目前生效的不同時，表格上方會出現橘色字：<code>Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.</code> 到 Monitor 分頁按 Stop 再按 Start 就會套用、橘色字消失。</p>
 <p><strong>日誌</strong>：視窗的開與關記成 <code>ToolEventWindowOpened</code>／<code>ToolEventWindowClosed</code>。事件不套用時（回放、測試模式），這兩行的結尾會加上 <code>(not applied: …)</code>，表示當時的判定沒有依這個視窗。其他相關訊息：<code>ToolEventIgnored</code>（對照表沒有的 CEID，每個只記一次）、<code>ToolEventWindowUnclosed</code>／<code>ToolEventOrphanEnd</code>／<code>ToolEventWindowTimedOut</code>（事件不成對或逾時，Warning）、<code>ToolEventUnmappedPlasma</code>（不在任何視窗內的一段電漿——通常是對照表還沒有的製程）。</p>
+<p><strong>EAP 連線（TCP）</strong>：現場 OES 的 SECS 連線是給 FDC 用的，EAP 沒辦法再從那條連線送 <code>TOOL_EVENT</code>。所以另外有一條純 TCP 連線：<strong>OES 主動連到 EAP</strong>（預設 <code>10.2.3.120:20347</code>），EAP 每有一筆主機台事件就送一行 <code>EVT</code>，另外每 30 秒送一行心跳 <code>HB</code>，回報 PM3 目前在哪個視窗。收到的事件和 <code>TOOL_EVENT</code> 走同一套對照表與視窗規則。通訊格式見 <code>eap-tool-event-tcp-spec-zh-TW</code>。</p>
+<p>狀態列多兩行（不需登入）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>顯示</th><th>意思</th></tr></thead>
+<tbody>
+<tr><td><code>EAP link: not in use</code></td><td>沒有啟用</td></tr>
+<tr><td><code>EAP link: connected to … (since hh:mm:ss)</code>（綠）</td><td>已連上 EAP</td></tr>
+<tr><td><code>EAP link: connecting to …</code> ／ <code>not connected … retrying every 10 s (…)</code>（紅）</td><td>連不上或斷線，每 10 秒自動重試；括號內是原因</td></tr>
+<tr><td><code>Last line … · heartbeat: PM3 … · tool link up · SEQ n</code></td><td>最後收到一行的時間，以及心跳的內容</td></tr>
+<tr><td>橘色 <code>No line from the EAP for 75 s — the process window has been set to unknown.</code></td><td>太久沒收到任何一行。製程視窗改為不明，照沒有製程事件時的方式判定，<strong>不會漏判</strong></td></tr>
+</tbody></table></div>
+<p><strong>斷線本身不會讓視窗變成不明</strong>：OES 會自己重連，連上後 EAP 立刻送一筆心跳，視窗就恢復正確。只有完全收不到任何訊息超過 <code>Heartbeat timeout (s)</code> 才會改為不明。心跳和 OES 自己記的視窗不同時，以心跳為準並記一筆 <code>ToolEventResync</code>（Warning），這筆就是 EAP 漏送了事件的紀錄。</p>
+<p>設定（Engineer 以上，<code>EAP link (TCP) — applies on save</code>，<strong>存檔即生效</strong>）：<code>Connect to the EAP</code>（預設不勾）、<code>EAP address</code>、<code>Port</code>、<code>Heartbeat timeout (s)</code>（預設 75，可設 35～600）。收到的事件會不會被採用，仍由上面的 <code>Use tool events</code> 決定。</p>
+<p>收送的每一行都記在 <code>Logs\eap_YYYYMMDD.log</code>（不是 <code>secs_</code> 那個檔）。系統日誌的相關訊息：<code>EapLinkConnected</code>／<code>EapLinkLost</code>／<code>EapLinkConnectFailed</code>（連不上時只記第一次，之後每小時一筆累計）、<code>EapEventSequenceGap</code>（有事件沒送到）、<code>EapSequenceReset</code>（EAP 重啟）、<code>EapLineRejected</code>（格式錯誤的行）、<code>ToolEventContextUnknown</code>（視窗改為不明，附原因）。</p>
 <hr>
 <h2 id="7-檔案與資料夾">7. 檔案與資料夾</h2>
 <h3 id="71-位置">7.1 位置</h3>
@@ -1503,7 +1518,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <h3 id="913-leak-monitor-一直顯示-process-context-unknown">9.13 Leak Monitor 一直顯示 <code>PROCESS CONTEXT UNKNOWN</code></h3>
 <p>已啟用主機台製程事件，但 OES 不知道目前是哪個製程視窗。照沒有製程事件時的方式判定，所以<strong>不會漏判</strong>，但指定類別的比值沒有依製程篩選。依序檢查 SECS 分頁的狀態列（§6.13.3）：</p>
 <ol>
-<li><strong><code>Tool events received this run: 0</code></strong> —— EAP 沒有在轉送事件。確認 SECS 已連線（<code>COMMUNICATING</code>），請 EAP 平台確認轉送已開啟。
+<li><strong><code>Tool events received this run: 0</code></strong> —— EAP 沒有在轉送事件。用 TCP 連線接收時，先看 <code>EAP link</code> 那一行是否為綠色（不是的話見 §9.15）；用 SECS <code>TOOL_EVENT</code> 接收時，確認 SECS 已連線（<code>COMMUNICATING</code>）。然後請 EAP 平台確認轉送已開啟。
 </li>
 <li><strong>有收到事件，但 <code>Last tool event</code> 的 CEID 不在對照表裡</strong> —— 對照表沒有這個主機台的 Start／End CEID。比對主機台的 CEID 表，修改 <code>settings.json</code> 後重新開始採集。
 </li>
@@ -1516,6 +1531,19 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </ol>
 <h3 id="914-eap-送-tool_event-收到-hcack-1">9.14 EAP 送 <code>TOOL_EVENT</code> 收到 HCACK 1</h3>
 <p>OES 的 SECS profile 是在支援製程事件之前產生的。程式<strong>不會覆寫</strong>既有的 profile（裡面可能有現場的修改），所以舊 profile 沒有 <code>TOOL_EVENT</code> 這個命令、也沒有 VID 030～032；啟動時系統日誌會有一筆 <code>SecsProfileMissingBinds</code>。處理方式：在 SECS 分頁按 <strong>Add missing rows</strong>（§6.13.2），再按 <strong>Restart interface</strong>。比值槽位 VID 101～400 也是同樣的情形、同樣的處理。</p>
+<h3 id="915-eap-link-不是綠色">9.15 <code>EAP link</code> 不是綠色</h3>
+<p>SECS 分頁 <code>EAP link</code> 那一行的括號會寫原因。依序檢查：</p>
+<ol>
+<li><strong><code>Could not connect: …目標電腦拒絕連線</code></strong> —— EAP 那邊沒有在 <code>20347</code> 監聽。請 EAP 平台確認服務已啟動、位址與 port 和 SECS 分頁填的一致。
+</li>
+<li><strong><code>no answer within 5 s</code></strong> —— 網路不通，或 EAP 主機的防火牆擋了 OES PC 的 IP。請 IT 確認 OES PC 能連到 <code>10.2.3.120:20347</code>。
+</li>
+<li><strong>綠色，但第二行是橘色的 <code>No line from the EAP for …</code></strong> —— 連得上但 EAP 沒有送心跳。請 EAP 平台確認每 30 秒送 <code>HB</code>、連上後立刻送一筆。
+</li>
+<li><strong>時好時壞，系統日誌有很多 <code>EapLinkLost</code></strong> —— 網路不穩，或 EAP 在 10 秒內沒等到回應就關掉連線。把 <code>Logs\eap_YYYYMMDD.log</code> 交給 EAP 平台比對雙方的時間。
+</li>
+</ol>
+<p>不想等現場 EAP，也可以用 <code>eap-link-sim.ps1 -Mode Eap</code> 在同一台電腦上假扮 EAP（步驟見 SECS SOP §12.7）。</p>
 <hr>
 <h2 id="10-附錄參數預設值">10. 附錄：參數預設值</h2>
 <h3 id="101-硬體參數">10.1 硬體參數</h3>

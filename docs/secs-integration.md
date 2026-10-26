@@ -522,6 +522,7 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `SecsRatioSlots.cs` | §5.3：25 個位移的唯一定義，範本列與綁定共用 |
 | `SecsProfileRows.cs` | §5.2：補上缺少的列——比對、以文字插入、衝突拒絕 |
 | `ToolEventSettings.cs` | §15：`ToolEventSettings`／`ToolEventMapping`／`ToolEventEdge`、`ToolEventContext`（VID 030 的編碼）、`ToolEventStatus`、`ToolEventAck`、引擎用的不可變對照表 `ToolEventTable` |
+| `EapEventLink.cs` | §15.9：EAP 的 TCP 事件連線——OES 當 client 連出、逐行解析與回覆、序號、靜默逾時；日誌 `eap_YYYYMMDD.log` |
 
 ### 11.2 修改
 
@@ -766,3 +767,54 @@ MainViewModel 在啟動時與每次 Stop→Start（和 `ReloadRatios` 同時）�
 | `ToolEventClassMismatch` | Warning | 分類器判定與視窗類別不同 |
 | `ToolEventsSuppressed`／`ToolEventsResumed` | Information | 開始／結束暫不套用 |
 | `BatchStepClassAmbiguous` | Information | 批次步驟的取樣區間出現兩種以上類別 |
+
+### 15.9 EAP 的 TCP 連線（2026-10-26）
+
+**為什麼有第二條路：** 現場 OES 的 SECS host 是 **FDC**，不是 EAP。HSMS-SS 一條連線只能有一個 host，EAP 因此沒有 session 可以送 `TOOL_EVENT`。
+所以同一批主機台事件另外走一條純 TCP 的文字行連線，線上規格在 [`eap-tool-event-tcp-spec-zh-TW.md`](eap-tool-event-tcp-spec-zh-TW.md)。
+被否決的替代方案（OES 以 SECS host 身分連 EAP，方案 2b）記在 [`eap-tool-context-host-zh-TW.md`](eap-tool-context-host-zh-TW.md)。
+
+**兩個來源都收，沒有切換開關**：`TOOL_EVENT` 與 TCP 都進同一個 `ReceiveToolEvent`。現場實際只會有一個來源；萬一兩邊同時轉送，重複的 Start 會留下 `ToolEventWindowUnclosed` 這筆假警告，日誌本身就指出問題。
+
+**連線（`EapEventLink`）：**
+
+- **OES 是 client**，連到 EAP 監聽的位址（預設 `10.2.3.120:20347`，EAP 提供）；連不上或斷線後每 10 秒重試。只連這一個位址，就已經做到「只收特定來源」，不需要白名單。
+- 每一行剛好回一行：`EVT` → `ACK,<SEQ>,<code>`、`HB` → `HBACK,<code>`、讀不出序號或不認得的類型 → `ERR,<code>`。代碼沿用 HCACK：0 收下（含對照表外的 CEID）、1 不認得的類型、2 未啟用製程事件、3 格式錯誤。
+- **序號**：`_lastEventSeq`（最後處理過的 `EVT`）用來判斷重送；`_lastKnownSeq`（兩種訊息聽過的最大值）用來判斷跳號。兩者分開，是因為 OES 重啟後的第一筆 `HB` 報的正是 EAP 接著要重送的那筆 `EVT`；拿它去判重送，那筆事件就會被丟掉。
+- **斷線本身不改視窗。** 只有連續 `heartbeatTimeoutSeconds`（預設 75 秒）完全沒收到任何一行，才呼叫 `ReportToolContext(Unknown)`，關閉連線並重連。每段靜默只報一次，而且只在曾經收到過訊息之後才報：從沒說過話的連線沒有視窗可以撤回，而且事件可能正從 SECS 進來。
+
+**引擎（`ReportToolContext`）：** 心跳陳述的是視窗「現在在哪」，不是移動視窗的邊界事件。
+
+- 和邊界事件排在**同一個佇列**，在下一幀依到達順序套用，避免舊的心跳蓋掉較新的事件。
+- 與目前視窗相同時什麼都不做、也不寫日誌（每 30 秒一筆）。
+- 不同時直接修正：從 Unknown 變成已知記 `ToolEventContextRestored`（Information）；已知卻被修正記 `ToolEventResync`（Warning，代表 EAP 漏送了事件）；變成 Unknown 記 `ToolEventContextUnknown`（Warning，附原因）。
+- `WINCEID` 經對照表解讀：有類別的 Start → 該視窗；只記錄的 Start 或對照表外的 CEID → 視窗外（主機台在跑一個沒有比值指定的製程，同時也關掉一個漏了 End 的視窗）；標成 End 的 CEID → `ToolEventAck.Invalid`、回 `HBACK,3`、視窗不變。
+- `TOOLLINK = 0` 或 `STATE = 2` 一律回報 Unknown。
+- 心跳**不算收到的事件**：VID 032 與接收計數只由 `EVT`／`TOOL_EVENT` 推動。
+
+**設定（`secs.toolEvents.tcp`，存檔即生效）：** `enabled`（預設 false）、`remoteHost`、`remotePort`、`heartbeatTimeoutSeconds`（SECS 分頁限 35–600；低於 35 秒，正常的 30 秒心跳也會逾時）。
+這組設定不受 `secs.enabled` 影響。設定沒變時重新存檔不會斷線（SECS 分頁存檔會一次寫入所有欄位）。
+收到的事件能不能用，仍由 staged 的 `toolEvents.enabled` 決定。
+
+**畫面：** SECS 分頁狀態列多兩行（不需登入）：`EAP link: connected to … (since …)`／`connecting…`／`not connected … retrying every 10 s (…)`；第二行是最後一行的時間與心跳內容。靜默逾時時兩行都變橘色，第二行寫明視窗已設為不明。
+設定區 `EAP link (TCP) — applies on save`（Engineer+）。不另做即時的收送清單（SECS 清單 2026-10-13 的當機教訓），原始內容看 `Logs\eap_YYYYMMDD.log`。
+`SecsLogFile` 多了檔名前綴參數，兩個日誌共用換日與清理邏輯，保留天數同 `logRetentionDays`；診斷包也收 `eap_` 檔。
+
+**日誌事件：**
+
+| 名稱 | 等級 | 何時 |
+|---|---|---|
+| `EapLinkConnected` | Information | 連上；斷線後重連時附上斷了幾分鐘、失敗幾次 |
+| `EapLinkLost` | Warning | 已建立的連線中斷，附原因 |
+| `EapLinkConnectFailed` | Warning | 連不上：只記第一次，之後每小時一筆累計 |
+| `EapEventSequenceGap` | Warning | 序號跳號，附缺幾筆 |
+| `EapSequenceReset` | Information | 序號變小（EAP 重啟） |
+| `EapLineRejected` | Warning | 格式錯誤或不認得的類型；同一種每小時最多一筆，附第一行原文 |
+| `ToolEventContextRestored`／`ToolEventResync`／`ToolEventContextUnknown` | Information／Warning／Warning | 見上方「引擎」 |
+| `ToolEventIgnored` | Information | 對照表外的 CEID，每個每次執行一次（TCP 這邊另記一份） |
+
+**驗證：**
+
+- 自動測試：`ToolContextReportTests`（引擎）、`EapLineParseTests`（線上規則）、`EapEventLinkWireTests`（loopback 假 EAP：重送只套用一次、心跳點名的事件仍會套用、跳號與重啟、各種錯誤行、斷線重連不撤回視窗、靜默只撤回一次、從沒說過話不撤回、同設定重存不斷線）。
+- 手動：`tools/eap-link-sim.ps1`。`-Mode Eap` 假扮 EAP 測 OES，`-Mode Oes` 假扮 OES 給 EAP 廠商自測。
+- 2026-10-26 在開發機以 `-Mode Eap` 對真的 App 跑過：狀態列轉綠、`EVT` 讓視窗進入 A；停掉模擬器 35 秒後轉橘、視窗變為不明，日誌依序為 `EapLinkConnected` → `ToolEventWindowOpened` → `EapLinkLost` → `EapLinkConnectFailed`（只一筆）→ `ToolEventContextUnknown`。

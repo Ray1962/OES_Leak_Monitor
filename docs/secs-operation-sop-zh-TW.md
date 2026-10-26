@@ -530,6 +530,43 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 - [ ] Profile 有 `TOOL_EVENT`（Host 送一次，HCACK = 0）
 - [ ] 主機台跑一次 Chamber Process：狀態列顯示 `in window A`，結束後 `outside any window`
 
+### 12.7 改用 TCP 接收 EAP 事件（OES 的 SECS host 是 FDC 時）
+
+OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 `TOOL_EVENT`，改由 **OES 主動以 TCP 連到 EAP**，接收 `EVT`（主機台事件）與每 30 秒一筆的 `HB`（心跳）。通訊規格交給 EAP 平台的是 `eap-tool-event-tcp-spec-zh-TW`。12.1～12.3 的比值類別、CEID 對照表、`Use tool events` 照做，只是事件改從這條連線進來。
+
+**設定（Engineer）：**
+
+1. 跟 EAP 平台確認監聽位址（現場為 `10.2.3.120:20347`），並把 **OES PC 的 IP** 交給對方，讓 EAP 主機的防火牆放行。
+2. SECS 分頁的 `EAP link (TCP) — applies on save`：勾 `Connect to the EAP`，填 `EAP address`、`Port`，`Heartbeat timeout (s)` 用預設 75。
+3. 按 **Save & apply**，**立即生效**，不用重新開始採集。
+
+**確認：**
+
+| 看哪裡 | 正常 |
+|---|---|
+| `EAP link` 第一行 | 綠色 `connected to 10.2.3.120:20347 (since …)` |
+| `EAP link` 第二行 | `Last line` 的時間每 30 秒更新一次；`heartbeat: PM3 …` 與主機台狀態一致；`tool link up` |
+| `Tool events` 那一行 | 主機台跑 Chamber Process 時是 `in window A` |
+| 系統日誌 | 有 `EapLinkConnected`；沒有 `ToolEventResync` |
+
+有問題時依操作手冊 §9.15 檢查。收送的每一行都在 `Logs\eap_YYYYMMDD.log`。
+
+**沒有 EAP 也能先驗 OES（同一台電腦）：**
+
+1. 開 PowerShell，在放 `eap-link-sim.ps1` 的資料夾執行：
+   `powershell -ExecutionPolicy Bypass -File .\eap-link-sim.ps1 -Mode Eap -Bind 127.0.0.1 -Port 20347`
+2. SECS 分頁的 `EAP address` 暫時改成 `127.0.0.1`，Save & apply → 狀態列轉綠。
+3. 在模擬器視窗輸入 `start`／`end`／`clean-start`／`link-down`／`silent 90` 等指令（腳本開頭有完整清單），對照狀態列與系統日誌。
+4. 測完把 `EAP address` 改回 `10.2.3.120`，Save & apply。
+
+**給 EAP 廠商自測：** 同一支腳本以 `-Mode Oes -RemoteHost 10.2.3.120 -Port 20347` 執行，就會假扮 OES 連過去，每一行都照 OES 的規則回覆並印出來。
+
+**檢核：**
+
+- [ ] `EAP link` 綠色，`Last line` 每 30 秒更新
+- [ ] 主機台跑一次 Chamber Process：`in window A`，結束後 `outside any window`
+- [ ] 拔掉 OES 網路線 90 秒後接回：75 秒時轉橘、視窗不明；接回後自動恢復
+
 ---
 
 ## 附錄 A：檔案位置
@@ -542,6 +579,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | **Profile 範本（要改的是這份）** | `{Config}\profiles\oes-leak-monitor.json` | 編號一律以 `cc=00` 書寫 |
 | 有效 profile（產生物，不要改） | `{Config}\profiles\.effective\oes-leak-monitor.json` | 每次啟動依腔體號重寫 |
 | SECS 收送日誌 | `{Config}\Logs\secs_YYYYMMDD.log` | 每日一檔，保留 `logRetentionDays` 天 |
+| EAP 連線收送日誌 | `{Config}\Logs\eap_YYYYMMDD.log` | §12.7 的 TCP 連線；保留天數同上 |
 | 系統稽核日誌 | `{Config}\Logs\{YYMMDDHH}.csv` | `SecsStarted`／`SecsStopped`／`SecsSettingsSaved` 等記在這裡 |
 
 分頁中段會直接顯示前三個路徑的實際值——**現場找檔案看那裡就好，不用背。**

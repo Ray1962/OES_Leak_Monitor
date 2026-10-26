@@ -1118,6 +1118,24 @@ PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B
 
 **日誌**：視窗的開與關記成 `ToolEventWindowOpened`／`ToolEventWindowClosed`。事件不套用時（回放、測試模式），這兩行的結尾會加上 `(not applied: …)`，表示當時的判定沒有依這個視窗。其他相關訊息：`ToolEventIgnored`（對照表沒有的 CEID，每個只記一次）、`ToolEventWindowUnclosed`／`ToolEventOrphanEnd`／`ToolEventWindowTimedOut`（事件不成對或逾時，Warning）、`ToolEventUnmappedPlasma`（不在任何視窗內的一段電漿——通常是對照表還沒有的製程）。
 
+**EAP 連線（TCP）**：現場 OES 的 SECS 連線是給 FDC 用的，EAP 沒辦法再從那條連線送 `TOOL_EVENT`。所以另外有一條純 TCP 連線：**OES 主動連到 EAP**（預設 `10.2.3.120:20347`），EAP 每有一筆主機台事件就送一行 `EVT`，另外每 30 秒送一行心跳 `HB`，回報 PM3 目前在哪個視窗。收到的事件和 `TOOL_EVENT` 走同一套對照表與視窗規則。通訊格式見 `eap-tool-event-tcp-spec-zh-TW`。
+
+狀態列多兩行（不需登入）：
+
+| 顯示 | 意思 |
+|---|---|
+| `EAP link: not in use` | 沒有啟用 |
+| `EAP link: connected to … (since hh:mm:ss)`（綠） | 已連上 EAP |
+| `EAP link: connecting to …` ／ `not connected … retrying every 10 s (…)`（紅） | 連不上或斷線，每 10 秒自動重試；括號內是原因 |
+| `Last line … · heartbeat: PM3 … · tool link up · SEQ n` | 最後收到一行的時間，以及心跳的內容 |
+| 橘色 `No line from the EAP for 75 s — the process window has been set to unknown.` | 太久沒收到任何一行。製程視窗改為不明，照沒有製程事件時的方式判定，**不會漏判** |
+
+**斷線本身不會讓視窗變成不明**：OES 會自己重連，連上後 EAP 立刻送一筆心跳，視窗就恢復正確。只有完全收不到任何訊息超過 `Heartbeat timeout (s)` 才會改為不明。心跳和 OES 自己記的視窗不同時，以心跳為準並記一筆 `ToolEventResync`（Warning），這筆就是 EAP 漏送了事件的紀錄。
+
+設定（Engineer 以上，`EAP link (TCP) — applies on save`，**存檔即生效**）：`Connect to the EAP`（預設不勾）、`EAP address`、`Port`、`Heartbeat timeout (s)`（預設 75，可設 35～600）。收到的事件會不會被採用，仍由上面的 `Use tool events` 決定。
+
+收送的每一行都記在 `Logs\eap_YYYYMMDD.log`（不是 `secs_` 那個檔）。系統日誌的相關訊息：`EapLinkConnected`／`EapLinkLost`／`EapLinkConnectFailed`（連不上時只記第一次，之後每小時一筆累計）、`EapEventSequenceGap`（有事件沒送到）、`EapSequenceReset`（EAP 重啟）、`EapLineRejected`（格式錯誤的行）、`ToolEventContextUnknown`（視窗改為不明，附原因）。
+
 ---
 
 ## 7. 檔案與資料夾
@@ -1463,7 +1481,7 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 
 已啟用主機台製程事件，但 OES 不知道目前是哪個製程視窗。照沒有製程事件時的方式判定，所以**不會漏判**，但指定類別的比值沒有依製程篩選。依序檢查 SECS 分頁的狀態列（§6.13.3）：
 
-1. **`Tool events received this run: 0`** —— EAP 沒有在轉送事件。確認 SECS 已連線（`COMMUNICATING`），請 EAP 平台確認轉送已開啟。
+1. **`Tool events received this run: 0`** —— EAP 沒有在轉送事件。用 TCP 連線接收時，先看 `EAP link` 那一行是否為綠色（不是的話見 §9.15）；用 SECS `TOOL_EVENT` 接收時，確認 SECS 已連線（`COMMUNICATING`）。然後請 EAP 平台確認轉送已開啟。
 2. **有收到事件，但 `Last tool event` 的 CEID 不在對照表裡** —— 對照表沒有這個主機台的 Start／End CEID。比對主機台的 CEID 表，修改 `settings.json` 後重新開始採集。
 3. **剛重新開始採集或剛啟動** —— 要等主機台的下一個 Start 事件。這是正常的。
 4. **日誌有 `ToolEventWindowTimedOut`** —— 視窗開太久沒收到 End，代表 EAP 漏轉了 ProcessEnd，或 `Max window (s)` 設得比製程還短。
@@ -1472,6 +1490,17 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 ### 9.14 EAP 送 `TOOL_EVENT` 收到 HCACK 1
 
 OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆寫**既有的 profile（裡面可能有現場的修改），所以舊 profile 沒有 `TOOL_EVENT` 這個命令、也沒有 VID 030～032；啟動時系統日誌會有一筆 `SecsProfileMissingBinds`。處理方式：在 SECS 分頁按 **Add missing rows**（§6.13.2），再按 **Restart interface**。比值槽位 VID 101～400 也是同樣的情形、同樣的處理。
+
+### 9.15 `EAP link` 不是綠色
+
+SECS 分頁 `EAP link` 那一行的括號會寫原因。依序檢查：
+
+1. **`Could not connect: …目標電腦拒絕連線`** —— EAP 那邊沒有在 `20347` 監聽。請 EAP 平台確認服務已啟動、位址與 port 和 SECS 分頁填的一致。
+2. **`no answer within 5 s`** —— 網路不通，或 EAP 主機的防火牆擋了 OES PC 的 IP。請 IT 確認 OES PC 能連到 `10.2.3.120:20347`。
+3. **綠色，但第二行是橘色的 `No line from the EAP for …`** —— 連得上但 EAP 沒有送心跳。請 EAP 平台確認每 30 秒送 `HB`、連上後立刻送一筆。
+4. **時好時壞，系統日誌有很多 `EapLinkLost`** —— 網路不穩，或 EAP 在 10 秒內沒等到回應就關掉連線。把 `Logs\eap_YYYYMMDD.log` 交給 EAP 平台比對雙方的時間。
+
+不想等現場 EAP，也可以用 `eap-link-sim.ps1 -Mode Eap` 在同一台電腦上假扮 EAP（步驟見 SECS SOP §12.7）。
 
 ---
 
