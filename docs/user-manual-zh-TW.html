@@ -137,7 +137,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#610-ratio-review比值回放">6.10 Ratio Review（比值回放）</a>
 <a class="l3" href="#611-batch-trend批次趨勢">6.11 Batch Trend（批次趨勢）</a>
 <a class="l3" href="#612-logs系統日誌">6.12 Logs（系統日誌）</a>
-<a class="l3" href="#613-secs與-meseap-連線">6.13 SECS（與 MES／EAP 連線）</a>
+<a class="l3" href="#613-secs與-fdc-的-secs-連線與-eap-的事件連線">6.13 SECS（與 FDC 的 SECS 連線、與 EAP 的事件連線）</a>
 <a class="l2" href="#7-檔案與資料夾">7. 檔案與資料夾</a>
 <a class="l3" href="#71-位置">7.1 位置</a>
 <a class="l3" href="#72-檔名規則">7.2 檔名規則</a>
@@ -344,7 +344,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>10</td><td><strong>Batch Trend</strong></td><td>跨批次趨勢：一批一個點，判斷這一批和前面幾十批有無不同</td><td>全開放</td></tr>
 <tr><td>11</td><td><strong>Ratio Review</strong></td><td>回放已存的比值 CSV（% 基準／原始比值／洩漏率）</td><td>全開放</td></tr>
 <tr><td>12</td><td><strong>Logs</strong></td><td>系統稽核日誌、一鍵診斷打包</td><td>全開放</td></tr>
-<tr><td>13</td><td><strong>SECS</strong></td><td>與 MES／Host 的連線狀態（設定需 Engineer+，看狀態不需要）</td><td>檢視全開放</td></tr>
+<tr><td>13</td><td><strong>SECS</strong></td><td>與 Host（現場為 FDC）的 SECS 連線狀態，以及接收 EAP 製程事件的連線（設定需 Engineer+，看狀態不需要）</td><td>檢視全開放</td></tr>
 </tbody></table></div>
 <blockquote><p><strong>Configuration</strong> 與 <strong>Replay</strong> 分頁在切入時會檢查角色；權限不足會跳出登入視窗，取消就退回原本的分頁。</p></blockquote>
 <hr>
@@ -1135,8 +1135,16 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <p>一份沒有「缺漏」段落的清單，讀起來就像什麼都齊了。</p></blockquote>
 <p><strong>密碼不會離開機台</strong>：所有設定檔（含備份）的存取控制區段與 <code>passwordHash</code> 都會被移除。 <strong>使用者名稱會保留</strong> —— 稽核日誌的價值就在於知道是誰做的。</p>
 <blockquote><p>追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 <code>Description</code> 欄會直接寫出原因。</p></blockquote>
-<h3 id="613-secs與-meseap-連線">6.13 SECS（與 MES／EAP 連線）</h3>
-<p>這個分頁<strong>不需要登入就看得到</strong>：被問到「OES 有沒有接上 MES」時，Operator 不必等工程師。設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 <code>secs-operation-sop-zh-TW.html</code>（與本手冊同一個資料夾）；這裡只說明畫面。</p>
+<h3 id="613-secs與-fdc-的-secs-連線與-eap-的事件連線">6.13 SECS（與 FDC 的 SECS 連線、與 EAP 的事件連線）</h3>
+<p>這個分頁<strong>不需要登入就看得到</strong>：被問到「OES 有沒有接上 FDC」「有沒有收到 EAP 的製程事件」時，Operator 不必等工程師。</p>
+<p>現場有兩條連線，不要混為一談：</p>
+<ul>
+<li><strong>SECS 連線</strong>：<strong>FDC</strong> 是 OES 唯一的 SECS host，從這條連線讀洩漏狀態、收警報。一條 SECS 連線只能有一個 host，所以 EAP 不會連進來。畫面上方的色塊、設定區的 <code>Address</code>／<code>Port</code>（預設 5000）都是這一條。
+</li>
+<li><strong>EAP 事件連線（TCP）</strong>：OES 主動連到 EAP，接收主機台的製程事件（§6.13.3）。設定區的 <code>EAP link (TCP)</code> 是這一條。
+</li>
+</ul>
+<p>設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 <code>secs-operation-sop-zh-TW.html</code>（與本手冊同一個資料夾）；這裡只說明畫面。</p>
 <h4 id="6131-上方連線狀態">6.13.1 上方：連線狀態</h4>
 <p>色塊顯示連線狀態（<code>DISABLED</code>／<code>LISTENING</code>／<code>COMMUNICATING</code>／<code>FAILED</code> 等），下面依序是控制狀態與機台號、目前的報告開關摘要，以及主機台製程事件的狀態列（§6.13.3）。</p>
 <h4 id="6132-設定區與-traffic">6.13.2 設定區與 Traffic</h4>
@@ -1152,7 +1160,14 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </tbody></table></div>
 <p>按下後先把 profile 備份成 <code>….bak-年月日時分秒</code>，再<strong>只附加</strong>缺的列——既有的列（含改過的編號、名稱、註解）一律不動；<strong>現場刻意刪掉的列也會被補回</strong>，不要的話補完再刪。結果顯示在按鈕下方，<strong>要按 Restart interface（或重開 App）才生效</strong>，並記入系統日誌 <code>SecsProfileRowsAdded</code>。步驟見 SECS SOP §7.3。</p>
 <h4 id="6133-主機台製程事件tool-events">6.13.3 主機台製程事件（Tool events）</h4>
-<p>PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；<strong>主機台知道</strong>。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）以 SECS 命令 <code>TOOL_EVENT</code> 轉送過來，OES 依對照表開關「<strong>製程視窗</strong>」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 <code>Not this process</code>。沒有指定類別的比值不受影響，每一段電漿都判定。</p>
+<p>PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；<strong>主機台知道</strong>。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）轉送過來，OES 依對照表開關「<strong>製程視窗</strong>」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 <code>Not this process</code>。沒有指定類別的比值不受影響，每一段電漿都判定。</p>
+<p>事件有兩種送達方式，OES 都會接收，進來之後的處理完全相同：</p>
+<ul>
+<li><strong>EAP 事件連線（TCP）</strong>：<strong>現場用這一種</strong>，見本節後段「EAP 連線（TCP）」。
+</li>
+<li><strong>SECS 命令 <code>TOOL_EVENT</code></strong>：由 OES 的 SECS host 送來（§11.5）。現場的 host 是 FDC，FDC 不送這個命令，所以現場不會用到。
+</li>
+</ul>
 <p><strong>狀態列</strong>（不需登入）：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>顯示</th><th>意思</th></tr></thead>
@@ -1161,7 +1176,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td><code>Tool events: in window A</code></td><td>在製程 A 的視窗內</td></tr>
 <tr><td><code>Tool events: outside any window</code></td><td>視窗已關閉、目前沒有任何視窗（與有沒有電漿無關）</td></tr>
 <tr><td><code>Tool events: window unknown — …</code></td><td>已啟用，但目前沒有視窗生效：還沒收到事件、視窗逾時，或事件不套用到目前的光譜（回放、測試模式）。照沒有製程事件時的方式判定</td></tr>
-<tr><td><code>Last tool event: CEID … at hh:mm:ss</code></td><td>最後一筆收到的事件（不論是否在對照表內）；<code>none received yet</code> 表示還沒收到</td></tr>
+<tr><td><code>Last tool event: CEID … at hh:mm:ss</code></td><td>最後一筆收到的事件（不論是否在對照表內）；<code>none received yet</code> 表示還沒收到。時間是 <strong>EAP 收到這筆事件的時間</strong>：主機台的事件報告不帶時間戳，由 EAP 填入，和主機台實際發生的時刻只差 SECS 傳遞的時間</td></tr>
 <tr><td><code>Tool events received this run: n</code></td><td>這次啟動後收到的事件數。一直是 0，就是 EAP 沒有在轉送</td></tr>
 </tbody></table></div>
 <p><strong>設定</strong>（Engineer 以上，Save &amp; apply）：</p>
@@ -1172,7 +1187,9 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td><code>Max window (s) — applies on save</code></td><td>存檔即生效</td><td>視窗最長存活時間（預設 600 秒，可設 10～86400）。超過仍未收到 End，視窗作廢、回到「window unknown」</td></tr>
 <tr><td><code>Apply tool events in test mode — applies on save</code></td><td>存檔即生效</td><td>測試模式的合成光譜是否套用視窗（預設不套用）。只在沒有光譜儀的電腦上驗證用。<strong>回放錄檔時一律不套用</strong></td></tr>
 </tbody></table></div>
-<p><strong>CEID 對照表</strong>（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 <code>(record only)</code>，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（<code>inherit</code> 表示沿用製程分類器設定或記錄器的門檻）。對照表要在 <code>settings.json</code> 的 <code>secs.toolEvents.mappings</code> 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。</p>
+<p><strong>CEID 對照表</strong>（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 <code>(record only)</code>，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（<code>inherit</code> 表示沿用製程分類器設定或記錄器的門檻）。</p>
+<p>現場的對照表有三組：<code>A</code>（Chamber Process／precoat）、<code>B</code>（Chamber Clean），以及 <strong><code>LEAK_CHECK</code></strong>（主機台的 Auto Leak check，升壓測漏）。<strong>沒有任何比值指定 <code>LEAK_CHECK</code></strong>，所以它不影響判定；它的用途是讓主機台測漏期間，狀態列顯示 <code>in window LEAK_CHECK</code>、VID 031 為 <code>LEAK_CHECK</code>，FDC 才能把 OES 的讀值和主機台的測漏結果對齊。測漏期間比值顯示 <code>Not this process</code> 是正常的。</p>
+<p>對照表要在 <code>settings.json</code> 的 <code>secs.toolEvents.mappings</code> 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。</p>
 <p>已存檔的開關或對照表和目前生效的不同時，表格上方會出現橘色字：<code>Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.</code> 到 Monitor 分頁按 Stop 再按 Start 就會套用、橘色字消失。</p>
 <p><strong>日誌</strong>：視窗的開與關記成 <code>ToolEventWindowOpened</code>／<code>ToolEventWindowClosed</code>。事件不套用時（回放、測試模式），這兩行的結尾會加上 <code>(not applied: …)</code>，表示當時的判定沒有依這個視窗。其他相關訊息：<code>ToolEventIgnored</code>（對照表沒有的 CEID，每個只記一次）、<code>ToolEventWindowUnclosed</code>／<code>ToolEventOrphanEnd</code>／<code>ToolEventWindowTimedOut</code>（事件不成對或逾時，Warning）、<code>ToolEventUnmappedPlasma</code>（不在任何視窗內的一段電漿——通常是對照表還沒有的製程）。</p>
 <p><strong>EAP 連線（TCP）</strong>：現場 OES 的 SECS 連線是給 FDC 用的，EAP 沒辦法再從那條連線送 <code>TOOL_EVENT</code>。所以另外有一條純 TCP 連線：<strong>OES 主動連到 EAP</strong>（預設 <code>10.2.3.120:20347</code>），EAP 每有一筆主機台事件就送一行 <code>EVT</code>，另外每 30 秒送一行心跳 <code>HB</code>，回報 PM3 目前在哪個視窗。收到的事件和 <code>TOOL_EVENT</code> 走同一套對照表與視窗規則。通訊格式見 <code>eap-tool-event-tcp-spec-zh-TW</code>。</p>
@@ -1652,7 +1669,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>角色等級</td><td>Guest(0) &lt; Operator(1) &lt; Engineer(2) &lt; Admin(3)</td></tr>
 </tbody></table></div>
 <h2 id="11-附錄secs-識別碼svidalidceid">11. 附錄：SECS 識別碼（SVID／ALID／CEID）</h2>
-<p>本機台以 SECS/GEM（HSMS）與廠內 Host／MES 連線時，Host 看到的每一筆資料都有一個識別碼。這三種識別碼各自回答 Host 的一個問題：</p>
+<p>本機台以 SECS/GEM（HSMS）與廠內 Host 連線時（現場的 Host 是 <strong>FDC</strong>），Host 看到的每一筆資料都有一個識別碼。這三種識別碼各自回答 Host 的一個問題：</p>
 <div class="tablewrap"><table>
 <thead><tr><th></th><th>全名</th><th>回答的問題</th><th>誰先開口</th><th>訊息</th></tr></thead>
 <tbody>
@@ -1735,7 +1752,8 @@ daily-inspection-plan-zh-TW.html</code></pre>
 </li>
 </ol>
 <h3 id="115-遠端命令tool_event">11.5 遠端命令：<code>TOOL_EVENT</code></h3>
-<p>除了上面三種，OES 只接受<strong>一個</strong>遠端命令（S2F41）：<code>TOOL_EVENT</code>。它由廠內 EAP 送來，內容是主機台自己的製程事件 CEID（必填 <code>CEID</code>，選填 <code>TIME</code>），用途見 §6.13.3。</p>
+<p>除了上面三種，OES 只接受<strong>一個</strong>遠端命令（S2F41）：<code>TOOL_EVENT</code>。它由 OES 的 SECS host 送來，內容是主機台自己的製程事件 CEID（必填 <code>CEID</code>，選填 <code>TIME</code>），用途見 §6.13.3。</p>
+<blockquote><p><strong>現場不會用到這個命令。</strong> 現場的 SECS host 是 FDC，FDC 不送 S2F41；主機台的製程事件改由 EAP 經 TCP 連線轉送（§6.13.3「EAP 連線（TCP）」），進來之後的處理和 <code>TOOL_EVENT</code> 完全相同。這個命令保留給「EAP 本身就是 SECS host」的場合。</p></blockquote>
 <ul>
 <li><strong>它是資訊轉送，不是控制命令</strong>：不會啟停採集、不會解除警報、不改任何設定。
 </li>
@@ -1761,7 +1779,7 @@ daily-inspection-plan-zh-TW.html</code></pre>
 <tr><td>狀態變數識別碼</td><td>SVID (Status Variable ID)</td><td>Host 可隨時查詢的數值，見 §11.1</td></tr>
 <tr><td>警報識別碼</td><td>ALID (Alarm ID)</td><td>設備主動送出的警報，成對 set／clear，見 §11.2</td></tr>
 <tr><td>事件識別碼</td><td>CEID (Collection Event ID)</td><td>設備主動送出的事件通知，見 §11.3</td></tr>
-<tr><td>主機台製程事件</td><td>Tool event（S2F41 <code>TOOL_EVENT</code>）</td><td>EAP 轉送過來的主機台製程事件 CEID，見 §6.13.3</td></tr>
+<tr><td>主機台製程事件</td><td>Tool event</td><td>EAP 轉送過來的主機台製程事件 CEID；現場經 TCP 連線送達（另一種方式是 S2F41 <code>TOOL_EVENT</code>），見 §6.13.3</td></tr>
 <tr><td>製程視窗</td><td>Process window</td><td>主機台某個製程的 Start 到 End；指定類別的比值只在該類別的視窗內判定</td></tr>
 </tbody></table></div>
 </main>

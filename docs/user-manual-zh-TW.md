@@ -167,7 +167,7 @@ daily-inspection-plan-zh-TW.html
 | 10 | **Batch Trend** | 跨批次趨勢：一批一個點，判斷這一批和前面幾十批有無不同 | 全開放 |
 | 11 | **Ratio Review** | 回放已存的比值 CSV（% 基準／原始比值／洩漏率） | 全開放 |
 | 12 | **Logs** | 系統稽核日誌、一鍵診斷打包 | 全開放 |
-| 13 | **SECS** | 與 MES／Host 的連線狀態（設定需 Engineer+，看狀態不需要） | 檢視全開放 |
+| 13 | **SECS** | 與 Host（現場為 FDC）的 SECS 連線狀態，以及接收 EAP 製程事件的連線（設定需 Engineer+，看狀態不需要） | 檢視全開放 |
 
 > **Configuration** 與 **Replay** 分頁在切入時會檢查角色；權限不足會跳出登入視窗，取消就退回原本的分頁。
 
@@ -1066,9 +1066,16 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 > 追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 `Description` 欄會直接寫出原因。
 
-### 6.13 SECS（與 MES／EAP 連線）
+### 6.13 SECS（與 FDC 的 SECS 連線、與 EAP 的事件連線）
 
-這個分頁**不需要登入就看得到**：被問到「OES 有沒有接上 MES」時，Operator 不必等工程師。設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 `secs-operation-sop-zh-TW.html`（與本手冊同一個資料夾）；這裡只說明畫面。
+這個分頁**不需要登入就看得到**：被問到「OES 有沒有接上 FDC」「有沒有收到 EAP 的製程事件」時，Operator 不必等工程師。
+
+現場有兩條連線，不要混為一談：
+
+- **SECS 連線**：**FDC** 是 OES 唯一的 SECS host，從這條連線讀洩漏狀態、收警報。一條 SECS 連線只能有一個 host，所以 EAP 不會連進來。畫面上方的色塊、設定區的 `Address`／`Port`（預設 5000）都是這一條。
+- **EAP 事件連線（TCP）**：OES 主動連到 EAP，接收主機台的製程事件（§6.13.3）。設定區的 `EAP link (TCP)` 是這一條。
+
+設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 `secs-operation-sop-zh-TW.html`（與本手冊同一個資料夾）；這裡只說明畫面。
 
 #### 6.13.1 上方：連線狀態
 
@@ -1091,7 +1098,12 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 #### 6.13.3 主機台製程事件（Tool events）
 
-PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）以 SECS 命令 `TOOL_EVENT` 轉送過來，OES 依對照表開關「**製程視窗**」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
+PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）轉送過來，OES 依對照表開關「**製程視窗**」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
+
+事件有兩種送達方式，OES 都會接收，進來之後的處理完全相同：
+
+- **EAP 事件連線（TCP）**：**現場用這一種**，見本節後段「EAP 連線（TCP）」。
+- **SECS 命令 `TOOL_EVENT`**：由 OES 的 SECS host 送來（§11.5）。現場的 host 是 FDC，FDC 不送這個命令，所以現場不會用到。
 
 **狀態列**（不需登入）：
 
@@ -1101,7 +1113,7 @@ PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B
 | `Tool events: in window A` | 在製程 A 的視窗內 |
 | `Tool events: outside any window` | 視窗已關閉、目前沒有任何視窗（與有沒有電漿無關） |
 | `Tool events: window unknown — …` | 已啟用，但目前沒有視窗生效：還沒收到事件、視窗逾時，或事件不套用到目前的光譜（回放、測試模式）。照沒有製程事件時的方式判定 |
-| `Last tool event: CEID … at hh:mm:ss` | 最後一筆收到的事件（不論是否在對照表內）；`none received yet` 表示還沒收到 |
+| `Last tool event: CEID … at hh:mm:ss` | 最後一筆收到的事件（不論是否在對照表內）；`none received yet` 表示還沒收到。時間是 **EAP 收到這筆事件的時間**：主機台的事件報告不帶時間戳，由 EAP 填入，和主機台實際發生的時刻只差 SECS 傳遞的時間 |
 | `Tool events received this run: n` | 這次啟動後收到的事件數。一直是 0，就是 EAP 沒有在轉送 |
 
 **設定**（Engineer 以上，Save & apply）：
@@ -1112,7 +1124,11 @@ PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B
 | `Max window (s) — applies on save` | 存檔即生效 | 視窗最長存活時間（預設 600 秒，可設 10～86400）。超過仍未收到 End，視窗作廢、回到「window unknown」 |
 | `Apply tool events in test mode — applies on save` | 存檔即生效 | 測試模式的合成光譜是否套用視窗（預設不套用）。只在沒有光譜儀的電腦上驗證用。**回放錄檔時一律不套用** |
 
-**CEID 對照表**（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 `(record only)`，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（`inherit` 表示沿用製程分類器設定或記錄器的門檻）。對照表要在 `settings.json` 的 `secs.toolEvents.mappings` 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。
+**CEID 對照表**（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 `(record only)`，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（`inherit` 表示沿用製程分類器設定或記錄器的門檻）。
+
+現場的對照表有三組：`A`（Chamber Process／precoat）、`B`（Chamber Clean），以及 **`LEAK_CHECK`**（主機台的 Auto Leak check，升壓測漏）。**沒有任何比值指定 `LEAK_CHECK`**，所以它不影響判定；它的用途是讓主機台測漏期間，狀態列顯示 `in window LEAK_CHECK`、VID 031 為 `LEAK_CHECK`，FDC 才能把 OES 的讀值和主機台的測漏結果對齊。測漏期間比值顯示 `Not this process` 是正常的。
+
+對照表要在 `settings.json` 的 `secs.toolEvents.mappings` 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。
 
 已存檔的開關或對照表和目前生效的不同時，表格上方會出現橘色字：`Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.` 到 Monitor 分頁按 Stop 再按 Start 就會套用、橘色字消失。
 
@@ -1623,7 +1639,7 @@ SECS 分頁 `EAP link` 那一行的括號會寫原因。依序檢查：
 
 ## 11. 附錄：SECS 識別碼（SVID／ALID／CEID）
 
-本機台以 SECS/GEM（HSMS）與廠內 Host／MES 連線時，Host 看到的每一筆資料都有一個識別碼。這三種識別碼各自回答 Host 的一個問題：
+本機台以 SECS/GEM（HSMS）與廠內 Host 連線時（現場的 Host 是 **FDC**），Host 看到的每一筆資料都有一個識別碼。這三種識別碼各自回答 Host 的一個問題：
 
 | | 全名 | 回答的問題 | 誰先開口 | 訊息 |
 |---|---|---|---|---|
@@ -1710,7 +1726,9 @@ ALID 與 CEID 格式相同，但屬於不同的命名空間（ALID 用 001～130
 
 ### 11.5 遠端命令：`TOOL_EVENT`
 
-除了上面三種，OES 只接受**一個**遠端命令（S2F41）：`TOOL_EVENT`。它由廠內 EAP 送來，內容是主機台自己的製程事件 CEID（必填 `CEID`，選填 `TIME`），用途見 §6.13.3。
+除了上面三種，OES 只接受**一個**遠端命令（S2F41）：`TOOL_EVENT`。它由 OES 的 SECS host 送來，內容是主機台自己的製程事件 CEID（必填 `CEID`，選填 `TIME`），用途見 §6.13.3。
+
+> **現場不會用到這個命令。** 現場的 SECS host 是 FDC，FDC 不送 S2F41；主機台的製程事件改由 EAP 經 TCP 連線轉送（§6.13.3「EAP 連線（TCP）」），進來之後的處理和 `TOOL_EVENT` 完全相同。這個命令保留給「EAP 本身就是 SECS host」的場合。
 
 - **它是資訊轉送，不是控制命令**：不會啟停採集、不會解除警報、不改任何設定。
 - **回覆碼 HCACK**：0 = 收下（對照表沒有的 CEID 也回 0，只記錄）；1 = 命令不存在（舊版 profile，見 §9.14）；2 = 未啟用製程事件，或不在 ONLINE／REMOTE；3 = 參數錯誤（缺 `CEID`、`CEID` 讀不出來、`TIME` 格式錯）。
@@ -1735,5 +1753,5 @@ ALID 與 CEID 格式相同，但屬於不同的命名空間（ALID 用 001～130
 | 狀態變數識別碼 | SVID (Status Variable ID) | Host 可隨時查詢的數值，見 §11.1 |
 | 警報識別碼 | ALID (Alarm ID) | 設備主動送出的警報，成對 set／clear，見 §11.2 |
 | 事件識別碼 | CEID (Collection Event ID) | 設備主動送出的事件通知，見 §11.3 |
-| 主機台製程事件 | Tool event（S2F41 `TOOL_EVENT`） | EAP 轉送過來的主機台製程事件 CEID，見 §6.13.3 |
+| 主機台製程事件 | Tool event | EAP 轉送過來的主機台製程事件 CEID；現場經 TCP 連線送達（另一種方式是 S2F41 `TOOL_EVENT`），見 §6.13.3 |
 | 製程視窗 | Process window | 主機台某個製程的 Start 到 End；指定類別的比值只在該類別的視窗內判定 |
