@@ -170,4 +170,21 @@
           Condition="Exists('%(_ShippedTool.FullPath)')" />
   </Target>
 
+  <!--
+    The EAP link simulator travels with the app for the same reason: it is used
+    on the fab PC (SECS SOP §12.7) - -Mode Eap to check the OES end before the
+    real EAP is connected, -Mode Oes handed to the EAP vendor - and neither of
+    those machines has the repo on it. One file, Windows PowerShell 5.1.
+
+    Publish only, and warn rather than fail, exactly like CopyOperatorDocs.
+  -->
+  <Target Name="CopyEapLinkSimulator" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <ItemGroup>
+      <_EapSimulator Include="$(MSBuildProjectDirectory)\..\..\tools\eap-link-sim.ps1" />
+    </ItemGroup>
+    <Warning Text="EAP link simulator not found at %(_EapSimulator.FullPath) — the publish folder will ship without it, and the SECS SOP §12.7 points at a file that is not there."
+             Condition="!Exists('%(_EapSimulator.FullPath)')" />
+    <Copy SourceFiles="@(_EapSimulator)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true"
+          Condition="Exists('%(_EapSimulator.FullPath)')" />
+  </Target>
 </Project>

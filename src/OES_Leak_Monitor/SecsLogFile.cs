@@ -18,12 +18,17 @@ namespace OES_Leak_Monitor;
 /// <para/>
 /// Writes are serialised and best-effort: a logging failure must not take the interface
 /// down, so an I/O error is swallowed after being surfaced once.
+/// <para/>
+/// The EAP's plain-TCP event link keeps its trace with the same class under its own prefix
+/// (<c>eap_</c>): same day files, same pruning, but not interleaved with the FDC's SECS traffic,
+/// so either one can be read without filtering the other out.
 /// </summary>
 public sealed class SecsLogFile : IDisposable
 {
     private readonly object _gate = new();
     private readonly string _folder;
     private readonly int _retentionDays;
+    private readonly string _prefix;
 
     private StreamWriter? _writer;
     private DateTime _openDay = DateTime.MinValue;
@@ -32,10 +37,13 @@ public sealed class SecsLogFile : IDisposable
     /// <summary>Raised once when writing starts failing, with the reason.</summary>
     public event Action<string>? WriteFailed;
 
-    public SecsLogFile(string folder, int retentionDays)
+    /// <param name="prefix">File-name prefix, <c>secs_</c> or <c>eap_</c>; the files are
+    /// <c>{prefix}yyyyMMdd.log</c>.</param>
+    public SecsLogFile(string folder, int retentionDays, string prefix = "secs_")
     {
         _folder = folder;
         _retentionDays = retentionDays;
+        _prefix = prefix;
     }
 
     /// <summary>Path of the file currently being written, or "" before the first line.</summary>
@@ -75,15 +83,15 @@ public sealed class SecsLogFile : IDisposable
         }
         Close();
         Directory.CreateDirectory(_folder);
-        CurrentPath = Path.Combine(_folder, $"secs_{day:yyyyMMdd}.log");
+        CurrentPath = Path.Combine(_folder, $"{_prefix}{day:yyyyMMdd}.log");
         _writer = new StreamWriter(CurrentPath, append: true, Encoding.UTF8) { AutoFlush = true };
         _openDay = day;
         Prune(day);
     }
 
     /// <summary>
-    /// Deletes day files older than the retention window. Only files this class writes
-    /// (<c>secs_YYYYMMDD.log</c>) and only ones whose stamp parses — a folder the operator
+    /// Deletes day files older than the retention window. Only files this instance writes
+    /// (<c>{prefix}YYYYMMDD.log</c>) and only ones whose stamp parses — a folder the operator
     /// keeps other things in is not ours to tidy.
     /// </summary>
     private void Prune(DateTime today)
@@ -93,11 +101,11 @@ public sealed class SecsLogFile : IDisposable
             return;
         }
         var cutoff = today.AddDays(-_retentionDays);
-        foreach (var path in SafeEnumerate(_folder, "secs_*.log"))
+        foreach (var path in SafeEnumerate(_folder, _prefix + "*.log"))
         {
             var stem = Path.GetFileNameWithoutExtension(path);
-            if (stem.Length != 13 ||
-                !DateTime.TryParseExact(stem.Substring(5), "yyyyMMdd",
+            if (stem.Length != _prefix.Length + 8 ||
+                !DateTime.TryParseExact(stem.Substring(_prefix.Length), "yyyyMMdd",
                     CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
             {
                 continue;

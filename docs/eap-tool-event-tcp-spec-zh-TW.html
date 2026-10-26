@@ -132,7 +132,7 @@ td code{white-space:nowrap;}
 </nav>
 <main>
 <h1 id="oes-leak-monitor--eap-製程事件通訊規格tcp-文字行">OES Leak Monitor × EAP 製程事件通訊規格（TCP 文字行）</h1>
-<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 EAP 把主機台 <strong>PM3</strong> 的製程事件轉送給 OES Leak Monitor 的通訊方式：連線、訊息格式、回應碼、心跳、斷線處理與驗收方式。 <strong>狀態：</strong> 草案（2026-10-26 修訂）。<strong>OES 端尚未實作</strong>，請廠商先確認本規格，有疑問或無法照做的地方請在第 10 節回覆。 <strong>一句話：</strong> OES 主動以 TCP 連到 EAP 的 <code>10.2.3.120:20347</code>，EAP 一行送一筆訊息：PM3 事件發生時送 <code>EVT</code>，另外每 30 秒送一筆 <code>HB</code> 心跳回報 PM3 目前狀態；OES 每收一行回一行。</p></blockquote>
+<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 EAP 把主機台 <strong>PM3</strong> 的製程事件轉送給 OES Leak Monitor 的通訊方式：連線、訊息格式、回應碼、心跳、斷線處理與驗收方式。 <strong>狀態：</strong> 草案（2026-10-26 修訂）。OES 端已依本規格實作。第 10 節的 C3、C4 已回覆，C1、C2 的位址改由現場輸入，只剩 C5 待確認；有疑問或無法照做的地方請在第 10 節回覆。 <strong>一句話：</strong> OES 主動以 TCP 連到 EAP 的 <code>10.2.3.120:20347</code>，EAP 一行送一筆訊息：PM3 事件發生時送 <code>EVT</code>，另外每 30 秒送一筆 <code>HB</code> 心跳回報 PM3 目前狀態；OES 每收一行回一行。</p></blockquote>
 <h2 id="目錄">目錄</h2>
 <ul>
 <li><a href="#1-背景">1. 背景</a>
@@ -185,8 +185,8 @@ td code{white-space:nowrap;}
 <tbody>
 <tr><td>協定</td><td>TCP</td></tr>
 <tr><td>連線方向</td><td><strong>OES 主動連入，EAP 監聽</strong></td></tr>
-<tr><td>EAP 的監聽位址</td><td><strong><code>10.2.3.120:20347</code></strong>（EAP 方提供）</td></tr>
-<tr><td>OES 的來源位址</td><td>OES PC 的 IP（第 10 節 C1 由 OES 方提供）；來源 port 由作業系統分配，<strong>每次連線可能不同</strong></td></tr>
+<tr><td>EAP 的監聽位址</td><td>預設 <strong><code>10.2.3.120:20347</code></strong>（EAP 方提供）。<strong>在 OES 的 SECS 分頁輸入</strong>（<code>EAP address</code>／<code>Port</code>），存檔即生效，不必重開 App。EAP 位址變更（包括切換到備援機）時，由設備工程師在 OES 改，見第 10 節</td></tr>
+<tr><td>OES 的來源位址</td><td>OES PC 的 IP，由現場決定，<strong>輸入到 EAP 端的防火牆設定</strong>（見第 10 節）；來源 port 由作業系統分配，<strong>每次連線可能不同</strong></td></tr>
 <tr><td>同時連線數</td><td><strong>1 條</strong>。EAP 若在舊連線還在時又收到同一台 OES 的新連線（例如 OES 重啟、網路瞬斷後舊連線尚未釋放），請<strong>以新連線取代舊連線</strong></td></tr>
 <tr><td>斷線重連</td><td><strong>OES 每 10 秒</strong>重試一次，直到連上為止</td></tr>
 <tr><td>防火牆</td><td>EAP 端允許 OES PC 的 IP 連入 20347（建議只允許這個 IP）。OES PC 只需要允許連出，通常不需另外設定</td></tr>
@@ -223,7 +223,7 @@ td code{white-space:nowrap;}
 <thead><tr><th>欄位</th><th>用在</th><th>格式</th><th>內容</th></tr></thead>
 <tbody>
 <tr><td><code>CEID</code></td><td><code>EVT</code></td><td>十進位數字，1～10 位，範圍 0～4294967295</td><td>主機台的<strong>原始 CEID</strong>（例如 <code>3100439529</code>），不需轉換</td></tr>
-<tr><td><code>TIME</code></td><td><code>EVT</code></td><td><code>YYYYMMDDhhmmsscc</code>（16 位）或 <code>YYYYMMDDhhmmss</code>（14 位），本地時間；<strong>可以留空</strong></td><td><strong>主機台</strong>發出該事件的時間。主機台的事件報告沒有時間時，填 EAP 收到的時間。留空時，OES 用自己收到的時間</td></tr>
+<tr><td><code>TIME</code></td><td><code>EVT</code></td><td><code>YYYYMMDDhhmmsscc</code>（16 位）或 <code>YYYYMMDDhhmmss</code>（14 位），本地時間；<strong>可以留空</strong></td><td><strong>EAP 收到</strong>該主機台事件的時間（主機台的事件報告不帶時間戳，見 C3）。請一律填上、不要留空：留空時 OES 只能用自己收到的時間，會多算進轉送延遲</td></tr>
 <tr><td><code>SEQ</code></td><td><code>EVT</code>、<code>HB</code></td><td>十進位數字，0～4294967295</td><td>事件序號。見 5.1</td></tr>
 <tr><td><code>STATE</code></td><td><code>HB</code></td><td><code>0</code>、<code>1</code> 或 <code>2</code></td><td>PM3 目前的視窗狀態：<strong>0</strong> = 不在任何製程視窗內、<strong>1</strong> = 在製程視窗內、<strong>2</strong> = 不明</td></tr>
 <tr><td><code>WINCEID</code></td><td><code>HB</code></td><td>同 <code>CEID</code>；<code>STATE</code> 不是 1 時留空</td><td>開啟目前視窗的那筆 <strong>Start 事件</strong>的主機台 CEID</td></tr>
@@ -354,7 +354,7 @@ OES → EAP   ERR,1</code></pre>
 <tr><td>E4</td><td><strong>EAP 不知道 PM3 狀態時，<code>STATE</code> 填 2</strong>：EAP 剛啟動、尚未收到任何 PM3 製程事件，或與主機台斷線、恢復後尚未收到新事件時</td><td>不知道時填 0，OES 會以為 PM3 閒置，這是錯的</td></tr>
 <tr><td>E5</td><td>與主機台斷線時，<strong>下一筆 <code>HB</code> 立即送出</strong>（不必等 30 秒），<code>TOOLLINK = 0</code>、<code>STATE = 2</code></td><td>讓 OES 盡快改用不依賴製程事件的判定方式</td></tr>
 <tr><td>E6</td><td>重送時使用相同的 <code>SEQ</code></td><td>見 7.4</td></tr>
-<tr><td>E7</td><td><code>TIME</code>、<code>WINTIME</code> 以主機台的事件時間為準</td><td>EAP 轉送有延遲時，OES 的紀錄仍能對到主機台實際發生的時刻</td></tr>
+<tr><td>E7</td><td><code>TIME</code>、<code>WINTIME</code> 填 <strong>EAP 收到主機台事件的時間</strong>，不是送給 OES 的時間（主機台不帶時間戳，見 C3）</td><td>EAP 轉送或重送有延遲時，OES 的紀錄仍能對到 EAP 實際收到事件的時刻，與主機台只差 SECS 的傳遞時間</td></tr>
 <tr><td>E8</td><td>EAP 與 OES PC 都要接 NTP 對時</td><td>雙方的時間戳要能直接比對</td></tr>
 <tr><td>E9</td><td><strong>接受 OES 連線後立即送一筆 <code>HB</code></strong></td><td>OES 重啟或重連後，靠這一筆立即恢復正確的製程視窗</td></tr>
 </tbody></table></div>
@@ -401,13 +401,23 @@ OES → EAP   ERR,1</code></pre>
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>項目</th><th>由誰提供</th></tr></thead>
 <tbody>
-<tr><td>C1</td><td><strong>OES PC 的 IP</strong>，供 EAP 端的防火牆只允許這個 IP 連入 20347</td><td>OES 方</td></tr>
-<tr><td>C2</td><td>EAP 若有主備切換：<strong><code>10.2.3.120</code> 是否為會跟著切換的虛擬 IP？</strong> 不是的話，請提供備援機的位址</td><td>EAP 廠商</td></tr>
-<tr><td>C3</td><td>主機台的 PM3 事件報告裡有沒有時間戳？沒有的話，<code>TIME</code> 只能填 EAP 收到的時間</td><td>EAP 廠商</td></tr>
-<tr><td>C4</td><td>本規格的逾時與間隔（回應 10 秒、OES 重連 10 秒、心跳 30 秒、OES 判定中斷 75 秒）平台是否都能配合</td><td>EAP 廠商</td></tr>
+<tr><td>C1</td><td><strong>OES PC 的 IP</strong>，供 EAP 端的防火牆只允許這個 IP 連入</td><td>✅ <strong>現場輸入</strong>：設備工程師查出 OES PC 的 IP，填入下方「現場設定紀錄」並交給 EAP 方，由 EAP 方輸入防火牆設定</td></tr>
+<tr><td>C2</td><td>EAP 若有主備切換，OES 要連哪個位址</td><td>✅ <strong>現場輸入</strong>：OES 只連一個位址，在 SECS 分頁的 <code>EAP address</code>／<code>Port</code> 輸入，存檔即生效。EAP 切換到不同 IP 的備援機時，由設備工程師在 OES 改成備援機的位址；使用會跟著切換的虛擬 IP 時就不必改</td></tr>
+<tr><td>C3</td><td>主機台的 PM3 事件報告裡有沒有時間戳？</td><td>✅ <strong>2026-10-26 回覆：沒有。</strong> <code>TIME</code>／<code>WINTIME</code> 填 EAP 收到事件的時間（第 5 節、E7）</td></tr>
+<tr><td>C4</td><td>本規格的逾時與間隔（回應 10 秒、OES 重連 10 秒、心跳 30 秒、OES 判定中斷 75 秒）平台是否都能配合</td><td>✅ <strong>2026-10-26 回覆：都能配合</strong></td></tr>
 <tr><td>C5</td><td>預估開發與測試時程</td><td>EAP 廠商</td></tr>
 </tbody></table></div>
-<p>已確認：EAP 的監聽位址為 <code>10.2.3.120:20347</code>（EAP 方提供，2026-10-26）。</p>
+<p>已確認：EAP 的監聽位址為 <code>10.2.3.120:20347</code>（EAP 方提供，2026-10-26），這也是 OES 的預設值。</p>
+<p><strong>現場設定紀錄</strong>（上線時填寫，雙方各留一份）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>填寫</th><th>輸入到哪裡</th></tr></thead>
+<tbody>
+<tr><td>EAP 監聽 IP</td><td>______________</td><td>OES SECS 分頁 <code>EAP address</code></td></tr>
+<tr><td>EAP 監聽 Port</td><td>______________</td><td>OES SECS 分頁 <code>Port</code></td></tr>
+<tr><td>EAP 備援機 IP（若有、且不是虛擬 IP）</td><td>______________</td><td>切換時改填到 OES SECS 分頁 <code>EAP address</code></td></tr>
+<tr><td>OES PC 的 IP</td><td>______________</td><td>EAP 端防火牆的允許清單</td></tr>
+<tr><td>填寫人／日期</td><td>______________</td><td></td></tr>
+</tbody></table></div>
 <h2 id="11-驗收方式">11. 驗收方式</h2>
 <p>OES 方會提供一支測試程式 <code>eap-link-sim.ps1</code>（Windows PowerShell，不需安裝）。以 <code>-Mode Oes</code> 執行時，它<strong>假扮 OES</strong> 連到 EAP，對每一行回正確的 <code>ACK</code>／<code>HBACK</code> 並印出收到的內容，供 EAP 在正式連線前自行測試。正式驗收依下表進行：</p>
 <div class="tablewrap"><table>

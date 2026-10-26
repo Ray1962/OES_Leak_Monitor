@@ -52,6 +52,15 @@ public sealed class ToolEventSettings
     public bool ApplyInTestMode { get; set; }
 
     /// <summary>
+    /// The plain-TCP link to the EAP (<c>docs/eap-tool-event-tcp-spec-zh-TW.md</c>) — a second
+    /// way for the same events to arrive, because the site's SECS host is the FDC and HSMS-SS
+    /// leaves the EAP no session to send <c>TOOL_EVENT</c> on. <b>Hot-applied</b>: it is a
+    /// transport and names no class. Whether what it delivers is used is still
+    /// <see cref="Enabled"/>'s call.
+    /// </summary>
+    public ToolEventTcpSettings Tcp { get; set; } = new();
+
+    /// <summary>
     /// Whether two settings agree on the <b>staged</b> half — the switch and the table — which is
     /// what the engine adopts at an acquisition start. The hot-applied fields are left out: they
     /// take effect on save, so they never leave a saved table waiting. Switched off is one state
@@ -78,6 +87,47 @@ public sealed class ToolEventSettings
         Mappings = (Mappings ?? new()).Select(m => m.Clone()).ToList(),
         MaxWindowSeconds = MaxWindowSeconds,
         ApplyInTestMode = ApplyInTestMode,
+        Tcp = (Tcp ?? new()).Clone(),
+    };
+}
+
+/// <summary>
+/// Where the OES connects to receive the EAP's forwarded events over plain TCP. The OES is the
+/// client: the EAP listens on the address it gave (<c>10.2.3.120:20347</c>), which is also what
+/// confines the link to one sender without an allow-list.
+/// <para>Off by default, like the SECS interface, so an upgrade opens no connection until asked.</para>
+/// </summary>
+public sealed class ToolEventTcpSettings
+{
+    public bool Enabled { get; set; } = false;
+
+    public string RemoteHost { get; set; } = DefaultRemoteHost;
+
+    public int RemotePort { get; set; } = DefaultRemotePort;
+
+    /// <summary>
+    /// How long without a single line before the window stops being trusted. A dropped
+    /// connection by itself changes nothing — the reconnect and the heartbeat sent on accept
+    /// restore the window sooner than this.
+    /// </summary>
+    public double HeartbeatTimeoutSeconds { get; set; } = DefaultHeartbeatTimeoutSeconds;
+
+    /// <summary>The address the EAP gave, 2026-10-26.</summary>
+    public const string DefaultRemoteHost = "10.2.3.120";
+    public const int DefaultRemotePort = 20347;
+
+    /// <summary>Two missed 30 s heartbeats plus a margin.</summary>
+    public const double DefaultHeartbeatTimeoutSeconds = 75;
+
+    /// <summary>Range Save accepts. Under 35 s a healthy 30 s heartbeat would time out.</summary>
+    public const double MinHeartbeatTimeoutSeconds = 35, MaxHeartbeatTimeoutSeconds = 600;
+
+    public ToolEventTcpSettings Clone() => new()
+    {
+        Enabled = Enabled,
+        RemoteHost = RemoteHost,
+        RemotePort = RemotePort,
+        HeartbeatTimeoutSeconds = HeartbeatTimeoutSeconds,
     };
 }
 
@@ -160,7 +210,28 @@ public enum ToolEventAck
     Ignored,
     /// <summary>Tool events are not in use as currently applied.</summary>
     Disabled,
+    /// <summary>The report contradicts the table — a heartbeat naming an End CEID as the event
+    /// that opened the current window. Nothing changes.</summary>
+    Invalid,
 }
+
+/// <summary>What the EAP's heartbeat says about the tool's window: <c>STATE</c> on the wire.</summary>
+public enum ToolContextReportState
+{
+    Outside = 0,
+    InWindow = 1,
+    Unknown = 2,
+}
+
+/// <summary>
+/// A statement of where the tool's window <i>is</i>, as opposed to an edge that moves it: the
+/// EAP's heartbeat, or the link deciding it can no longer vouch for one. The engine compares it
+/// with the window it holds and corrects only a difference.
+/// </summary>
+/// <param name="StartCeid">For <see cref="ToolContextReportState.InWindow"/>: the tool CEID that
+/// opened the window, read through the CEID table like an event.</param>
+/// <param name="Reason">Why, in words, for the log line a correction writes.</param>
+public readonly record struct ToolContextReport(ToolContextReportState State, uint StartCeid, string Reason);
 
 /// <summary>
 /// An applied <see cref="ToolEventSettings"/>, indexed for the two questions asked of it on

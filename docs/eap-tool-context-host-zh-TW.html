@@ -351,7 +351,7 @@ td code{white-space:nowrap;}
 <tr><td>Q9</td><td>可行的話，預估開發與測試時程？</td><td></td></tr>
 </tbody></table></div>
 <h2 id="10-若平台無法扮演-equipment">10. 若平台無法扮演 equipment</h2>
-<p>如果 Q1 的答案是否定的，替代做法是<strong>角色反過來</strong>：OES 另開第二個 port 當 equipment，EAP 以 host 身分連入，把 PM3 事件用 S2F41 <code>TOOL_EVENT</code> 推送給 OES。訊息格式已經定義在 <code>eap-integration-spec-zh-TW.md</code> §6.5，OES 端也已實作接收邏輯，只需要再加開第二個 port。</p>
+<p>如果 Q1 的答案是否定的，替代做法是<strong>角色反過來</strong>：OES 另開第二個 port 當 equipment，EAP 以 host 身分連入，把 PM3 事件用 S2F41 <code>TOOL_EVENT</code> 推送給 OES。訊息格式已經定義在 <code>Satellite_SECS_Specification_v2.md</code> §7，OES 端也已實作接收邏輯，只需要再加開第二個 port。</p>
 <p>兩種方案的差別：</p>
 <div class="tablewrap"><table>
 <thead><tr><th></th><th>本方案（2b）</th><th>替代方案（2a）</th></tr></thead>

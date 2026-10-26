@@ -59,6 +59,18 @@
                                AutomationProperties.Name="Tool event count"/>
                 </StackPanel>
 
+                <!-- The EAP's plain-TCP event link: the same events for a site whose SECS host is
+                     the FDC. Ungated status; orange once a silence has made the window unknown. -->
+                <StackPanel Margin="0,4,0,0"
+                            ToolTip="The OES connects to the EAP and receives the main tool's events (EVT) and a 30 s heartbeat (HB) over plain TCP. Every line is in Log\eap_yyyyMMdd.log.">
+                    <TextBlock Text="{Binding EapLinkText}" Foreground="{Binding EapLinkBrush}" FontWeight="SemiBold"
+                               AutomationProperties.Name="EAP link" TextWrapping="Wrap" MaxWidth="900"
+                               HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding EapDetailText}" Foreground="{Binding EapLinkBrush}"
+                               AutomationProperties.Name="EAP link detail" TextWrapping="Wrap" MaxWidth="900"
+                               HorizontalAlignment="Left"/>
+                </StackPanel>
+
                 <TextBlock Text="{Binding IdExample}" Margin="0,4,0,0" Foreground="#777"
                            TextWrapping="Wrap"
                            ToolTip="Every id is derived from the chamber code. Check these against the host's configuration — a mismatch here is the usual reason a host connects and then reads nothing."/>
@@ -168,6 +180,35 @@
                                   AutomationProperties.Name="Apply tool events in test mode"
                                   VerticalAlignment="Center" Margin="0,0,0,6"
                                   ToolTip="Off by default: a synthetic spectrum is not the chamber. On, the tool's window is applied to test-mode spectra, so the windows can be exercised on a machine with no spectrometer. Never applies during a replay."/>
+                    </WrapPanel>
+                </Border>
+
+                <!-- EAP TCP link. All four apply on save: a transport names no class. -->
+                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,6,0,2" Margin="0,2,0,4">
+                    <WrapPanel>
+                        <TextBlock Text="EAP link (TCP) — applies on save:" FontWeight="Bold"
+                                   VerticalAlignment="Center" Margin="0,0,12,6"/>
+                        <CheckBox Content="Connect to the EAP"
+                                  IsChecked="{Binding EapEnabled}"
+                                  AutomationProperties.Name="Connect to the EAP"
+                                  VerticalAlignment="Center" Margin="0,0,20,6"
+                                  ToolTip="The OES connects to the address the EAP listens on and receives the main tool's events there. What they do is still decided by 'Use tool events' and the CEID table."/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                            <TextBlock Text="EAP address:" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding EapHost}" Width="120" VerticalAlignment="Center"
+                                     AutomationProperties.Name="EAP address"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                            <TextBlock Text="Port:" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding EapPort}" Width="60" VerticalAlignment="Center"
+                                     AutomationProperties.Name="EAP port"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Heartbeat timeout (s):" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding EapHeartbeatTimeoutSeconds}" Width="60" VerticalAlignment="Center"
+                                     AutomationProperties.Name="EAP heartbeat timeout seconds"
+                                     ToolTip="With no line at all from the EAP for this long, the process window is set to unknown and ratios are judged as without tool events. A dropped connection alone does not do this. 35–600 s; the EAP sends a heartbeat every 30 s."/>
+                        </StackPanel>
                     </WrapPanel>
                 </Border>
 
