@@ -185,7 +185,7 @@ td code{white-space:nowrap;}
 <tbody>
 <tr><td>協定</td><td>TCP</td></tr>
 <tr><td>連線方向</td><td><strong>EAP 主動連入，OES 監聽</strong></td></tr>
-<tr><td>OES 的 IP／Port</td><td>由 OES 方提供（建議 port <code>5100</code>，不可與 OES 的 SECS port 相同）</td></tr>
+<tr><td>OES 的 IP／Port</td><td>由 OES 方提供（第 10 節 C1）。<strong>port 另開（建議 <code>5100</code>），不可與 FDC 使用的 OES SECS port 相同</strong>；IP 通常與 FDC 連的相同，OES PC 有多張網卡時為 EAP 所在網段那一張</td></tr>
 <tr><td>來源 IP 限制</td><td>OES 只接受<strong>事先登記的 EAP IP</strong>。其他 IP 連入時，OES 立即關閉連線，不回任何資料</td></tr>
 <tr><td>來源 port</td><td><strong>不限制</strong>。EAP 用作業系統分配的 port 即可，不需要固定</td></tr>
 <tr><td>同時連線數</td><td><strong>1 條</strong>。同一個登記 IP 再連進來時，<strong>新連線取代舊連線</strong>，OES 關閉舊連線</td></tr>
@@ -382,7 +382,7 @@ OES → EAP   ERR,1</code></pre>
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>項目</th><th>由誰提供</th></tr></thead>
 <tbody>
-<tr><td>C1</td><td>OES 的 IP 與 port（建議 <code>5100</code>）</td><td>OES 方</td></tr>
+<tr><td>C1</td><td>OES 給 EAP 連入的 IP 與 port。<strong>port 是新開的（建議 <code>5100</code>），不是 FDC 使用的 SECS port</strong>；IP 通常與 FDC 連的相同，但 OES PC 若有多張網卡、EAP 與 FDC 在不同網段，填 EAP 所在網段那張網卡的 IP</td><td>OES 方</td></tr>
 <tr><td>C2</td><td>EAP 的來源 IP。<strong>EAP 若有備援機（主備切換），請提供所有可能的 IP</strong>，全部登記</td><td>EAP 廠商</td></tr>
 <tr><td>C3</td><td>主機台的 PM3 事件報告裡有沒有時間戳？沒有的話，<code>TIME</code> 只能填 EAP 收到的時間</td><td>EAP 廠商</td></tr>
 <tr><td>C4</td><td>本規格的逾時與間隔（回應 10 秒、重連 10 秒、心跳 30 秒、OES 判定中斷 75 秒）平台是否都能配合</td><td>EAP 廠商</td></tr>
