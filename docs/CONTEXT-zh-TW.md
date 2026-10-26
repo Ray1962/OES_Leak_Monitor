@@ -184,7 +184,7 @@ continuum baseline（連續背景基線）或 Golden Run baseline（基準值）
 所依據的檔案。
 
 **Tool event（主機台製程事件）**：
-主機台自己的製程事件（它的 CEID，例如 PM3 ProcessStart），由廠內 EAP 以 S2F41 `TOOL_EVENT` 轉送過來。
+主機台自己的製程事件（它的 CEID，例如 PM3 ProcessStart），由廠內 EAP 轉送過來。現場 OES 的 SECS host 是 FDC，所以事件走 EAP 事件連線（純 TCP，由 OES 主動連到 EAP）；另一種送達方式是由 SECS host 送 S2F41 `TOOL_EVENT`。兩種方式進來之後的處理完全相同。
 它是資訊，不是命令：只告訴監測器現在跑的是哪個製程，其他什麼都不改。對照表沒有的 CEID 照收、忽略。
 _避免_：用「遠端命令」指稱這個概念——它是唯一的一個，而且什麼都不控制。
 
