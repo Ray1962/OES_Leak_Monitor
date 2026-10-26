@@ -22,11 +22,13 @@ internal sealed class SecsHarness : IAsyncDisposable
     private readonly string _folder = Path.Combine(
         Path.GetTempPath(), "oes-secs-" + Guid.NewGuid().ToString("N"));
     private readonly List<uint> _ceids = new();
+    private readonly List<Item> _eventBodies = new();
     private readonly List<string> _alids = new();
     private readonly List<TraceSample> _traces = new();
 
     private GemHost _host = null!;
     private SecsSettings _settings = null!;
+    private int _port;
 
     public SecsBridge Bridge { get; private set; } = null!;
 
@@ -37,6 +39,10 @@ internal sealed class SecsHarness : IAsyncDisposable
     public IReadOnlyList<uint> Ceids() { lock (_ceids) { return _ceids.ToArray(); } }
 
     public int Count { get { lock (_ceids) { return _ceids.Count; } } }
+
+    /// <summary>The whole S6F11 body of each event report, in arrival order:
+    /// <c>L{3} DATAID, CEID, L{ L{2} RPTID, L{values} }</c>.</summary>
+    public IReadOnlyList<Item> EventBodies() { lock (_ceids) { return _eventBodies.ToArray(); } }
 
     /// <summary>Alarm ids received so far, as sent — ASCII, per specification §5.3.</summary>
     public IReadOnlyList<string> Alids() { lock (_alids) { return _alids.ToArray(); } }
@@ -75,8 +81,19 @@ internal sealed class SecsHarness : IAsyncDisposable
             () => new SecsBridge.AcquisitionInfo(120f, 4u));
         h.Bridge.Configure(settings);
 
-        h._host = new GemHost(
-            new SecsGemOptions { IsActive = true, IpAddress = "127.0.0.1", Port = port },
+        h._port = port;
+        await h.ConnectHostAsync();
+        return h;
+    }
+
+    /// <summary>
+    /// A fresh <see cref="GemHost"/> on the same port, wired to the same collections, waited
+    /// until it is Communicating. Used at start-up and by <see cref="ReconnectHostAsync"/>.
+    /// </summary>
+    private async Task ConnectHostAsync()
+    {
+        _host = new GemHost(
+            new SecsGemOptions { IsActive = true, IpAddress = "127.0.0.1", Port = _port },
             new GemOptions
             {
                 ModelName = "TEST-HOST",
@@ -84,15 +101,19 @@ internal sealed class SecsHarness : IAsyncDisposable
                 EstablishRetryIntervalMs = 1000,
             });
         // S6F11 carries L{3} DATAID, CEID, reports — the CEID is U4 (only ALID is ASCII).
-        h._host.EventReportReceived += m =>
+        _host.EventReportReceived += m =>
         {
-            lock (h._ceids) { h._ceids.Add(m.SecsItem![1].FirstValue<uint>()); }
+            lock (_ceids)
+            {
+                _ceids.Add(m.SecsItem![1].FirstValue<uint>());
+                _eventBodies.Add(m.SecsItem!);
+            }
         };
-        h._host.AlarmReceived += m =>
+        _host.AlarmReceived += m =>
         {
-            lock (h._alids) { h._alids.Add(m.SecsItem![1].GetString()); }
+            lock (_alids) { _alids.Add(m.SecsItem![1].GetString()); }
         };
-        h._host.TraceDataReceived += m =>
+        _host.TraceDataReceived += m =>
         {
             var body = m.SecsItem!;
             var values = new List<Item>();
@@ -100,19 +121,49 @@ internal sealed class SecsHarness : IAsyncDisposable
             {
                 values.Add(body[3][i]);
             }
-            lock (h._traces)
+            lock (_traces)
             {
-                h._traces.Add(new TraceSample(
+                _traces.Add(new TraceSample(
                     body[0].FirstValue<uint>(), body[1].FirstValue<uint>(), body[2].GetString(), values));
             }
         };
-        h._host.Start();
-        h._host.Enable();
+        _host.Start();
+        _host.Enable();
 
         Assert.True(await SecsTestPort.WaitAsync(
-            () => h._host.CommunicationState == CommunicationState.Communicating, 20),
+            () => _host.CommunicationState == CommunicationState.Communicating, 20),
             "the host and the equipment never reached Communicating");
-        return h;
+    }
+
+    /// <summary>
+    /// Drops the TCP link from the host side and connects a new host — a host that crashed or
+    /// was restarted. The equipment instance is untouched, unlike <see cref="RestartAsync"/>.
+    /// </summary>
+    public async Task ReconnectHostAsync()
+    {
+        await _host.DisposeAsync();
+        Assert.True(await SecsTestPort.WaitAsync(
+            () => Bridge.State != SecsRunState.Communicating, 20),
+            "the equipment never noticed the host had gone");
+        await ConnectHostAsync();
+        Assert.True(await SecsTestPort.WaitAsync(
+            () => Bridge.State == SecsRunState.Communicating, 20),
+            "the equipment never got back to Communicating with the new host");
+    }
+
+    /// <summary>
+    /// Sends a primary message as the host and returns the reply — for the cases
+    /// <see cref="GemHost"/> only logs (S1F4) or reduces to a bool (S2F24, S2F34…), where the
+    /// test needs the actual item. <c>GemHost</c> keeps its transport private; the
+    /// <see cref="SecsGemHost"/> inside it is public and sends exactly what it is given.
+    /// </summary>
+    public Task<SecsMessage> SendRawAsync(SecsMessage message)
+    {
+        var field = typeof(GemHost).GetField("_host",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GemHost no longer has a _host field");
+        var transport = (SecsGemHost)field.GetValue(_host)!;
+        return transport.SendAsync(message);
     }
 
     /// <summary>What Restart interface does — re-reads the profile — then waits for the host to
