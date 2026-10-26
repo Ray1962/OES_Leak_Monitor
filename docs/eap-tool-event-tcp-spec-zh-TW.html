@@ -132,7 +132,7 @@ td code{white-space:nowrap;}
 </nav>
 <main>
 <h1 id="oes-leak-monitor--eap-製程事件通訊規格tcp-文字行">OES Leak Monitor × EAP 製程事件通訊規格（TCP 文字行）</h1>
-<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 EAP 把主機台 <strong>PM3</strong> 的製程事件轉送給 OES Leak Monitor 的通訊方式：連線、訊息格式、回應碼、心跳、斷線處理與驗收方式。 <strong>狀態：</strong> 草案（2026-10-26）。<strong>OES 端尚未實作</strong>，請廠商先確認本規格，有疑問或無法照做的地方請在第 10 節回覆。 <strong>一句話：</strong> EAP 主動以 TCP 連到 OES 指定的 port，一行送一筆訊息：PM3 事件發生時送 <code>EVT</code>，另外每 30 秒送一筆 <code>HB</code> 心跳回報 PM3 目前狀態；OES 每收一行回一行。</p></blockquote>
+<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 EAP 把主機台 <strong>PM3</strong> 的製程事件轉送給 OES Leak Monitor 的通訊方式：連線、訊息格式、回應碼、心跳、斷線處理與驗收方式。 <strong>狀態：</strong> 草案（2026-10-26 修訂）。<strong>OES 端尚未實作</strong>，請廠商先確認本規格，有疑問或無法照做的地方請在第 10 節回覆。 <strong>一句話：</strong> OES 主動以 TCP 連到 EAP 的 <code>10.2.3.120:20347</code>，EAP 一行送一筆訊息：PM3 事件發生時送 <code>EVT</code>，另外每 30 秒送一筆 <code>HB</code> 心跳回報 PM3 目前狀態；OES 每收一行回一行。</p></blockquote>
 <h2 id="目錄">目錄</h2>
 <ul>
 <li><a href="#1-背景">1. 背景</a>
@@ -160,19 +160,19 @@ td code{white-space:nowrap;}
 </ul>
 <h2 id="1-背景">1. 背景</h2>
 <p>OES Leak Monitor 裝在主機台 PM3 上，用電漿光譜偵測腔體漏氣。PM3 會交替執行不同製程（Chamber Process／precoat、Chamber Clean 等），每種製程的光譜完全不同。OES 必須知道<strong>當下這一幀光譜屬於哪個製程</strong>，才能用正確的基準判定。</p>
-<p>主機台的製程事件已經送到 EAP，所以由 EAP 轉送給 OES。OES 原有的 SECS 連線是給 FDC 使用的，因此另外開一條專用的 TCP 連線，只用來接收 EAP 轉送的事件。</p>
+<p>主機台的製程事件已經送到 EAP，所以由 EAP 轉送給 OES。OES 原有的 SECS 連線是給 FDC 使用的，因此另外開一條專用的 TCP 連線：<strong>由 OES 連到 EAP</strong>，只用來接收 EAP 轉送的事件。</p>
 <p>這條連線<strong>只傳遞資訊，不做任何控制</strong>：OES 不會透過它對 EAP 或主機台下任何命令。</p>
 <h2 id="2-系統配置">2. 系統配置</h2>
-<pre><code>┌──────────────┐  SECS（既有）  ┌──────────────┐
-│   Tool PC    │──────────────▶│     EAP      │
-│  (PM2／PM3)  │   EAP = host  │              │
-└──────────────┘               └──────┬───────┘
-                                      │ TCP 文字行（本規格）
-                                      │ EAP 主動連入
-┌──────────────┐  SECS（既有）  ┌──────▼───────┐
-│     FDC      │──────────────▶│    OES PC    │
-│              │   FDC = host  │  （只看 PM3） │
-└──────────────┘               └──────────────┘</code></pre>
+<pre><code>┌──────────────┐  SECS（既有）  ┌──────────────────────┐
+│   Tool PC    │──────────────▶│         EAP          │
+│  (PM2／PM3)  │   EAP = host  │ 監聽 10.2.3.120:20347 │
+└──────────────┘               └──────────▲───────────┘
+                                          │ TCP 文字行（本規格）
+                                          │ OES 主動連入
+┌──────────────┐  SECS（既有）  ┌──────────┴───────────┐
+│     FDC      │──────────────▶│        OES PC        │
+│              │   FDC = host  │     （只看 PM3）      │
+└──────────────┘               └──────────────────────┘</code></pre>
 <ul>
 <li>FDC 與 OES 之間的 SECS 連線不受本規格影響。
 </li>
@@ -184,15 +184,14 @@ td code{white-space:nowrap;}
 <thead><tr><th>項目</th><th>規定</th></tr></thead>
 <tbody>
 <tr><td>協定</td><td>TCP</td></tr>
-<tr><td>連線方向</td><td><strong>EAP 主動連入，OES 監聽</strong></td></tr>
-<tr><td>OES 的 IP／Port</td><td>由 OES 方提供（第 10 節 C1）。<strong>port 另開（建議 <code>5100</code>），不可與 FDC 使用的 OES SECS port 相同</strong>；IP 通常與 FDC 連的相同，OES PC 有多張網卡時為 EAP 所在網段那一張</td></tr>
-<tr><td>來源 IP 限制</td><td>OES 只接受<strong>事先登記的 EAP IP</strong>。其他 IP 連入時，OES 立即關閉連線，不回任何資料</td></tr>
-<tr><td>來源 port</td><td><strong>不限制</strong>。EAP 用作業系統分配的 port 即可，不需要固定</td></tr>
-<tr><td>同時連線數</td><td><strong>1 條</strong>。同一個登記 IP 再連進來時，<strong>新連線取代舊連線</strong>，OES 關閉舊連線</td></tr>
-<tr><td>斷線重連</td><td>EAP 每 <strong>10 秒</strong>重試一次，直到連上為止</td></tr>
-<tr><td>防火牆</td><td>OES PC 的 Windows 防火牆只對登記的 EAP IP 開放這個 port（OES 方設定）</td></tr>
+<tr><td>連線方向</td><td><strong>OES 主動連入，EAP 監聽</strong></td></tr>
+<tr><td>EAP 的監聽位址</td><td><strong><code>10.2.3.120:20347</code></strong>（EAP 方提供）</td></tr>
+<tr><td>OES 的來源位址</td><td>OES PC 的 IP（第 10 節 C1 由 OES 方提供）；來源 port 由作業系統分配，<strong>每次連線可能不同</strong></td></tr>
+<tr><td>同時連線數</td><td><strong>1 條</strong>。EAP 若在舊連線還在時又收到同一台 OES 的新連線（例如 OES 重啟、網路瞬斷後舊連線尚未釋放），請<strong>以新連線取代舊連線</strong></td></tr>
+<tr><td>斷線重連</td><td><strong>OES 每 10 秒</strong>重試一次，直到連上為止</td></tr>
+<tr><td>防火牆</td><td>EAP 端允許 OES PC 的 IP 連入 20347（建議只允許這個 IP）。OES PC 只需要允許連出，通常不需另外設定</td></tr>
 </tbody></table></div>
-<p><strong>為什麼新連線取代舊連線：</strong> EAP 重啟或網路中斷時，OES 這端可能還留著一條看起來仍然連著、但實際已經斷掉的舊連線。如果 OES 拒絕新連線，EAP 會一直連不上。</p>
+<p><strong>為什麼新連線取代舊連線：</strong> OES 重啟或網路中斷時，EAP 這端可能還留著一條看起來仍然連著、但實際已經斷掉的舊連線。如果 EAP 拒絕新連線，OES 會一直連不上。</p>
 <h2 id="4-訊息格式">4. 訊息格式</h2>
 <h3 id="41-通則">4.1 通則</h3>
 <div class="tablewrap"><table>
@@ -208,7 +207,7 @@ td code{white-space:nowrap;}
 <h3 id="42-eap--oes">4.2 EAP → OES</h3>
 <p><strong>事件 <code>EVT</code>：PM3 的事件發生時送出</strong></p>
 <pre><code>EVT,&lt;CEID&gt;,&lt;TIME&gt;,&lt;SEQ&gt;</code></pre>
-<p><strong>心跳 <code>HB</code>：每 30 秒送出，以及每次連線建立後立即送一筆</strong></p>
+<p><strong>心跳 <code>HB</code>：每 30 秒送出，以及每次接受 OES 連線後立即送一筆</strong></p>
 <pre><code>HB,&lt;STATE&gt;,&lt;WINCEID&gt;,&lt;WINTIME&gt;,&lt;TOOLLINK&gt;,&lt;SEQ&gt;</code></pre>
 <h3 id="43-oes--eap">4.3 OES → EAP</h3>
 <p><strong>回應 <code>EVT</code>：</strong></p>
@@ -218,7 +217,7 @@ td code{white-space:nowrap;}
 <pre><code>HBACK,&lt;CODE&gt;</code></pre>
 <p><strong>格式錯誤、無法讀出序號時：</strong></p>
 <pre><code>ERR,&lt;CODE&gt;</code></pre>
-<p>OES 對每一行非空白的訊息都會<strong>剛好回一行</strong>，而且依收到的順序回覆。</p>
+<p>OES 對每一行非空白的訊息都會<strong>剛好回一行</strong>，而且依收到的順序回覆。OES 不會主動送出其他訊息。</p>
 <h2 id="5-欄位定義">5. 欄位定義</h2>
 <div class="tablewrap"><table>
 <thead><tr><th>欄位</th><th>用在</th><th>格式</th><th>內容</th></tr></thead>
@@ -270,15 +269,15 @@ td code{white-space:nowrap;}
 <tr><td><code>0</code></td><td>收下。包括 CEID 不在 OES 對照表內（OES 記錄後不處理）與重複的事件（見 7.4）</td><td><code>ACK</code>、<code>HBACK</code></td><td>正常，繼續</td></tr>
 <tr><td><code>1</code></td><td>不認得的訊息類型</td><td><code>ERR</code></td><td>檢查程式，不要重送</td></tr>
 <tr><td><code>2</code></td><td>OES 目前未啟用製程事件功能</td><td><code>ACK</code>、<code>HBACK</code></td><td>照常持續傳送，無害；請通知 OES 設備工程師</td></tr>
-<tr><td><code>3</code></td><td>格式錯誤：欄位數量不對、欄位內容無法解讀、超過長度上限</td><td><code>ACK</code>、<code>HBACK</code>、<code>ERR</code></td><td>修正格式。<strong>不要重送同一行</strong>，該筆事件 OES 不會採用</td></tr>
+<tr><td><code>3</code></td><td>格式錯誤：欄位數量不對、欄位內容無法解讀、超過長度上限；或 <code>HB</code> 的 <code>WINCEID</code> 是一筆 End 事件</td><td><code>ACK</code>、<code>HBACK</code>、<code>ERR</code></td><td>修正格式或內容。<strong>不要重送同一行</strong>，OES 不會採用該行</td></tr>
 </tbody></table></div>
 <p>OES 回 <code>ERR</code> 或代碼 <code>3</code> 時<strong>不會</strong>關閉連線。</p>
 <h2 id="7-運作流程">7. 運作流程</h2>
 <h3 id="71-連線建立後">7.1 連線建立後</h3>
 <ol>
-<li>EAP 連入 OES。
+<li>OES 連入 EAP 的 <code>10.2.3.120:20347</code>。
 </li>
-<li>EAP <strong>立即送一筆 <code>HB</code></strong>，回報 PM3 目前狀態。OES 用它補上連線中斷期間錯過的狀態。
+<li>EAP 接受連線後，<strong>立即送一筆 <code>HB</code></strong>，回報 PM3 目前狀態。OES 用它補上連線中斷期間錯過的狀態。
 </li>
 <li>有尚未收到 <code>ACK</code> 的 <code>EVT</code> 時，接著重送（見 7.4）。
 </li>
@@ -293,17 +292,19 @@ td code{white-space:nowrap;}
 </li>
 <li><strong>一次只能有一筆在等回應：</strong> 送出一行後，等收到 OES 的回應，再送下一行。PM3 事件間隔以分鐘計，不會因此塞車。
 </li>
+<li>沒有 OES 連線時，EAP 不需要保存心跳；尚未送出的 <code>EVT</code> 請依 7.4 保留到 OES 連上後重送（只需保留最後一筆未確認的）。
+</li>
 </ul>
 <h3 id="73-逾時">7.3 逾時</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>情況</th><th>處理</th></tr></thead>
 <tbody>
-<tr><td>EAP 送出一行後 <strong>10 秒</strong>內沒有收到回應</td><td>EAP 關閉連線，依第 3 節重連，並重送那一筆</td></tr>
-<tr><td>OES <strong>75 秒</strong>內沒有收到任何一行（約等於連續漏掉 2 筆 <code>HB</code>）</td><td>OES 關閉連線，把製程視窗改為「不明」，等 EAP 重連</td></tr>
+<tr><td>EAP 送出一行後 <strong>10 秒</strong>內沒有收到回應</td><td>EAP 關閉這條連線，等 OES 重新連入後重送那一筆</td></tr>
+<tr><td>OES <strong>75 秒</strong>內沒有收到任何一行（約等於連續漏掉 2 筆 <code>HB</code>）</td><td>OES 關閉連線、把製程視窗改為「不明」，並依第 3 節重連</td></tr>
 </tbody></table></div>
 <h3 id="74-重送與重複">7.4 重送與重複</h3>
 <ul>
-<li>EAP 送出 <code>EVT</code> 後，沒收到 <code>ACK</code> 就斷線時，<strong>重連後以相同的 <code>SEQ</code> 重送</strong>。
+<li>EAP 送出 <code>EVT</code> 後，沒收到 <code>ACK</code> 就斷線時，<strong>OES 重連後以相同的 <code>SEQ</code> 重送</strong>。
 </li>
 <li>OES 依序號判斷：
 </li>
@@ -317,8 +318,9 @@ td code{white-space:nowrap;}
 <tr><td>較小</td><td>EAP 已重啟、序號重新開始</td><td>處理，並記錄</td></tr>
 </tbody></table></div>
 <h3 id="75-對話範例">7.5 對話範例</h3>
-<p>PM3 閒置時連線，接著跑一次 Chamber Process：</p>
-<pre><code>EAP → OES   HB,0,,,1,127
+<p>OES 在 PM3 閒置時連上，接著跑一次 Chamber Process：</p>
+<pre><code>（OES 連入 10.2.3.120:20347）
+EAP → OES   HB,0,,,1,127
 OES → EAP   HBACK,0
                                              （14:01:40 PM3 ProcessStart）
 EAP → OES   EVT,3100439529,2026102614014000,128
@@ -349,11 +351,12 @@ OES → EAP   ERR,1</code></pre>
 <tr><td>E1</td><td><strong>主機台事件發生後 1 秒內送出 <code>EVT</code></strong></td><td>OES 每一幀光譜（約每 0.6～2 秒一幀）都要依視窗判定製程，短的製程步驟只有約 60 秒</td></tr>
 <tr><td>E2</td><td><strong>事件依發生順序送出</strong></td><td>Start 和 End 順序錯了，視窗就是錯的</td></tr>
 <tr><td>E3</td><td><strong><code>HB</code> 的內容要反映已送出的 <code>EVT</code></strong>：送出 Start 的 <code>EVT</code> 之後，下一筆 <code>HB</code> 的 <code>STATE</code> 必須是 1</td><td>OES 以 <code>HB</code> 修正自己的狀態，兩者矛盾時 OES 會被來回修改</td></tr>
-<tr><td>E4</td><td><strong>EAP 不知道 PM3 狀態時，<code>STATE</code> 填 2</strong>：EAP 剛啟動、尚未收到任何 PM3 製程事件，或與主機台斷線時</td><td>不知道時填 0，OES 會以為 PM3 閒置，這是錯的</td></tr>
+<tr><td>E4</td><td><strong>EAP 不知道 PM3 狀態時，<code>STATE</code> 填 2</strong>：EAP 剛啟動、尚未收到任何 PM3 製程事件，或與主機台斷線、恢復後尚未收到新事件時</td><td>不知道時填 0，OES 會以為 PM3 閒置，這是錯的</td></tr>
 <tr><td>E5</td><td>與主機台斷線時，<strong>下一筆 <code>HB</code> 立即送出</strong>（不必等 30 秒），<code>TOOLLINK = 0</code>、<code>STATE = 2</code></td><td>讓 OES 盡快改用不依賴製程事件的判定方式</td></tr>
 <tr><td>E6</td><td>重送時使用相同的 <code>SEQ</code></td><td>見 7.4</td></tr>
 <tr><td>E7</td><td><code>TIME</code>、<code>WINTIME</code> 以主機台的事件時間為準</td><td>EAP 轉送有延遲時，OES 的紀錄仍能對到主機台實際發生的時刻</td></tr>
 <tr><td>E8</td><td>EAP 與 OES PC 都要接 NTP 對時</td><td>雙方的時間戳要能直接比對</td></tr>
+<tr><td>E9</td><td><strong>接受 OES 連線後立即送一筆 <code>HB</code></strong></td><td>OES 重啟或重連後，靠這一筆立即恢復正確的製程視窗</td></tr>
 </tbody></table></div>
 <h3 id="82-可以這樣做">8.2 可以這樣做</h3>
 <ul>
@@ -369,43 +372,60 @@ OES → EAP   ERR,1</code></pre>
 <ul>
 <li><strong>CEID 怎麼變成製程：</strong> OES 用自己的對照表把主機台 CEID 換算成製程類別（例如 3100439529 → 製程 A），Start 到 End 之間的光譜都依該製程的基準判定。對照表只存在 OES，EAP 只要轉送原始 CEID。
 </li>
-<li><strong>心跳和 OES 的狀態不一致時，以心跳為準：</strong> <code>STATE = 1</code> 而 OES 沒有開著該視窗時，OES 以 <code>WINCEID</code>／<code>WINTIME</code> 補開；<code>STATE = 0</code> 而 OES 還開著視窗時，OES 補關。每次補正都記錄一筆警告。
+<li><strong>心跳和 OES 的狀態不一致時，以心跳為準</strong>，每次修正都記錄一筆警告（這就是「EAP 漏送事件」的紀錄）。<code>STATE = 1</code> 時，OES 依 <code>WINCEID</code> 在對照表裡的意義決定視窗：
 </li>
-<li><strong>資料不可信時，OES 不會停止偵測：</strong> 連線中斷、心跳逾時、<code>STATE = 2</code> 或 <code>TOOLLINK = 0</code> 時，OES 把製程視窗改為「不明」，改用光譜本身判斷，等狀態恢復再切回來。
+</ul>
+<div class="tablewrap"><table>
+<thead><tr><th><code>WINCEID</code> 在 OES 對照表裡是</th><th>OES 的視窗</th></tr></thead>
+<tbody>
+<tr><td>有製程類別的 Start（例如 3100439529 → 製程 A）</td><td>該製程的視窗</td></tr>
+<tr><td>只記錄、不分類的 Start（例如 Auto Leak check）</td><td>不在任何視窗內</td></tr>
+<tr><td>對照表沒有這個 CEID</td><td>不在任何視窗內</td></tr>
+<tr><td>End 事件</td><td>內容矛盾：回 <code>HBACK,3</code>，視窗不變</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>資料不可信時，OES 不會停止偵測：</strong> 以下情況 OES 把製程視窗改為「不明」，改用光譜本身判斷，等狀態恢復再切回來：
+<ul>
+<li><code>HB</code> 回報 <code>STATE = 2</code> 或 <code>TOOLLINK = 0</code>；</li>
+<li><strong>75 秒內沒有收到任何一行</strong>。</li>
+</ul>
+</li>
+<li><strong>連線斷掉本身不改變視窗。</strong> OES 每 10 秒重連，連上後 EAP 立即送 <code>HB</code>（E9）；只要 75 秒內恢復，視窗就一直維持正確。
 </li>
 <li><strong>OES 不會因為這條連線斷掉而發出漏氣警報。</strong> 連線狀態顯示在 OES 的畫面上，並寫入 OES 的系統日誌。
 </li>
-<li><strong>紀錄：</strong> 這條連線收發的每一行，OES 都會記錄在通訊日誌中，包含時間與對方 IP。被拒絕的 IP 也會記錄。
+<li><strong>紀錄：</strong> 這條連線收發的每一行，OES 都會記錄在通訊日誌中，包含時間與方向；連線、斷線、重連失敗也會記錄。
 </li>
 </ul>
 <h2 id="10-待確認事項">10. 待確認事項</h2>
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>項目</th><th>由誰提供</th></tr></thead>
 <tbody>
-<tr><td>C1</td><td>OES 給 EAP 連入的 IP 與 port。<strong>port 是新開的（建議 <code>5100</code>），不是 FDC 使用的 SECS port</strong>；IP 通常與 FDC 連的相同，但 OES PC 若有多張網卡、EAP 與 FDC 在不同網段，填 EAP 所在網段那張網卡的 IP</td><td>OES 方</td></tr>
-<tr><td>C2</td><td>EAP 的來源 IP。<strong>EAP 若有備援機（主備切換），請提供所有可能的 IP</strong>，全部登記</td><td>EAP 廠商</td></tr>
+<tr><td>C1</td><td><strong>OES PC 的 IP</strong>，供 EAP 端的防火牆只允許這個 IP 連入 20347</td><td>OES 方</td></tr>
+<tr><td>C2</td><td>EAP 若有主備切換：<strong><code>10.2.3.120</code> 是否為會跟著切換的虛擬 IP？</strong> 不是的話，請提供備援機的位址</td><td>EAP 廠商</td></tr>
 <tr><td>C3</td><td>主機台的 PM3 事件報告裡有沒有時間戳？沒有的話，<code>TIME</code> 只能填 EAP 收到的時間</td><td>EAP 廠商</td></tr>
-<tr><td>C4</td><td>本規格的逾時與間隔（回應 10 秒、重連 10 秒、心跳 30 秒、OES 判定中斷 75 秒）平台是否都能配合</td><td>EAP 廠商</td></tr>
+<tr><td>C4</td><td>本規格的逾時與間隔（回應 10 秒、OES 重連 10 秒、心跳 30 秒、OES 判定中斷 75 秒）平台是否都能配合</td><td>EAP 廠商</td></tr>
 <tr><td>C5</td><td>預估開發與測試時程</td><td>EAP 廠商</td></tr>
 </tbody></table></div>
+<p>已確認：EAP 的監聽位址為 <code>10.2.3.120:20347</code>（EAP 方提供，2026-10-26）。</p>
 <h2 id="11-驗收方式">11. 驗收方式</h2>
-<p>OES 方會提供一個簡單的測試程式，可以在 EAP 上線前模擬 OES 端，供 EAP 自行測試。正式驗收依下表進行：</p>
+<p>OES 方會提供一支測試程式 <code>eap-link-sim.ps1</code>（Windows PowerShell，不需安裝）。以 <code>-Mode Oes</code> 執行時，它<strong>假扮 OES</strong> 連到 EAP，對每一行回正確的 <code>ACK</code>／<code>HBACK</code> 並印出收到的內容，供 EAP 在正式連線前自行測試。正式驗收依下表進行：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>操作</th><th>預期結果</th></tr></thead>
 <tbody>
-<tr><td>1</td><td>EAP 從登記的 IP 連入</td><td>連線成功；EAP 立即送 <code>HB</code>，收到 <code>HBACK,0</code>；OES 畫面顯示「已連線」</td></tr>
-<tr><td>2</td><td>從<strong>未登記</strong>的 IP 連入 OES 的 port</td><td>OES 立即關閉連線、不回資料；OES 日誌記錄該 IP</td></tr>
+<tr><td>1</td><td>OES 啟用連線</td><td>OES 連上 <code>10.2.3.120:20347</code>；EAP 立即送 <code>HB</code>，收到 <code>HBACK,0</code>；OES 畫面顯示「已連線」</td></tr>
+<tr><td>2</td><td>EAP 停止監聽 30 秒後恢復</td><td>OES 每 10 秒重試；EAP 恢復後 OES 自動連上，EAP 立即送 <code>HB</code></td></tr>
 <tr><td>3</td><td>PM3 閒置時觀察 <code>HB</code></td><td>每 30 秒一筆，<code>STATE = 0</code>、<code>TOOLLINK = 1</code></td></tr>
 <tr><td>4</td><td>主機台跑一次 PM3 Chamber Process</td><td>Start／End 各一筆 <code>EVT</code>，發生後 1 秒內送出，各收到 <code>ACK,&lt;SEQ&gt;,0</code>；期間 <code>HB</code> 的 <code>STATE = 1</code>、<code>WINCEID = 3100439529</code>；OES 畫面顯示製程 A 視窗</td></tr>
 <tr><td>5</td><td>主機台跑一次 PM3 Chamber Clean</td><td>同上，<code>WINCEID = 3099591660</code>，OES 顯示製程 B 視窗</td></tr>
 <tr><td>6</td><td>轉送一筆不在 OES 對照表內的 CEID（例如 slit door）</td><td><code>ACK,&lt;SEQ&gt;,0</code>；OES 視窗不變</td></tr>
 <tr><td>7</td><td>送一筆格式錯誤的 <code>EVT</code></td><td><code>ACK,&lt;SEQ&gt;,3</code>；連線不斷</td></tr>
-<tr><td>8</td><td>PM3 製程進行中，重啟 OES</td><td>EAP 自動重連並立即送 <code>HB</code>；OES 不必等下一筆事件，就恢復到正確的製程視窗</td></tr>
-<tr><td>9</td><td>PM3 製程進行中，拔掉 OES 的網路線 90 秒後接回</td><td>OES 在 75 秒時改為「不明」；接回後 EAP 重連、送 <code>HB</code>，OES 恢復正確視窗</td></tr>
-<tr><td>10</td><td>在 EAP 送出 <code>EVT</code> 後、收到 <code>ACK</code> 前中斷連線（可用測試程式模擬）</td><td>重連後 EAP 以相同 <code>SEQ</code> 重送；OES 只處理一次</td></tr>
+<tr><td>8</td><td>PM3 製程進行中，重啟 OES</td><td>OES 重新連上，EAP 立即送 <code>HB</code>；OES 不必等下一筆事件，就恢復到正確的製程視窗</td></tr>
+<tr><td>9</td><td>PM3 製程進行中，拔掉 OES 的網路線 90 秒後接回</td><td>OES 在 75 秒時改為「不明」；接回後 OES 重連、EAP 送 <code>HB</code>，OES 恢復正確視窗</td></tr>
+<tr><td>10</td><td>在 EAP 送出 <code>EVT</code> 後、收到 <code>ACK</code> 前中斷連線（可用測試程式模擬）</td><td>OES 重連後 EAP 以相同 <code>SEQ</code> 重送；OES 只處理一次</td></tr>
 <tr><td>11</td><td>中斷 EAP 與主機台的連線</td><td>EAP 立即送 <code>HB,2,,,0,&lt;SEQ&gt;</code>；OES 改為「不明」</td></tr>
 <tr><td>12</td><td>恢復 EAP 與主機台的連線</td><td><code>TOOLLINK = 1</code>；<code>STATE</code> 在下一筆 PM3 製程事件後恢復正確值</td></tr>
-<tr><td>13</td><td>重啟 EAP</td><td>EAP 重連，第一筆 <code>HB</code> 為 <code>STATE = 2</code>、<code>SEQ = 0</code>；第一筆 <code>EVT</code> 的 <code>SEQ = 1</code>，OES 正常接受</td></tr>
+<tr><td>13</td><td>重啟 EAP</td><td>OES 在 10 秒內重新連上；第一筆 <code>HB</code> 為 <code>STATE = 2</code>、<code>SEQ = 0</code>；第一筆 <code>EVT</code> 的 <code>SEQ = 1</code>，OES 正常接受</td></tr>
 </tbody></table></div>
 </main>
 </div>
