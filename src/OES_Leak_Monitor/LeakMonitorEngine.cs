@@ -310,7 +310,10 @@ public sealed class LeakMonitorEngine : IDisposable
     // Events arrive on the SECS receive thread and are applied by the frame thread at the start
     // of the next frame, so the window — like every other piece of per-frame state here — only
     // ever changes under _gate, between frames, and every ratio on one frame sees one answer.
-    private readonly ConcurrentQueue<(ToolEventMapping Mapping, DateTime Time)> _toolQueue = new();
+    // Edges and context reports share one queue: a heartbeat states the window as of the events
+    // sent before it, so applying the two kinds out of order would let a stale report undo a newer
+    // edge (or the reverse).
+    private readonly ConcurrentQueue<ToolQueued> _toolQueue = new();
     private const int MaxQueuedToolEvents = 1000;   // acquisition stopped for a long time: keep the newest
     private ToolEventContext _toolContext = ToolEventContext.Disabled;
     private string? _toolWindowClass;
@@ -809,10 +812,113 @@ public sealed class LeakMonitorEngine : IDisposable
         PublishToolStatus();
         if (!table.TryGet(ceid, out var mapping)) return ToolEventAck.Ignored;
 
-        _toolQueue.Enqueue((mapping, time));
-        while (_toolQueue.Count > MaxQueuedToolEvents && _toolQueue.TryDequeue(out _)) { }
+        EnqueueTool(new ToolQueued(mapping, time, null));
         return ToolEventAck.Accepted;
     }
+
+    /// <summary>
+    /// Where the tool's window is, as the EAP's heartbeat states it or as the TCP link concludes
+    /// when it can no longer vouch for one. Any thread; like an event it only resolves and
+    /// queues, and the next frame compares it with the window held and corrects a difference —
+    /// logged, since a correction means an edge was lost somewhere. A report that agrees changes
+    /// nothing and writes nothing: one arrives every 30 s.
+    /// <para>An in-window report is read through the CEID table: a Start with a class opens that
+    /// window; a record-only or unmapped Start means the tool is running something no ratio is
+    /// scoped to, i.e. outside any window — which also closes a window whose End was lost when
+    /// the tool moved on to such a process. An End named as the opening event is a contradiction
+    /// and is refused.</para>
+    /// </summary>
+    public ToolEventAck ReportToolContext(ToolContextReport report)
+    {
+        var table = _toolTable;
+        if (table is null || _disposed) return ToolEventAck.Disabled;
+
+        ToolContextTarget target;
+        switch (report.State)
+        {
+            case ToolContextReportState.Unknown:
+                target = new ToolContextTarget(ToolEventContext.Unknown, null, report.Reason);
+                break;
+            case ToolContextReportState.InWindow:
+                if (table.TryGet(report.StartCeid, out var m))
+                {
+                    if (m.Edge == ToolEventEdge.End) return ToolEventAck.Invalid;
+                    string cls = m.ClassName?.Trim() ?? "";
+                    target = cls.Length > 0
+                        ? new ToolContextTarget(ToolEventContext.InWindow, cls, report.Reason)
+                        : new ToolContextTarget(ToolEventContext.OutsideWindow, null, report.Reason);
+                }
+                else
+                {
+                    target = new ToolContextTarget(ToolEventContext.OutsideWindow, null, report.Reason);
+                }
+                break;
+            default:
+                target = new ToolContextTarget(ToolEventContext.OutsideWindow, null, report.Reason);
+                break;
+        }
+        EnqueueTool(new ToolQueued(null, default, target));
+        return ToolEventAck.Accepted;
+    }
+
+    private void EnqueueTool(ToolQueued item)
+    {
+        _toolQueue.Enqueue(item);
+        while (_toolQueue.Count > MaxQueuedToolEvents && _toolQueue.TryDequeue(out _)) { }
+    }
+
+    /// <summary>One queued item: an edge (<paramref name="Mapping"/>) or a context report
+    /// (<paramref name="Context"/>).</summary>
+    private readonly record struct ToolQueued(ToolEventMapping? Mapping, DateTime Time, ToolContextTarget? Context);
+
+    /// <summary>A context report resolved through the table: the window it asks for.</summary>
+    private sealed record ToolContextTarget(ToolEventContext Context, string? Class, string Reason);
+
+    /// <summary>
+    /// Brings the held window into line with a context report. Caller holds <c>_gate</c>.
+    /// Returns whether anything changed.
+    /// </summary>
+    private bool ApplyToolContext(ToolContextTarget target, DateTime frameTime)
+    {
+        bool same = target.Context == _toolContext &&
+                    (target.Context != ToolEventContext.InWindow ||
+                     string.Equals(_toolWindowClass, target.Class, StringComparison.OrdinalIgnoreCase));
+        if (same) return false;
+
+        var previous = _toolContext;
+        string before = DescribeWindow(previous, _toolWindowClass);
+        _toolContext = target.Context;
+        _toolWindowClass = target.Context == ToolEventContext.InWindow ? target.Class : null;
+        _toolWindowOpenedAt = target.Context == ToolEventContext.InWindow ? frameTime : null;
+        string after = DescribeWindow(_toolContext, _toolWindowClass);
+        string related = $"From={before},To={after}";
+
+        if (target.Context == ToolEventContext.Unknown)
+            _log?.LogSystemEvent(LogSeverity.Warning, "ToolEventContextUnknown",
+                $"Process window no longer known ({target.Reason}); it was {before} — ratios are " +
+                $"judged as without tool events until it is known again{NotAppliedNote()}",
+                related: related);
+        else if (previous == ToolEventContext.Unknown)
+            // Becoming known is the normal course after a start-up or a reconnect, not evidence
+            // that anything was lost.
+            _log?.LogSystemEvent(LogSeverity.Information, "ToolEventContextRestored",
+                $"Process window known again: {after} ({target.Reason}){NotAppliedNote()}",
+                related: related);
+        else
+            _log?.LogSystemEvent(LogSeverity.Warning, "ToolEventResync",
+                $"Process window corrected from {before} to {after} ({target.Reason}) — an event " +
+                $"the EAP should have forwarded did not arrive{NotAppliedNote()}",
+                related: related);
+        return true;
+    }
+
+    private static string DescribeWindow(ToolEventContext context, string? cls) => context switch
+    {
+        ToolEventContext.InWindow => $"window {cls}",
+        ToolEventContext.OutsideWindow => "outside any window",
+        ToolEventContext.Disabled => "not in use",
+        _ => "unknown",
+    };
 
     /// <summary>
     /// Applies the events queued since the last frame, then retires a window that has outlived
@@ -838,8 +944,14 @@ public sealed class LeakMonitorEngine : IDisposable
         bool changed = false;
         while (_toolQueue.TryDequeue(out var queued))
         {
+            if (queued.Context is { } report)
+            {
+                if (ApplyToolContext(report, frameTime)) changed = true;
+                continue;
+            }
             changed = true;
-            var (m, eventTime) = queued;
+            var m = queued.Mapping!;
+            var eventTime = queued.Time;
             string cls = m.ClassName?.Trim() ?? "";
             string name = m.Name.Length > 0 ? m.Name : m.Ceid.ToString(System.Globalization.CultureInfo.InvariantCulture);
             string at = eventTime.ToString("HH:mm:ss.ff", System.Globalization.CultureInfo.InvariantCulture);

@@ -112,6 +112,24 @@ public class AppSettingsDefaultsTests
     }
 
     /// <summary>
+    /// A settings.json written before the EAP's TCP link existed loads with the link off — an
+    /// upgrade opens no connection until someone asks for one — and with the address the EAP
+    /// gave already filled in for when they do.
+    /// </summary>
+    [Fact]
+    public void SettingsWithoutTheEapLink_LoadWithItOff()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>(
+            """{"secs":{"toolEvents":{"enabled":true}}}""", OnDisk)!;
+
+        var tcp = settings.Secs.ToolEvents.Tcp;
+        Assert.False(tcp.Enabled);
+        Assert.Equal("10.2.3.120", tcp.RemoteHost);
+        Assert.Equal(20347, tcp.RemotePort);
+        Assert.Equal(75, tcp.HeartbeatTimeoutSeconds);
+    }
+
+    /// <summary>
     /// The table round-trips through the real <c>SettingsService</c> with its edges as words, the
     /// way a site writes them by hand.
     /// </summary>
