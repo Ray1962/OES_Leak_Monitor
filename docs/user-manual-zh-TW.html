@@ -1228,7 +1228,8 @@ check-oes-connect.cmd</code></pre>
 <tr><td><code>EAP link: not in use</code></td><td>沒有啟用</td></tr>
 <tr><td><code>EAP link: not started — the EAP ids are not all set (…)</code>（橘）</td><td>已勾選連線，但必填的 EAP 識別碼還沒填齊（括號內列出缺哪幾個），或有重複，所以不會連線</td></tr>
 <tr><td><code>Tool link not fully monitored — …</code>（橘，第三行）</td><td>EAP 不提供 S4 或連線狀態 CEID（<code>S4 tool link</code>／<code>Tool-link CEID</code> 填 0）。連線照常運作，這行說明 OES 因此看不到什麼</td></tr>
-<tr><td><code>EAP link: connected to … (since hh:mm:ss)</code>（綠）</td><td>已連上，事件也已啟用</td></tr>
+<tr><td><code>EAP link: connected to … — &lt;型號 版本&gt; (since hh:mm:ss)</code>（綠）</td><td>已連上，事件也已啟用。型號與版本是 EAP 回的 S1F2，用來確認連到的是對的 EAP</td></tr>
+<tr><td><code>EAP link: connected to … — link test only (EAP ids not set); no events are read</code>（橘）</td><td>識別碼全部是 0：只驗證連線，不讀 S1～S7、不收事件、不影響製程視窗。填入 EAP 方給的識別碼並 Save &amp; apply，就轉為正式運作</td></tr>
 <tr><td><code>EAP link: connecting to … — …</code>（紅）</td><td>連不上或斷線，會自動重試；破折號後面是原因</td></tr>
 <tr><td><code>Last S1F3 hh:mm:ss · PM3 … · tool link up · SEQ n · last event: …</code></td><td>最後一次讀 S1～S7 的時間與內容，以及最後一筆轉發事件</td></tr>
 <tr><td>橘色 <code>Nothing from the EAP for 75 s — the process window has been set to unknown.</code></td><td>太久沒有成功讀到 S1～S7，也沒收到事件。製程視窗改為不明，照沒有製程事件時的方式判定，<strong>不會漏判</strong></td></tr>
@@ -1636,13 +1637,15 @@ check-oes-connect.cmd</code></pre>
 <h3 id="915-eap-link-不是綠色">9.15 <code>EAP link</code> 不是綠色</h3>
 <p>EAP 分頁最上方那一行會寫原因。依序檢查：</p>
 <ol>
-<li><strong><code>not started — the EAP ids are not all set</code>（或 <code>… share an SVID</code>）</strong> —— 必填的 EAP 識別碼沒填齊（訊息括號內列出缺哪幾個）或有重複。照 EAP 方給的編號在 EAP 分頁填好，Save &amp; apply。S4 和 <code>Tool-link CEID</code> 可以留 0。
+<li><strong><code>not started — the EAP ids are not all set</code>（或 <code>… share an SVID</code>）</strong> —— 必填的 EAP 識別碼只填了一部分（訊息括號內列出缺哪幾個）或有重複。照 EAP 方給的編號在 EAP 分頁填好，Save &amp; apply。S4 和 <code>Tool-link CEID</code> 可以留 0；EAP 還沒給編號時，全部留 0 就是只連線測試。
 </li>
 <li><strong><code>connecting to … — cannot reach the EAP (…目標電腦拒絕連線)</code></strong> —— EAP 那邊沒有在該 port 監聽。請 EAP 平台確認服務已啟動、位址與 port 和 EAP 分頁填的一致。
 </li>
 <li><strong><code>connecting to … — cannot reach the EAP (…)</code> 其他原因，或一直停在 <code>connecting…</code></strong> —— 網路不通，或 EAP 主機的防火牆擋了 OES PC 的 IP。請 IT 確認 OES PC 能連到 EAP 的位址與 port。
 </li>
 <li><strong>系統日誌有 <code>EapLinkSetupFailed</code></strong> —— 連上了，但 EAP 拒絕啟用事件：<code>Forward CEID</code>／<code>Tool-link CEID</code> 和 EAP 的編號不一致。
+</li>
+<li><strong>橘色的 <code>connected to … — link test only</code></strong> —— 連線本身沒問題，只是識別碼全是 0，所以不讀資料。這是只連線測試，不是故障；填入識別碼即可。
 </li>
 <li><strong>綠色，但第二行是橘色的 <code>Nothing from the EAP for …</code>，或日誌有 <code>EapReportRejected</code></strong> —— 連得上，但讀不到 S1～S7 或資料格式不符：多半是 S1～S7 的編號填錯，或 EAP 的報告格式和規格不一致。把 <code>Logs\eap_YYYYMMDD.log</code> 交給 EAP 平台比對。
 </li>

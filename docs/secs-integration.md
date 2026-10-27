@@ -787,7 +787,8 @@ MainViewModel 在啟動時與每次 Stop→Start（和 `ReloadRatios` 同時）�
 - **序號**：`_lastEventSeq`（最後處理過的事件）判斷重送，`_lastKnownSeq`（看過的最大值，含 S7）判斷跳號。兩者分開，是因為 OES 重啟後第一次 S1F3 讀到的 S7，正是 EAP 接著要重送的那筆事件；拿它判斷重送，那筆就會被丟掉。
 - **斷線本身不改視窗**，`GemHost` 會自己重連。只有連續 `silenceTimeoutSeconds`（預設 75 秒）**沒有成功的 S1F3、也沒收到 S6F11**，才報不明。每段只報一次，而且要先前曾經成功通訊過。刻意不用 HSMS linktest 判斷：linktest 只代表連線還在，不代表 EAP 的應用程式還活著。
 - **連線失敗的偵測**：Secs4Net 連線失敗時不會發出狀態變化，只會寫一行 `[ERR] …` 再啟動 T5 計時，所以 OES 從「`Start T5 Timer` 而且尚未連上」來計數。第一次記 `EapLinkConnectFailed`，之後每小時一筆累計；重新連上的 `EapLinkConnected` 會附上斷線多久、失敗幾次。
-- 必填的 7 個識別碼（S1～S3、S5～S7、轉發 CEID）有任何一個是 0、非 0 的 S1～S7 有重複，或兩個 CEID 相同時（`EapLinkSettings.IdProblem()`，EAP 分頁存檔和連線類別共用這個判斷）不啟動連線，狀態為 `IdsMissing`。**S4 與連線狀態 CEID 是選填**（#64，規格 Q5）：S4 為 0 時 S1F3 只讀 6 個值（`QueriedSvids`）、判定跳過「S4 = 0 → 不明」；連線狀態 CEID 為 0 時 S2F37 只啟用轉發 CEID（`EnabledCeids`）。缺任一個，連線啟動時記一筆 `EapToolLinkNotMonitored`（`ToolLinkGap()` 說明看不到什麼），EAP 分頁以橘字第三行標示。設定沒變時重新存檔不會重建連線。
+- **7 個必填的識別碼全部是 0 時是「只連線」**（#65，`EapLinkSettings.IsLinkTestOnly`）：照樣連線、S1F17、S1F1，`EapLinkConnected` 註明 link test only，之後不送 S2F37、不送 S1F3、不呼叫 `ReportToolContext`，也從不呼叫 `Heard()`，所以靜默逾時不會啟動、製程視窗不受影響。EAP 回的 MDLN／SOFTREV 從傳輸層記錄的 S1F2 解析（`PeerOf`，0.8.0 的 `AreYouThereAsync` 不回傳值），顯示在 EAP 分頁；連上時狀態列是橘色，避免綠色被讀成「事件已在進來」。填入識別碼存檔後依既有的 hot-apply 轉為正式運作。
+- 必填的 7 個識別碼（S1～S3、S5～S7、轉發 CEID）只填了一部分、非 0 的 S1～S7 有重複，或兩個 CEID 相同時（`EapLinkSettings.IdProblem()`，EAP 分頁存檔和連線類別共用這個判斷）不啟動連線，狀態為 `IdsMissing`。**S4 與連線狀態 CEID 是選填**（#64，規格 Q5）：S4 為 0 時 S1F3 只讀 6 個值（`QueriedSvids`）、判定跳過「S4 = 0 → 不明」；連線狀態 CEID 為 0 時 S2F37 只啟用轉發 CEID（`EnabledCeids`）。缺任一個，連線啟動時記一筆 `EapToolLinkNotMonitored`（`ToolLinkGap()` 說明看不到什麼），EAP 分頁以橘字第三行標示。設定沒變時重新存檔不會重建連線。
 
 **設定（`secs.toolEvents.eap`，存檔即生效、和 `secs.enabled` 無關）：** `enabled`（預設 false）、`remoteHost`、`remotePort`、`deviceId`、`silenceTimeoutSeconds`（35～600）、`windowStateSvid`…`sequenceSvid`、`forwardCeid`、`linkCeid`（預設都是 0）。現場從來沒部署過 TCP 版的 `tcp` 區段，所以不需要遷移。
 

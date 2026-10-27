@@ -540,7 +540,7 @@ OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 `T
 **設定（Engineer）：**
 
 1. 跟 EAP 平台確認監聽位址（現場為 `10.2.3.120:20347`）、Device ID，以及 **EAP 指定的 9 個識別碼**（S1～S7 的 SVID、轉發事件 CEID、主機台連線狀態 CEID；其中 S4 與主機台連線狀態 CEID 是選填，平台不提供就填 0），並把 **OES PC 的 IP** 交給對方，讓 EAP 主機的防火牆放行。填進規格書 §10 的現場設定紀錄。
-2. 到 **EAP 分頁**的 `EAP link (SECS host) — applies on save`：勾 `Connect to the EAP`，填 `EAP address`、`Port`、`Device ID`，`Silence timeout (s)` 用預設 75；在 `EAP ids` 填 9 個編號。
+2. 到 **EAP 分頁**的 `EAP link (SECS host) — applies on save`：勾 `Connect to the EAP`，填 `EAP address`、`Port`、`Device ID`，`Silence timeout (s)` 用預設 75。**EAP 還沒給識別碼時，`EAP ids` 全部留 0 先存檔**：OES 只做連線測試（狀態列橘色 `link test only`，並顯示 EAP 回的型號與版本），用來確認網路、防火牆與 Device ID，不影響量測。拿到識別碼後，在 `EAP ids` 填入 9 個編號（S4 與主機台連線狀態 CEID 不提供就留 0）。
 3. 按 **Save & apply**，**立即生效**，不用重新開始採集。編號沒填齊或有重複時存檔會被擋下，並說明原因。
 
 **確認：**

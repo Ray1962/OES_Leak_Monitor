@@ -1175,7 +1175,8 @@ OES 在這條連線上是 **host**，主動連到 EAP（預設 `10.2.3.120:20347
 | `EAP link: not in use` | 沒有啟用 |
 | `EAP link: not started — the EAP ids are not all set (…)`（橘） | 已勾選連線，但必填的 EAP 識別碼還沒填齊（括號內列出缺哪幾個），或有重複，所以不會連線 |
 | `Tool link not fully monitored — …`（橘，第三行） | EAP 不提供 S4 或連線狀態 CEID（`S4 tool link`／`Tool-link CEID` 填 0）。連線照常運作，這行說明 OES 因此看不到什麼 |
-| `EAP link: connected to … (since hh:mm:ss)`（綠） | 已連上，事件也已啟用 |
+| `EAP link: connected to … — <型號 版本> (since hh:mm:ss)`（綠） | 已連上，事件也已啟用。型號與版本是 EAP 回的 S1F2，用來確認連到的是對的 EAP |
+| `EAP link: connected to … — link test only (EAP ids not set); no events are read`（橘） | 識別碼全部是 0：只驗證連線，不讀 S1～S7、不收事件、不影響製程視窗。填入 EAP 方給的識別碼並 Save & apply，就轉為正式運作 |
 | `EAP link: connecting to … — …`（紅） | 連不上或斷線，會自動重試；破折號後面是原因 |
 | `Last S1F3 hh:mm:ss · PM3 … · tool link up · SEQ n · last event: …` | 最後一次讀 S1～S7 的時間與內容，以及最後一筆轉發事件 |
 | 橘色 `Nothing from the EAP for 75 s — the process window has been set to unknown.` | 太久沒有成功讀到 S1～S7，也沒收到事件。製程視窗改為不明，照沒有製程事件時的方式判定，**不會漏判** |
@@ -1604,11 +1605,12 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 
 EAP 分頁最上方那一行會寫原因。依序檢查：
 
-1. **`not started — the EAP ids are not all set`（或 `… share an SVID`）** —— 必填的 EAP 識別碼沒填齊（訊息括號內列出缺哪幾個）或有重複。照 EAP 方給的編號在 EAP 分頁填好，Save & apply。S4 和 `Tool-link CEID` 可以留 0。
+1. **`not started — the EAP ids are not all set`（或 `… share an SVID`）** —— 必填的 EAP 識別碼只填了一部分（訊息括號內列出缺哪幾個）或有重複。照 EAP 方給的編號在 EAP 分頁填好，Save & apply。S4 和 `Tool-link CEID` 可以留 0；EAP 還沒給編號時，全部留 0 就是只連線測試。
 2. **`connecting to … — cannot reach the EAP (…目標電腦拒絕連線)`** —— EAP 那邊沒有在該 port 監聽。請 EAP 平台確認服務已啟動、位址與 port 和 EAP 分頁填的一致。
 3. **`connecting to … — cannot reach the EAP (…)` 其他原因，或一直停在 `connecting…`** —— 網路不通，或 EAP 主機的防火牆擋了 OES PC 的 IP。請 IT 確認 OES PC 能連到 EAP 的位址與 port。
 4. **系統日誌有 `EapLinkSetupFailed`** —— 連上了，但 EAP 拒絕啟用事件：`Forward CEID`／`Tool-link CEID` 和 EAP 的編號不一致。
-5. **綠色，但第二行是橘色的 `Nothing from the EAP for …`，或日誌有 `EapReportRejected`** —— 連得上，但讀不到 S1～S7 或資料格式不符：多半是 S1～S7 的編號填錯，或 EAP 的報告格式和規格不一致。把 `Logs\eap_YYYYMMDD.log` 交給 EAP 平台比對。
+5. **橘色的 `connected to … — link test only`** —— 連線本身沒問題，只是識別碼全是 0，所以不讀資料。這是只連線測試，不是故障；填入識別碼即可。
+6. **綠色，但第二行是橘色的 `Nothing from the EAP for …`，或日誌有 `EapReportRejected`** —— 連得上，但讀不到 S1～S7 或資料格式不符：多半是 S1～S7 的編號填錯，或 EAP 的報告格式和規格不一致。把 `Logs\eap_YYYYMMDD.log` 交給 EAP 平台比對。
 
 不想等現場 EAP，也可以用 `Test_SECS` 的「EAP（PM3 event forwarder）」設定檔在同一台電腦上假扮 EAP（步驟見 SECS SOP §12.7）。
 

@@ -67,6 +67,40 @@ public sealed class EapLinkSettingsTests
         Assert.Equal("the EAP ids are not all set (S2, forwarding CEID)", s.IdProblem());
     }
 
+    /// <summary>
+    /// No required id set is the link-test-only configuration (#65): usable, not a problem —
+    /// whatever the two optional ids say. One required id set makes it a half-filled
+    /// configuration again, and the rest are named.
+    /// </summary>
+    [Fact]
+    public void NoRequiredIdSet_IsALinkTest_OneSet_IsHalfFilled()
+    {
+        var none = new EapLinkSettings();
+        Assert.True(none.IsLinkTestOnly);
+        Assert.Null(none.IdProblem());
+
+        var optionalOnly = new EapLinkSettings { ToolLinkSvid = 6004, LinkCeid = 6101 };
+        Assert.True(optionalOnly.IsLinkTestOnly);
+        Assert.Null(optionalOnly.IdProblem());
+
+        var one = new EapLinkSettings { WindowStateSvid = 6001 };
+        Assert.False(one.IsLinkTestOnly);
+        Assert.Equal("the EAP ids are not all set (S2, S3, S5, S6, S7, forwarding CEID)", one.IdProblem());
+        Assert.False(All().IsLinkTestOnly);
+    }
+
+    /// <summary>The EAP's model and revision, from the transport's log of its S1F2; nothing from
+    /// any other line.</summary>
+    [Fact]
+    public void ThePeerIsReadFromTheLoggedS1F2()
+    {
+        string s1f2 = "<-- [0x00000003] 'S1F2'  OnLineData\n  <L [2]\n    <A [8] \"FAKE-EAP\">\n    <A [3] \"1.0\">\n  >";
+        Assert.Equal("FAKE-EAP 1.0", EapSecsLink.PeerOf(s1f2));
+        Assert.Null(EapSecsLink.PeerOf("--> [0x00000003] 'S1F1' W AreYouThere"));
+        Assert.Null(EapSecsLink.PeerOf("<-- [0x00000004] 'S1F4'  StatusData\n  <A [3] \"abc\">"));
+        Assert.Null(EapSecsLink.PeerOf("<-- [0x00000003] 'S1F2'  OnLineData\n  <L [0] >"));
+    }
+
     /// <summary>An optional S4 of 0 is not a duplicate; a real one still is.</summary>
     [Fact]
     public void DuplicatesAreJudgedOnTheIdsThatAreSet()
