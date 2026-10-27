@@ -143,6 +143,8 @@
       <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\golden-run-baseline-troubleshooting-zh-TW.html" />
       <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\baseline-builder-sop-zh-TW.html" />
       <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\secs-ratio-svid-example-zh-TW.html" />
+      <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\fdc-integration-spec-zh-TW.html" />
+      <_OperatorDoc Include="$(MSBuildProjectDirectory)\..\..\docs\eap-tool-event-secs-spec-zh-TW.html" />
     </ItemGroup>
     <Warning Text="Operator document not found at %(_OperatorDoc.FullPath) — the publish folder will ship without it. Regenerate the HTML from its Markdown source with tools/md2html.py (see CLAUDE.md &gt; Documentation)."
              Condition="!Exists('%(_OperatorDoc.FullPath)')" />
