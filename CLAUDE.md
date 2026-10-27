@@ -55,7 +55,7 @@ Each note says what the component does, why it is built that way, and the incide
 
 `docs/` holds the human-facing docs; the design notes there are the authority on the maths. What each one is for, who reads it and whether it ships: `docs/dev/docs-index.md`. Rules for all of them:
 
-- **The Markdown is the source; the HTML beside it is generated.** Regenerate after every edit with `python3 tools/check-docs.py --fix`, which keeps each document's own title (a hand-typed `tools/md2html.py` command does not). Without `--fix` it reports stale HTML and publish-list disagreements; CI runs it on every push and PR.
+- **The Markdown is the source; the HTML beside it is generated.** Regenerate after every edit with `python3 tools/check-docs.py --fix`, which keeps each document's own title (a hand-typed `tools/md2html.py` command does not). Without `--fix` it reports stale HTML, publish-list disagreements, and a package table in `docs/dev/nuget-packages.md` that no longer matches the csproj; CI runs it on every push and PR.
 - Some HTML is written by hand and is its own source — `secs-acceptance-sheet-zh-TW.html`, `ratio-noise-pipeline.html`, `process-classification-20260820-21-zh-TW.html`, and `EAP ceid-events.html` (whose `.md` beside it is not its source). Edit those directly; never run them through `md2html.py`.
 - A doc that ships with the publish folder needs one `_OperatorDoc` line in the csproj **and** its filename in `publish.cmd`'s completeness check; `check-docs.py` compares the two.
 - Manual screenshots are `docs/images/manual-*.png`; `run-app` has the procedure for retaking one.
