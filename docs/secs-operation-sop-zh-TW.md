@@ -464,9 +464,9 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 
 **目的：** 讓洩漏判定只在正確的製程裡運作。PM3 交替跑 Chamber Process／precoat（製程 A）與 Chamber Clean（製程 B）等不同電漿；OES 只看光譜，主機台才確切知道此刻是哪一個。廠內 EAP 把主機台的 PM3 ProcessStart／ProcessEnd CEID 以 S2F41 `TOOL_EVENT` 轉送給 OES，OES 依對照表開關「製程視窗」，指定了製程類別的比值只在該類別的視窗內判定。
 
-**誰做：** Engineer／設備工程師。Operator 只看 SECS 分頁的狀態列（§12.4）。
+**誰做：** Engineer／設備工程師。Operator 只看 EAP 分頁的狀態（§12.4）。
 
-**先跟 EAP 平台確認：** 平台會轉送 PM3 的 CEID。現場 OES 的 SECS host 是 FDC，所以轉送走 TCP（§12.7，給平台方的規格在 `eap-tool-event-tcp-spec-zh-TW`）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。FDC 讀 VID 030／031 標記製程，規格在 `fdc-integration-spec-zh-TW`。
+**先跟 EAP 平台確認：** 平台會轉送 PM3 的 CEID。現場 OES 的 SECS host 是 FDC，所以 OES 以 SECS host 身分連到 EAP 取得事件（§12.7，給平台方的規格在 `eap-tool-event-secs-spec-zh-TW`）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。FDC 讀 VID 030／031 標記製程，規格在 `fdc-integration-spec-zh-TW`。
 
 ### 12.1 確認比值已指定製程類別
 
@@ -499,15 +499,15 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 
 ### 12.3 套用
 
-1. 開啟 App，SECS 分頁的 **CEID 表**應顯示剛填的四列。
-2. 到 Monitor 分頁 **Stop → Start**（重新開始採集）。對照表與 `Use tool events` 都是在這時才套用；套用前 SECS 分頁會有橘色字「…not yet in force — restart acquisition…」。
+1. 開啟 App，EAP 分頁的 **CEID 表**應顯示剛填的各列。
+2. 到 Monitor 分頁 **Stop → Start**（重新開始採集）。對照表與 `Use tool events` 都是在這時才套用；套用前 EAP 分頁會有橘色字「…not yet in force — restart acquisition…」。
 3. 系統日誌出現 `ToolEventsApplied`。
 
-`Max window (s)` 與 `Apply tool events in test mode` 可以直接在 SECS 分頁改，按 **Save & apply** 即生效。
+`Max window (s)` 與 `Apply tool events in test mode` 可以直接在 EAP 分頁改，按 **Save & apply** 即生效。
 
 ### 12.4 確認有在運作
 
-看 SECS 分頁的狀態列，或請 Host 讀 VID 030～032：
+看 EAP 分頁的狀態，或請 Host 讀 VID 030～032：
 
 | 情況 | 狀態列 | VID 030 ／ 031 |
 |---|---|---|
@@ -529,44 +529,43 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 
 - [ ] Ratio Setup：要在製程 A 判定的比值，Process class = `A`
 - [ ] `settings.json` 的 `secs.toolEvents` 已填，且 `enabled` = true
-- [ ] 已 Stop → Start，SECS 分頁沒有橘色字
+- [ ] 已 Stop → Start，EAP 分頁沒有橘色字
 - [ ] Profile 有 `TOOL_EVENT`（Host 送一次，HCACK = 0）
 - [ ] 主機台跑一次 Chamber Process：狀態列顯示 `in window A`，結束後 `outside any window`
 
-### 12.7 改用 TCP 接收 EAP 事件（OES 的 SECS host 是 FDC 時）
+### 12.7 EAP 連線（OES 的 SECS host 是 FDC 時）
 
-OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 `TOOL_EVENT`，改由 **OES 主動以 TCP 連到 EAP**，接收 `EVT`（主機台事件）與每 30 秒一筆的 `HB`（心跳）。通訊規格交給 EAP 平台的是 `eap-tool-event-tcp-spec-zh-TW`。12.1～12.3 的比值類別、CEID 對照表、`Use tool events` 照做，只是事件改從這條連線進來。
+OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 `TOOL_EVENT`，改由 **OES 以 SECS host 身分主動連到 EAP**（方案 2b）：EAP 當 equipment，OES 連上後讀 EAP 的 S1～S7（PM3 目前的視窗等），之後每 30 秒再讀一次，並接收 EAP 以 S6F11 轉發的主機台事件。給平台方的規格是 `eap-tool-event-secs-spec-zh-TW`。12.1～12.3 的比值類別、CEID 對照表、`Use tool events` 照做，只是事件改從這條連線進來。
 
 **設定（Engineer）：**
 
-1. 跟 EAP 平台確認監聽位址（現場為 `10.2.3.120:20347`），並把 **OES PC 的 IP** 交給對方，讓 EAP 主機的防火牆放行。
-2. SECS 分頁的 `EAP link (TCP) — applies on save`：勾 `Connect to the EAP`，填 `EAP address`、`Port`，`Heartbeat timeout (s)` 用預設 75。
-3. 按 **Save & apply**，**立即生效**，不用重新開始採集。
+1. 跟 EAP 平台確認監聽位址（現場為 `10.2.3.120:20347`）、Device ID，以及 **EAP 指定的 9 個識別碼**（S1～S7 的 SVID、轉發事件 CEID、主機台連線狀態 CEID），並把 **OES PC 的 IP** 交給對方，讓 EAP 主機的防火牆放行。填進規格書 §10 的現場設定紀錄。
+2. 到 **EAP 分頁**的 `EAP link (SECS host) — applies on save`：勾 `Connect to the EAP`，填 `EAP address`、`Port`、`Device ID`，`Silence timeout (s)` 用預設 75；在 `EAP ids` 填 9 個編號。
+3. 按 **Save & apply**，**立即生效**，不用重新開始採集。編號沒填齊或有重複時存檔會被擋下，並說明原因。
 
 **確認：**
 
 | 看哪裡 | 正常 |
 |---|---|
 | `EAP link` 第一行 | 綠色 `connected to 10.2.3.120:20347 (since …)` |
-| `EAP link` 第二行 | `Last line` 的時間每 30 秒更新一次；`heartbeat: PM3 …` 與主機台狀態一致；`tool link up` |
+| `EAP link` 第二行 | `Last S1F3` 的時間每 30 秒更新一次；`PM3 …` 與主機台狀態一致；`tool link up` |
 | `Tool events` 那一行 | 主機台跑 Chamber Process 時是 `in window A` |
-| 系統日誌 | 有 `EapLinkConnected`；沒有 `ToolEventResync` |
+| 系統日誌 | 有 `EapLinkConnected`；沒有 `EapLinkSetupFailed`、`EapReportRejected`、`ToolEventResync` |
 
-有問題時依操作手冊 §9.15 檢查。收送的每一行都在 `Logs\eap_YYYYMMDD.log`。
+有問題時依操作手冊 §9.15 檢查。收送的每一則訊息都在 `Logs\eap_YYYYMMDD.log`。
 
-**沒有 EAP 也能先驗 OES（同一台電腦）：**
+**沒有 EAP 也能先驗 OES（同一台電腦）：** 用 `Test_SECS`（SECS 測試程式，見 §9）假扮 EAP。
 
-1. 開 PowerShell，在 App 的資料夾（交付資料夾裡就有 `eap-link-sim.ps1`）執行：
-   `powershell -ExecutionPolicy Bypass -File .\eap-link-sim.ps1 -Mode Eap -Bind 127.0.0.1 -Port 20347`
-2. SECS 分頁的 `EAP address` 暫時改成 `127.0.0.1`，Save & apply → 狀態列轉綠。
-3. 在模擬器視窗輸入 `start`／`end`／`clean-start`／`link-down`／`silent 90` 等指令（腳本開頭有完整清單），對照狀態列與系統日誌。
-4. 測完把 `EAP address` 改回 `10.2.3.120`，Save & apply。
+1. 開 `Test_SECS.exe`，角色選 **Equipment simulator (passive)**，Device profile 選 **EAP (PM3 event forwarder)**，Port 改成一個沒用到的號碼（例如 `29347`，**不要用 OES 的 5000**），按 **Connect**。
+2. OES 的 EAP 分頁：`EAP address` 暫時改成 `127.0.0.1`、`Port` 填同一個號碼，`EAP ids` 填 `Test_SECS` 的預設值：S1～S7 = `6001`～`6007`、Forward CEID = `6100`、Tool-link CEID = `6101`。Save & apply → 狀態轉綠。
+3. 在 `Test_SECS` 按 `PM3 Chamber Process Start`／`End`、`Tool link down`、`Resend last event` 等按鈕，對照 EAP 分頁的狀態與系統日誌。關掉 `Test_SECS` 等 75 秒，狀態應轉橘、視窗改為不明。
+4. 測完把位址、Port、編號改回現場的值，Save & apply。
 
-**給 EAP 廠商自測：** 把交付資料夾裡的 `eap-link-sim.ps1` 交給對方，同一支腳本以 `-Mode Oes -RemoteHost 10.2.3.120 -Port 20347` 執行，就會假扮 OES 連過去，每一行都照 OES 的規則回覆並印出來。
+**給 EAP 廠商自測：** `Test_SECS` 角色選 **Host (active)**、Device profile 選 **OES (2b host)**，連到 EAP 平台，依序按「1. Establish and go online」「2. Enable the EAP events」「3. Read S1–S7」，再讓主機台跑一次製程。日誌的 `[OES]` 行寫出 S1～S7 的意思，`[EAP]` 行寫出每筆轉發事件的解讀；格式不符會寫 `REJECTED`。平台的編號和預設值不同時，在 `Test_SECS.exe` 旁放一份 `eap-ids.json`（欄位見 `Test_SECS` 的 `整合指南`）。
 
 **檢核：**
 
-- [ ] `EAP link` 綠色，`Last line` 每 30 秒更新
+- [ ] `EAP link` 綠色，`Last S1F3` 每 30 秒更新
 - [ ] 主機台跑一次 Chamber Process：`in window A`，結束後 `outside any window`
 - [ ] 拔掉 OES 網路線 90 秒後接回：75 秒時轉橘、視窗不明；接回後自動恢復
 
@@ -582,7 +581,7 @@ OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 `T
 | **Profile 範本（要改的是這份）** | `{Config}\profiles\oes-leak-monitor.json` | 編號一律以 `cc=00` 書寫 |
 | 有效 profile（產生物，不要改） | `{Config}\profiles\.effective\oes-leak-monitor.json` | 每次啟動依腔體號重寫 |
 | SECS 收送日誌 | `{Config}\Logs\secs_YYYYMMDD.log` | 每日一檔，保留 `logRetentionDays` 天 |
-| EAP 連線收送日誌 | `{Config}\Logs\eap_YYYYMMDD.log` | §12.7 的 TCP 連線；保留天數同上 |
+| EAP 連線收送日誌 | `{Config}\Logs\eap_YYYYMMDD.log` | §12.7 的 EAP 連線；保留天數同上 |
 | 系統稽核日誌 | `{Config}\Logs\{YYMMDDHH}.csv` | `SecsStarted`／`SecsStopped`／`SecsSettingsSaved` 等記在這裡 |
 
 分頁中段會直接顯示前三個路徑的實際值——**現場找檔案看那裡就好，不用背。**

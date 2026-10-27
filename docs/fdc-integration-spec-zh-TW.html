@@ -129,7 +129,7 @@ td code{white-space:nowrap;}
 </nav>
 <main>
 <h1 id="oes-leak-monitor--fdc-整合規格pm3">OES Leak Monitor × FDC 整合規格（PM3）</h1>
-<blockquote><p><strong>對象：</strong> 廠內 FDC 系統的開發與維運人員。 <strong>目的：</strong> 說明 FDC 要如何連上 PM3 的 OES Leak Monitor、讀哪些資料、怎麼判讀、怎麼知道每筆資料屬於哪個製程，以及第一階段要記錄與通知什麼。 <strong>第一階段範圍：</strong> <strong>只記錄與通知</strong>，不扣貨、不 Hold 腔體、不對設備下任何命令。 <strong>FDC 是 OES 唯一的 SECS host。</strong> 主機台的製程事件不經過 FDC：EAP 以 TCP 直接轉送給 OES（<code>eap-tool-event-tcp-spec-zh-TW.md</code>），OES 再把目前的製程視窗以 VID 030／031 報給 FDC（第 6 節）。 <strong>依據：</strong> <code>Satellite_SECS_Specification_v2.md</code>（欄位語意）、<code>secs-integration.md</code>（設備端實作）、<code>EAP ceid-events.md</code>（主機台 CEID 表）。三者與本文衝突時，以前兩份為準，並回頭修正本文。 <strong>沿革：</strong> 本文原為給 EAP 平台的 <code>eap-integration-spec-zh-TW.md</code>。2026-10-26 確認現場 OES 的 SECS host 是 FDC，改寫為本文；原本「EAP 以 S2F41 <code>TOOL_EVENT</code> 轉送製程事件」的做法改成上述 TCP 連線。</p></blockquote>
+<blockquote><p><strong>對象：</strong> 廠內 FDC 系統的開發與維運人員。 <strong>目的：</strong> 說明 FDC 要如何連上 PM3 的 OES Leak Monitor、讀哪些資料、怎麼判讀、怎麼知道每筆資料屬於哪個製程，以及第一階段要記錄與通知什麼。 <strong>第一階段範圍：</strong> <strong>只記錄與通知</strong>，不扣貨、不 Hold 腔體、不對設備下任何命令。 <strong>FDC 是 OES 唯一的 SECS host。</strong> 主機台的製程事件不經過 FDC：OES 另開一條 SECS 連線、以 host 身分向 EAP 取得（<code>eap-tool-event-secs-spec-zh-TW.md</code>），OES 再把目前的製程視窗以 VID 030／031 報給 FDC（第 6 節）。 <strong>依據：</strong> <code>Satellite_SECS_Specification_v2.md</code>（欄位語意）、<code>secs-integration.md</code>（設備端實作）、<code>EAP ceid-events.md</code>（主機台 CEID 表）。三者與本文衝突時，以前兩份為準，並回頭修正本文。 <strong>沿革：</strong> 本文原為給 EAP 平台的 <code>eap-integration-spec-zh-TW.md</code>。2026-10-26 確認現場 OES 的 SECS host 是 FDC，改寫為本文；原本「EAP 以 S2F41 <code>TOOL_EVENT</code> 轉送製程事件」的做法改成上述 OES 連到 EAP 的連線。</p></blockquote>
 <h2 id="目錄">目錄</h2>
 <ul>
 <li><a href="#1-系統配置">1. 系統配置</a>
@@ -158,8 +158,8 @@ td code{white-space:nowrap;}
 │   Tool PC    │──────────────▶│     EAP      │
 │  (PM2／PM3)  │   EAP = host  │              │
 └──────────────┘               └──────▲───────┘
-                                      │ TCP：主機台製程事件（EVT／HB）
-                                      │ OES 主動連入，見 eap-tool-event-tcp-spec
+                                      │ SECS：OES = host 連入 EAP，讀 S1～S7、收 S6F11
+                                      │ 見 eap-tool-event-secs-spec
 ┌──────────────┐  SECS（本規格）┌──────┴───────┐
 │     FDC      │──────────────▶│    OES PC    │
 │              │   FDC = host  │  只看 PM3    │
@@ -180,7 +180,7 @@ td code{white-space:nowrap;}
 <tbody>
 <tr><td>協定</td><td>HSMS-SS（SECS-II over TCP/IP）</td><td></td></tr>
 <tr><td>連線模式</td><td><strong>OES = Passive（監聽）、FDC = Active（主動連入）</strong></td><td></td></tr>
-<tr><td>IP／Port</td><td>依現場設定，預設 port 5000</td><td>由設備工程師在 OES 的 SECS 分頁設定，交給 FDC 方。<strong>不是</strong> EAP TCP 連線用的 port</td></tr>
+<tr><td>IP／Port</td><td>依現場設定，預設 port 5000</td><td>由設備工程師在 OES 的 SECS 分頁設定，交給 FDC 方。<strong>不是</strong> OES 連 EAP 用的 port</td></tr>
 <tr><td>Device ID</td><td>依現場設定</td><td>HSMS 交握不檢查 Device ID；填錯要到資料訊息才會收到 S9F1</td></tr>
 <tr><td>T3／T5／T6／T7／T8</td><td>45／10／10／10／10 秒（預設）</td><td>FDC 有指定值時，雙方一起改</td></tr>
 <tr><td>機台號 <code>cc</code></td><td><strong>03</strong>（待現場確認，見第 10 節）</td><td>決定所有 SVID／ALID／CEID 的第 2～3 碼</td></tr>
@@ -229,7 +229,7 @@ td code{white-space:nowrap;}
 <tr><td>029</td><td><code>1032700029</code></td><td>Process step index</td><td>U4</td><td></td><td>電漿步驟累計序號</td></tr>
 <tr><td>030</td><td><code>1032700030</code></td><td>Tool event context state</td><td>U4</td><td>✔</td><td>OES 依據的製程視窗狀態：0 未使用、1 狀態不明、2 在視窗內、3 不在任何視窗內，見規則 R9</td></tr>
 <tr><td>031</td><td><code>1032700031</code></td><td>Tool event window class</td><td>A</td><td>✔</td><td>目前視窗的類別（<code>A</code>／<code>B</code>）；030 ≠ 2 時為空字串</td></tr>
-<tr><td>032</td><td><code>1032700032</code></td><td>Last tool CEID</td><td>U4</td><td></td><td>OES 最後收到的主機台 CEID（EAP 經 TCP 轉送）；用來確認 EAP 的轉送確實到達（6.5）</td></tr>
+<tr><td>032</td><td><code>1032700032</code></td><td>Last tool CEID</td><td>U4</td><td></td><td>OES 最後收到的主機台 CEID（EAP 轉送）；用來確認 EAP 的轉送確實到達（6.5）</td></tr>
 </tbody></table></div>
 <p>完整的 VID 001～032 定義見 <code>Satellite_SECS_Specification_v2.md</code> §1.4(a)；數值範例見 <code>secs-global-vid-example-zh-TW.html</code>。</p>
 <p><strong>比值槽位 VID 101～400。</strong> 每組比值（OES 的 Ratio Setup 第 N 列，N = 1～10）佔 30 個號碼：</p>
@@ -284,7 +284,7 @@ td code{white-space:nowrap;}
 <tr><td>R6</td><td><strong>重連後用 S1F3 讀 007 校正警報表</strong>，即使已開啟 spooling 也要做</td><td>斷線期間的轉態遺失，警報表與實際不符</td></tr>
 <tr><td>R7</td><td><strong>VID 008 和 009 不可相加或相減。</strong> 008 只排除停用的比值；009 只算 Warning（Alarm 算在 010）。要判斷「有沒有異常」，看 007</td><td>鎖存 Alarm 時讀到 009 = 0，誤判為正常</td></tr>
 <tr><td>R8</td><td><strong>讀 027 前先看 028。</strong> 027 空字串有三種原因，只有 028 分得出來（0 未設分類器、1 無電漿步驟、2 尚未判定、3 已分類、4 無法分類）</td><td>把「還沒判定」當成「不是製程 A」</td></tr>
-<tr><td>R9</td><td><strong>VID 030 = 1 不只是「還沒收到事件」。</strong> 也包括：視窗逾時（超過 OES 端的上限仍未收到 End）、OES 與 EAP 的 TCP 連線 75 秒沒有任何訊息、EAP 回報它自己不知道 PM3 的狀態或與主機台斷線，以及事件暫不套用（OES 回放錄檔時一律如此；測試模式預設如此——此時 016 也是 1）。030 = 1 時 OES 照未使用製程事件時的方式判定，<strong>警報仍然有效</strong>。<strong>030 = 3 只表示不在任何視窗內，與有沒有電漿無關</strong>，有沒有電漿看 021</td><td>把「不明」期間的警報當成無效；把「視窗外」當成「沒有電漿」</td></tr>
+<tr><td>R9</td><td><strong>VID 030 = 1 不只是「還沒收到事件」。</strong> 也包括：視窗逾時（超過 OES 端的上限仍未收到 End）、OES 與 EAP 的連線 75 秒沒有任何成功的通訊、EAP 回報它自己不知道 PM3 的狀態或與主機台斷線，以及事件暫不套用（OES 回放錄檔時一律如此；測試模式預設如此——此時 016 也是 1）。030 = 1 時 OES 照未使用製程事件時的方式判定，<strong>警報仍然有效</strong>。<strong>030 = 3 只表示不在任何視窗內，與有沒有電漿無關</strong>，有沒有電漿看 021</td><td>把「不明」期間的警報當成無效；把「視窗外」當成「沒有電漿」</td></tr>
 <tr><td>R10</td><td><strong>讀槽位的位移 03 前先讀 18。</strong> 18 = 0 時 03 是基準百分比（100 = 基準）；= 1 時是 σ 分數（100 = 基準、120 = 警告、150 = 警報）。兩者刻度相同但意義不同，不可混算、不可畫在同一條軸上當同一個量</td><td>把 σ 分數 126 讀成「高出基準 26 %」</td></tr>
 <tr><td>R11</td><td><strong>收到 CEID <code>10327507</code> 後，先重讀 10 個槽位的位移 16～25，再相信下一筆槽位數值。</strong> 507 代表至少有一個槽位換了比值或改了定義</td><td>重排後把新比值的數值記到舊比值名下</td></tr>
 <tr><td>R12</td><td><strong>以位移 25（Key）追蹤比值，不要以槽位號或位移 22。</strong> 槽位號在重排後會換人；22 是可以隨時改的顯示名稱。25 建立後永不改變，改名、重排都不變。25 為空字串表示空槽位（與「有設定但停用」的 16 = 0 不同）</td><td>歷史資料接錯比值；改名後同一組比值變成兩條趨勢</td></tr>
@@ -292,7 +292,7 @@ td code{white-space:nowrap;}
 </tbody></table></div>
 <h2 id="6-製程視窗讀-vid-030031">6. 製程視窗：讀 VID 030／031</h2>
 <h3 id="61-來源">6.1 來源</h3>
-<p>PM3 交替跑不同製程，OES 的判定只在對的製程裡有意義。<strong>主機台知道此刻在跑哪個製程</strong>；它的製程事件送到 EAP，EAP 以 TCP 原樣轉送給 OES，OES 依自己的 CEID 對照表維護「製程視窗」，並報在：</p>
+<p>PM3 交替跑不同製程，OES 的判定只在對的製程裡有意義。<strong>主機台知道此刻在跑哪個製程</strong>；它的製程事件送到 EAP，OES 以 SECS host 身分向 EAP 取得（EAP 以 S6F11 轉發，OES 每 30 秒讀 EAP 的狀態），OES 依自己的 CEID 對照表維護「製程視窗」，並報在：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>VID</th><th>內容</th></tr></thead>
 <tbody>
@@ -355,12 +355,12 @@ td code{white-space:nowrap;}
 <div class="tablewrap"><table>
 <thead><tr><th>現象</th><th>代表</th><th>處理</th></tr></thead>
 <tbody>
-<tr><td>030 長時間為 1，032 也不變</td><td>OES 沒收到 EAP 的事件：TCP 連線中斷，或 EAP 沒有在轉送</td><td>通知設備工程師看 OES SECS 分頁的 <code>EAP link</code> 狀態（操作手冊 §9.15）</td></tr>
+<tr><td>030 長時間為 1，032 也不變</td><td>OES 沒收到 EAP 的事件：連線中斷，或 EAP 沒有在轉送</td><td>通知設備工程師看 OES EAP 分頁的 <code>EAP link</code> 狀態（操作手冊 §9.15）</td></tr>
 <tr><td>032 有在變，但 PM3 跑 Chamber Process 時 030／031 不是 2／<code>A</code></td><td>OES 的對照表沒有這個 CEID，或 OES 正在回放／測試模式（016 = 1）</td><td>通知設備工程師</td></tr>
-<tr><td>PM3 製程結束後 030 仍是 2</td><td>EAP 漏轉了 End。OES 會在下一筆心跳時修正，或 600 秒後作廢</td><td>記錄；頻繁發生時通知 EAP 平台</td></tr>
+<tr><td>PM3 製程結束後 030 仍是 2</td><td>EAP 漏轉了 End。OES 會在下一次讀 EAP 狀態（最多 30 秒）時修正，或 600 秒後作廢</td><td>記錄；頻繁發生時通知 EAP 平台</td></tr>
 </tbody></table></div>
 <h2 id="7-第一階段動作記錄與通知">7. 第一階段動作：記錄與通知</h2>
-<p><strong>不扣貨、不 Hold 腔體、不對任何設備下命令。</strong> FDC 不送 S2F41：OES 唯一接受的遠端命令 <code>TOOL_EVENT</code> 是給轉送製程事件用的，現場改由 EAP 以 TCP 轉送。原因：OES 在這台機台的偵測能力尚未經實地驗證（<code>leak-monitor-plan-zh-TW.md</code> §16.1 的結論為 NO-GO），且 2026-09 曾因基準擷取錯誤整天顯示 Alarm。先累積誤報率，再決定是否放權。</p>
+<p><strong>不扣貨、不 Hold 腔體、不對任何設備下命令。</strong> FDC 不送 S2F41：OES 唯一接受的遠端命令 <code>TOOL_EVENT</code> 是給轉送製程事件用的，現場改由 OES 連到 EAP 取得。原因：OES 在這台機台的偵測能力尚未經實地驗證（<code>leak-monitor-plan-zh-TW.md</code> §16.1 的結論為 NO-GO），且 2026-09 曾因基準擷取錯誤整天顯示 Alarm。先累積誤報率，再決定是否放權。</p>
 <div class="tablewrap"><table>
 <thead><tr><th>觸發</th><th>條件</th><th>通知對象</th><th>內容</th></tr></thead>
 <tbody>
@@ -387,7 +387,7 @@ OES：CH3 OES LEAK ALARM composite=3, 2 alarm / 0 warning of 3 ratios
 <tr><td>PM3 視窗</td><td>一筆一列：類別（031）、開始、結束（依 030／031 的變化，見 6.2）</td><td>永久（之後補晶圓資訊要用）</td></tr>
 <tr><td>主機台測漏對照</td><td>每次 LEAK_CHECK：開始、結束、主機台結果、前後 10 分鐘 OES 007／001 摘要</td><td>永久</td></tr>
 </tbody></table></div>
-<p>OES PC 本身也保存 SECS 收送日誌（<code>Log\secs_YYYYMMDD.log</code>）、與 EAP 的 TCP 收送日誌（<code>Log\eap_YYYYMMDD.log</code>）與 Ratio CSV，各方有爭議時可以互相對照。</p>
+<p>OES PC 本身也保存 SECS 收送日誌（<code>Log\secs_YYYYMMDD.log</code>）、與 EAP 連線的收送日誌（<code>Log\eap_YYYYMMDD.log</code>）與 Ratio CSV，各方有爭議時可以互相對照。</p>
 <p><strong>月報建議</strong>：Alarm 次數（依視窗分類）、每次 Alarm 的處理結果（真漏／基準問題／不明）、OES 斷線時數、與主機台測漏結果的一致率。這份統計是第二階段「是否放權」的依據。</p>
 <h2 id="9-驗收方式">9. 驗收方式</h2>
 <p>不需要真的漏氣。OES 的 Replay 分頁可以播放一段記錄過的漏氣錄檔（Normal → Warning → Alarm）。</p>
@@ -400,9 +400,9 @@ OES：CH3 OES LEAK ALARM composite=3, 2 alarm / 0 warning of 3 ratios
 <tr><td>4</td><td>操作者在 OES 按 Acknowledge</td><td>收到 <code>10327002</code> clear 與 CEID <code>10327502</code></td></tr>
 <tr><td>5</td><td>Alarm 期間拔掉網路線 30 秒再接回</td><td>重連後警報表正確；暫存訊息取回且標記延遲（驗證 R6）</td></tr>
 <tr><td>6</td><td>取消勾選 <strong>Report test / replay data too</strong> 後再播一次</td><td><strong>收不到 ALID</strong>；但 S1F3 讀 007 仍會變化</td></tr>
-<tr><td>7</td><td>在主機台跑一次 PM3 Chamber Process（EAP 的 TCP 轉送已上線）</td><td>FDC 讀到 030 = 2、031 = <code>A</code>，End 之後 030 = 3；032 為該製程的 End CEID；FDC 記下一個 <code>PROCESS_A</code> 視窗</td></tr>
+<tr><td>7</td><td>在主機台跑一次 PM3 Chamber Process（EAP 的轉送已上線）</td><td>FDC 讀到 030 = 2、031 = <code>A</code>，End 之後 030 = 3；032 為該製程的 End CEID；FDC 記下一個 <code>PROCESS_A</code> 視窗</td></tr>
 <tr><td>8</td><td>在主機台跑一次 PM3 Auto Leak check</td><td>031 = <code>LEAK_CHECK</code>；FDC 記下一個 <code>LEAK_CHECK</code> 視窗與前後的 OES 摘要</td></tr>
-<tr><td>9</td><td>請 EAP 平台暫停 TCP 服務超過 75 秒</td><td>030 變為 1；這段期間發生的警報 FDC 標記為 <code>UNKNOWN</code> 且照常通知；恢復後 030 回到正確值</td></tr>
+<tr><td>9</td><td>請 EAP 平台暫停對 OES 的服務超過 75 秒</td><td>030 變為 1；這段期間發生的警報 FDC 標記為 <code>UNKNOWN</code> 且照常通知；恢復後 030 回到正確值</td></tr>
 <tr><td>10</td><td>步驟 2 播放漏氣錄檔期間，Trace 追蹤槽位 1～3 的位移 05</td><td>依序走過 0（Normal）→ 1（Warning）→ 2（Alarm）；以出廠比值組驗收時，位移 25 為 <code>R_N2Ar</code>、<code>R_NOAr</code>、<code>R_N2357Ar</code>（現場比值組則以 OES Ratio Setup 畫面為準）</td></tr>
 <tr><td>11</td><td>請設備工程師在 OES Ratio Setup 把第 1 列往下移一列（▼）、存檔，Stop → Start（之後移回）</td><td>收到 CEID <code>10327507</code>；重讀後槽位 1、2 的位移 25 對調（驗證 R11、R12）。只改門檻再重啟則<strong>不會</strong>收到 507</td></tr>
 </tbody></table></div>
@@ -416,7 +416,7 @@ OES：CH3 OES LEAK ALARM composite=3, 2 alarm / 0 warning of 3 ratios
 <tr><td>N3</td><td><strong>主機台 Auto Leak check 的結果變數</strong>（漏率或通過／失敗的 VID），以及 FDC 怎麼取得</td><td>主機台／EAP 平台／FDC</td><td>沒有結果值，6.4 的對照只能記時間</td></tr>
 <tr><td>N4</td><td><strong>驗證有晶圓與沒有晶圓的製程 A 光譜是否有差</strong></td><td>設備工程師（用 N1 的資料）</td><td>若有差，OES 的基準只能從有晶圓的步驟建立</td></tr>
 <tr><td>N5</td><td><strong>製程 C 屬於哪一個主機台事件</strong></td><td>設備工程師／主機台</td><td>確定前，C 的電漿落在任何視窗之外，OES 記 <code>ToolEventUnmappedPlasma</code>、指定類別的比值不判定；確定後在 OES 對照表補一列即可</td></tr>
-<tr><td>N6</td><td><strong>EAP 以 TCP 轉送主機台事件上線</strong>（<code>eap-tool-event-tcp-spec-zh-TW</code>；其 §10 各項都已確認）</td><td>EAP 平台</td><td>上線前 030 一直是 1（狀態不明），判定照未使用製程事件時的方式；FDC 的資料全部標為 <code>UNKNOWN</code></td></tr>
+<tr><td>N6</td><td><strong>EAP 依 <code>eap-tool-event-secs-spec-zh-TW</code> 上線</strong>（其 §8 的 Q5 待廠商確認）</td><td>EAP 平台</td><td>上線前 030 一直是 1（狀態不明），判定照未使用製程事件時的方式；FDC 的資料全部標為 <code>UNKNOWN</code></td></tr>
 <tr><td>N7</td><td><strong>OES 對照表補上 <code>LEAK_CHECK</code></strong>（3100167145／3100167146，類別 <code>LEAK_CHECK</code>）</td><td>設備工程師</td><td>補上前，主機台測漏期間 030 = 3（視窗外），6.4 的測漏對照無法自動對齊</td></tr>
 </tbody></table></div>
 <h3 id="102-oes-設備端的已知限制">10.2 OES 設備端的已知限制</h3>
@@ -426,7 +426,7 @@ OES：CH3 OES LEAK ALARM composite=3, 2 alarm / 0 warning of 3 ratios
 <tr><td>CEID 501（洩漏狀態改變）</td><td>未實作</td><td>狀態變化靠 ALID 與 Trace 的 007 推得</td></tr>
 <tr><td>比值槽位 VID 101～400</td><td>已實作（2026-10-23）</td><td>見 §4.1 與規則 R10～R13</td></tr>
 <tr><td>槽位警報 ALID 101～130</td><td>未實作</td><td>逐比值的警報狀態看槽位位移 05</td></tr>
-<tr><td>遠端命令 S2F41</td><td>只有 <code>TOOL_EVENT</code>（給轉送製程事件用，現場改走 EAP 的 TCP 連線）；沒有任何控制命令</td><td>FDC 不送 S2F41，也不能遠端解除警報；一律由操作者在 OES 畫面按 Acknowledge</td></tr>
+<tr><td>遠端命令 S2F41</td><td>只有 <code>TOOL_EVENT</code>（給轉送製程事件用，現場改由 OES 連到 EAP 取得）；沒有任何控制命令</td><td>FDC 不送 S2F41，也不能遠端解除警報；一律由操作者在 OES 畫面按 Acknowledge</td></tr>
 <tr><td>舊版 profile</td><td>升級前就啟用過 SECS 的 OES，profile 不會自動加入新的列（<code>TOOL_EVENT</code>、VID 030～032、槽位 VID 101～400）</td><td>S1F11 名單少列（VID 030～032、槽位）；請設備工程師在 OES 的 SECS 分頁按 <strong>Add missing rows</strong> 並重啟介面（<code>secs-operation-sop-zh-TW</code> 有步驟）</td></tr>
 <tr><td>設備端時間戳</td><td>S6F11／S5F1 不帶</td><td>用 FDC 收到的時間；OES PC 要接 NTP</td></tr>
 <tr><td>一個 OES App 對一個 <code>cc</code></td><td>設計如此</td><td>將來 PM2 也加裝時，是另一條連線、另一組編號（<code>cc</code> = 02）</td></tr>
