@@ -8,7 +8,8 @@ Regenerate the manual after editing the Markdown:
 
 Covers exactly the subset that file uses: ATX headings, GitHub tables, fenced
 code, blockquotes, ordered/unordered lists (one nesting level), horizontal
-rules, and inline bold / code / links. Anchor ids follow GitHub's slug rules so
+rules, inline bold / code / links, and figures (a line holding only
+``![caption](path)``). Anchor ids follow GitHub's slug rules so
 the hand-written table-of-contents links keep working. There is no Markdown
 library in this environment (no pandoc, no python-markdown) and the manual is
 the only input, so this stays deliberately small rather than growing into a
@@ -16,11 +17,37 @@ general-purpose converter — if a new construct is needed, add it here.
 
 Output is one self-contained file: inlined CSS, a sticky section list, a dark
 -mode media query, and a print stylesheet. No external requests, so it can be
-copied to a machine with no network and opened directly.
+copied to a machine with no network and opened directly. A figure's image is
+read from disk (relative to the Markdown file) and embedded as a data URI for
+the same reason: the manual travels as one file, and an image beside it is the
+first thing to get left behind.
 """
+import base64
 import html
+import os
 import re
 import sys
+
+# Directory relative image paths resolve against: the Markdown file's own.
+SOURCE_DIR = "."
+_FIGURE = re.compile(r"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
+_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif"}
+
+
+def figure(caption, path):
+    """A block-level image, embedded, with its caption underneath."""
+    full = os.path.join(SOURCE_DIR, path)
+    mime = _MIME.get(os.path.splitext(path)[1].lower())
+    if mime is None:
+        sys.exit(f"md2html: unsupported image type: {path}")
+    try:
+        with open(full, "rb") as f:
+            data = base64.b64encode(f.read()).decode("ascii")
+    except OSError as e:
+        sys.exit(f"md2html: cannot read image {full}: {e}")
+    alt = html.escape(re.sub(r"[*`]", "", caption))
+    cap = f"<figcaption>{inline(caption)}</figcaption>" if caption else ""
+    return f'<figure><img src="data:{mime};base64,{data}" alt="{alt}" loading="lazy">{cap}</figure>'
 
 # ---------------------------------------------------------------- inline
 
@@ -132,6 +159,13 @@ def convert(md):
             i += 1
             continue
 
+        # figure: a line holding only ![caption](path)
+        m = _FIGURE.match(line)
+        if m:
+            out.append(figure(m.group(1), m.group(2)))
+            i += 1
+            continue
+
         # horizontal rule
         if re.fullmatch(r"\s*---+\s*", line):
             out.append("<hr>")
@@ -176,7 +210,7 @@ def convert(md):
 
         # paragraph
         buf = []
-        while i < n and lines[i].strip() and not re.match(
+        while i < n and lines[i].strip() and not _FIGURE.match(lines[i]) and not re.match(
                 r"^(#{1,6}\s|```|>|\s*([-*]|\d+\.)\s|\s*---+\s*$)", lines[i]):
             if "|" in lines[i] and i + 1 < n and is_table_sep(lines[i + 1]):
                 break
@@ -335,8 +369,21 @@ td code{white-space:nowrap;}
 """
 
 
+# Added only to documents that contain a figure, so every other document
+# regenerates byte-identical to what it was before figures existed.
+FIGURE_CSS = """
+/* ---- figures (screenshots) ---- */
+figure{margin:18px 0 22px;}
+figure img{display:block;max-width:100%;height:auto;border:1px solid var(--line);
+  border-radius:8px;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.08);}
+figcaption{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.6;}
+@media print{figure{page-break-inside:avoid;}}
+"""
+
+
 def build(md, title):
     body, toc = convert(md)
+    css = CSS + (FIGURE_CSS if "<figure>" in body else "")
     nav = "\n".join(
         f'<a class="l{lvl}" href="#{hid}">{html.escape(txt)}</a>'
         for lvl, txt, hid in toc
@@ -347,7 +394,7 @@ def build(md, title):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
-<style>{CSS}</style>
+<style>{css}</style>
 </head>
 <body>
 <div class="shell">
@@ -367,6 +414,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 4:
         sys.exit("usage: md2html.py <source.md> <output.html> <title>")
     src, dst, title = sys.argv[1], sys.argv[2], sys.argv[3]
+    SOURCE_DIR = os.path.dirname(os.path.abspath(src))
     with open(src, encoding="utf-8") as f:
         md = f.read()
     with open(dst, "w", encoding="utf-8", newline="\n") as f:

@@ -186,6 +186,8 @@ Treat that NuGet surface as the framework. When something looks "missing," it is
   python3 tools/md2html.py docs/user-manual-zh-TW.md docs/user-manual-zh-TW.html "OES Leak Monitor 操作手冊"
   ```
 
+  The manual's screenshots are `docs/images/manual-*.png`, referenced as `![caption](images/…)` on a line of their own; `md2html.py` embeds each one as a data URI (so the HTML is ~4 MB and stays one file) and adds the figure CSS only to a document that has a figure, so every other generated doc is unchanged. They were taken by replaying the 2026-08-14 recording (see `run-app`); retake one when its tab's layout changes.
+
   `tools/md2html.py` is a deliberately small converter covering only the Markdown subset the manual uses — there is no pandoc or python-markdown in this environment. It is deterministic (same input → byte-identical output), so a regeneration that produces no diff means the HTML was already current. Anchor ids follow GitHub's slug rules so the manual's hand-written table of contents works in both renderings; note that `\w` in Python is already Unicode-aware, and naming extra CJK ranges in the slug regex breaks it by preserving fullwidth punctuation.
 - `daily-inspection-plan-zh-TW.md` / `.html` — the fab-side inspection plan (Traditional Chinese): two-tier routine (L1 per-shift spectrum/trend check by an Operator who changes nothing; L2 weekly strategy review by an Engineer), the spectrum × trend diagnostic matrix, per-process line-selection and interference guidance, escalation matrix, printable checklists. Same Markdown-is-the-source rule and same generator as the manual — regenerate after every edit:
 
