@@ -454,7 +454,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 這是日常監看時盯著的畫面。由上而下四層：
 
-![圖 4　Leak Monitor 分頁在洩漏確認後的樣子（重播 2026-08-14 漏氣錄檔，基準取自錄檔開頭）。紅色橫幅 `ALARM — leak signal confirmed`，三條警報用比值都是 `ALARM`；`N₂ 337 / Ar 750` 與 `NO 237 / Ar 750` 是 `RawMean` 分子，百分比欄是 σ 分數。`Observing` 是 Guard／TrendOnly 比值，`No Plasma` 是限定其他製程、這段光譜沒有對應譜線的比值，`Disabled` 是停用的比值。下方趨勢圖可看到比值在 13:56 起越過 Warn（120）再越過 Alarm（150）。](images/manual-leak-monitor.png)
+![圖 4　Leak Monitor 分頁在洩漏確認後的樣子（重播 2026-08-14 漏氣錄檔，基準取自錄檔開頭）。紅色橫幅 `ALARM — leak signal confirmed`，三條警報用比值都是 `ALARM`；`N₂ 337 / Ar 750` 與 `NO 237 / Ar 750` 是 `RawMean` 分子，百分比欄是 σ 分數。`Observing` 是 Guard／TrendOnly 比值；三列 `No Plasma` 是以 CO 330 為參考線的比值，這份光譜裡沒有 CO 329.6，參考線一直讀不到；`Disabled` 是停用的比值。下方趨勢圖可看到比值在 13:56 起越過 Warn（120）再越過 Alarm（150）。圖中是這台電腦的設定：9 組比值（出廠只有前 4 組，見 §10.5），並勾選了 EAP 分頁的 **Apply tool events in test mode**（出廠不勾），所以橫幅會出現 tool events 那一行。](images/manual-leak-monitor.png)
 
 #### 6.3.1 狀態橫幅（最上方大色塊）
 
@@ -1155,7 +1155,7 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 這個分頁**不需要登入就看得到**：被問到「OES 有沒有收到主機台的製程」時，Operator 不必等工程師。設定要 Engineer 以上才能修改。
 
-![圖 12　EAP 分頁，已連上 EAP 並在製程 A 的視窗中。綠字第一行是連線狀態，第二行是最近一次 S1F3 的結果（PM3 在視窗內、主機台連線正常、序號）；下一行 `Tool events: in window A` 是 OES 目前判定的製程。中間是 EAP 位址與九個 ID 的設定，最下面是 CEID 對照表。](images/manual-eap.png)
+![圖 12　EAP 分頁，已連上 EAP 並在製程 A 的視窗中。綠字第一行是連線狀態，第二行是最近一次 S1F3 的結果（PM3 在視窗內、主機台連線正常、序號）；下一行 `Tool events: in window A` 是 OES 目前判定的製程。中間是 EAP 位址與九個 ID 的設定，最下面是 CEID 對照表。這張圖是在測試模式下拍的，所以勾選了 **Apply tool events in test mode**（出廠不勾）；接真實光譜時不需要這個選項。](images/manual-eap.png)
 
 PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。主機台的製程事件（PM3 ProcessStart／ProcessEnd 的 CEID）送到廠內 EAP，EAP 再轉給 OES。OES 依對照表開關「**製程視窗**」：指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定，不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
 

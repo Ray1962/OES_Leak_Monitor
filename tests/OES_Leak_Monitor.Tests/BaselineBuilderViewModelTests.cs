@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using OES_Leak_Monitor;
+using OxyPlot.Annotations;
 using Xunit;
 
 namespace OES_Leak_Monitor.Tests;
@@ -45,6 +48,66 @@ public class BaselineBuilderViewModelTests
         vm.StartDate = DateTime.Today.AddDays(-90);
 
         Assert.Empty(vm.Files);          // still nothing there, but it did not throw getting there
+    }
+
+    /// <summary>
+    /// The shaded window on the chart is the one Build will use, however it was set.
+    ///
+    /// <para>Typing into the two window boxes updated the file's window — and Build used it — but
+    /// only Suggest, Whole file and a drag redrew the chart, so the shading went on showing the
+    /// previous window. Caught in a manual screenshot: the boxes read 30–330 s, the shading
+    /// covered the whole recording, leak included, and the baseline was built from 30–330 s.
+    /// A chart that shows one window while the build uses another is how a leak gets pooled
+    /// into a baseline by someone who checked.</para>
+    /// </summary>
+    [Fact]
+    public void TypingAWindowRedrawsTheShadedWindow()
+    {
+        using var engine = new LeakMonitorEngine(LeakMonitorSettings.CreateDefault());
+        using var intensity = new DualIntensityLogger(new[] { "OES1" }, Missing);
+        var logger = new LoggerViewModel(intensity, Missing);
+        var vm = new BaselineBuilderViewModel(engine, logger, Missing);
+
+        var file = new BuilderFileViewModel(
+            Recording.TryParseArchived(@"C:\Data\202608\14.zip", "P_OES1_0814220358.csv", 1000)!)
+        {
+            Scan = ScanOf(frames: 100, secondsPerFrame: 2),
+            FromSec = 0,
+            ToSec = 198,
+        };
+        vm.Files.Add(file);
+        vm.SelectedFile = file;
+
+        file.FromSec = 30;      // what the two boxes do, through their binding
+        file.ToSec = 120;
+
+        var shading = Assert.Single(vm.TrendModel.Annotations.OfType<RectangleAnnotation>());
+        Assert.Equal(30, shading.MinimumX);
+        Assert.Equal(120, shading.MaximumX);
+    }
+
+    private static RecordingScan ScanOf(int frames, double secondsPerFrame)
+    {
+        var elapsed = Enumerable.Range(0, frames).Select(i => i * secondsPerFrame).ToArray();
+        var trace = new RatioTrace
+        {
+            Key = "R_Test",
+            DisplayName = "Test",
+            Value = Enumerable.Repeat(1.0, frames).ToArray(),
+            Accepted = Enumerable.Repeat(true, frames).ToArray(),
+            LowSnr = new bool[frames],
+            Reference = Enumerable.Repeat(100.0, frames).ToArray(),
+        };
+        return new RecordingScan
+        {
+            Path = "P_OES1_0814220358.csv",
+            DisplayName = "P_OES1_0814220358.csv",
+            StartLocal = new DateTime(2026, 8, 14, 22, 3, 58),
+            ElapsedSec = elapsed,
+            Traces = new Dictionary<string, RatioTrace> { [trace.Key] = trace },
+            Definitions = Array.Empty<RatioDefinition>(),
+            Acquisition = new AcquisitionFingerprint(),
+        };
     }
 }
 
