@@ -11,7 +11,7 @@ Steps:
 1. Check that the versions pinned in `OES_Leak_Monitor.csproj` exist in
    `/mnt/c/Users/infor/source/repos/Ray1962/LocalPackages` (`ls` the folder) —
    at the time of writing `Aqst.OesApp.Core` **0.1.10**, `Aqst.OesApp.Wpf`
-   **0.1.16**, `Aqst.OesSpectrometer` **0.6.2**, `Aqusen.Secs` **0.7.0**. Read
+   **0.1.16**, `Aqst.OesSpectrometer` **0.6.2**, `Aqusen.Secs` **0.8.0**. Read
    the csproj rather than trusting these numbers; they move. If an
    `Aqst.OesApp.*` package is missing, STOP and tell the user to `dotnet pack`
    it from the sibling repo `Ray1962/DualOes_PlasmaMonitor` first — do not
@@ -25,7 +25,7 @@ Steps:
    ```
 
 3. When it finishes, verify `src/OES_Leak_Monitor/bin/Publish/win-x64/` holds
-   all **23** expected files. Report the full output folder path and the `.exe`
+   all **22** expected files. Report the full output folder path and the `.exe`
    size. **Anything missing means the folder is not shippable — say so rather
    than reporting success**, because the app launches happily without most of
    these and only fails on the production PC.
@@ -38,7 +38,6 @@ Steps:
    | VC++ runtime | `vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll` |
    | Operator docs | `user-manual-zh-TW.html`, `daily-inspection-plan-zh-TW.html`, `secs-operation-sop-zh-TW.html`, `secs-acceptance-sheet-zh-TW.html`, `CONTEXT-zh-TW.html`, `golden-run-baseline-troubleshooting-zh-TW.html`, `baseline-builder-sop-zh-TW.html`, `secs-ratio-svid-example-zh-TW.html` |
    | Field diagnostic | `check-oes-connect.ps1`, `check-oes-connect.cmd` |
-| EAP link simulator | `eap-link-sim.ps1` (SECS SOP §12.7) |
 
    The authority on this list is `publish.cmd`'s own check — if it and this
    table disagree, `publish.cmd` is right and this file is stale.
@@ -56,5 +55,5 @@ Notes:
   The exception is `secs-acceptance-sheet-zh-TW.html`, which is a hand-authored
   form with no Markdown source: restore it from git, never regenerate it.
 - If the publish fails on restore, a package from step 1 is missing.
-- `publish.cmd` runs the same publish and then re-checks all 23 files itself, so
+- `publish.cmd` runs the same publish and then re-checks all 22 files itself, so
   prefer it when the user wants the folder opened in Explorer afterwards.

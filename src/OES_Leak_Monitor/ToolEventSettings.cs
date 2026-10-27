@@ -52,13 +52,13 @@ public sealed class ToolEventSettings
     public bool ApplyInTestMode { get; set; }
 
     /// <summary>
-    /// The plain-TCP link to the EAP (<c>docs/eap-tool-event-tcp-spec-zh-TW.md</c>) — a second
-    /// way for the same events to arrive, because the site's SECS host is the FDC and HSMS-SS
-    /// leaves the EAP no session to send <c>TOOL_EVENT</c> on. <b>Hot-applied</b>: it is a
-    /// transport and names no class. Whether what it delivers is used is still
-    /// <see cref="Enabled"/>'s call.
+    /// The SECS link to the EAP (scheme 2b, <c>docs/eap-tool-event-secs-spec-zh-TW.md</c>): the
+    /// OES as host, the EAP as equipment — a second way for the same events to arrive, because
+    /// the site's SECS host is the FDC and HSMS-SS leaves the EAP no session to send
+    /// <c>TOOL_EVENT</c> on. <b>Hot-applied</b>: it is a transport and names no class. Whether
+    /// what it delivers is used is still <see cref="Enabled"/>'s call.
     /// </summary>
-    public ToolEventTcpSettings Tcp { get; set; } = new();
+    public EapLinkSettings Eap { get; set; } = new();
 
     /// <summary>
     /// Whether two settings agree on the <b>staged</b> half — the switch and the table — which is
@@ -87,17 +87,17 @@ public sealed class ToolEventSettings
         Mappings = (Mappings ?? new()).Select(m => m.Clone()).ToList(),
         MaxWindowSeconds = MaxWindowSeconds,
         ApplyInTestMode = ApplyInTestMode,
-        Tcp = (Tcp ?? new()).Clone(),
+        Eap = (Eap ?? new()).Clone(),
     };
 }
 
 /// <summary>
-/// Where the OES connects to receive the EAP's forwarded events over plain TCP. The OES is the
-/// client: the EAP listens on the address it gave (<c>10.2.3.120:20347</c>), which is also what
-/// confines the link to one sender without an allow-list.
-/// <para>Off by default, like the SECS interface, so an upgrade opens no connection until asked.</para>
+/// Where and how the OES connects to the EAP as a SECS host, and the nine ids the EAP assigns.
+/// The OES is active; the EAP listens on the address it gave (<c>10.2.3.120:20347</c>).
+/// <para>Off by default, like the SECS interface, so an upgrade opens no connection until asked.
+/// The ids default to 0, which means "not set": the link does not start until all nine are.</para>
 /// </summary>
-public sealed class ToolEventTcpSettings
+public sealed class EapLinkSettings
 {
     public bool Enabled { get; set; } = false;
 
@@ -105,30 +105,63 @@ public sealed class ToolEventTcpSettings
 
     public int RemotePort { get; set; } = DefaultRemotePort;
 
+    public int DeviceId { get; set; }
+
     /// <summary>
-    /// How long without a single line before the window stops being trusted. A dropped
-    /// connection by itself changes nothing — the reconnect and the heartbeat sent on accept
-    /// restore the window sooner than this.
+    /// How long without a successful S1F3 reply and without an S6F11 before the window stops
+    /// being trusted. A dropped connection by itself changes nothing — the reconnect and the
+    /// S1F3 that follows restore the window sooner than this.
     /// </summary>
-    public double HeartbeatTimeoutSeconds { get; set; } = DefaultHeartbeatTimeoutSeconds;
+    public double SilenceTimeoutSeconds { get; set; } = DefaultSilenceTimeoutSeconds;
+
+    /// <summary>S1 PM3 window state (U1: 0 outside / 1 in a window / 2 unknown).</summary>
+    public uint WindowStateSvid { get; set; }
+    /// <summary>S2 Start CEID of the open window (U4).</summary>
+    public uint WindowCeidSvid { get; set; }
+    /// <summary>S3 when the open window started (A).</summary>
+    public uint WindowStartSvid { get; set; }
+    /// <summary>S4 the EAP's SECS link to the tool (U1: 0 down / 1 up).</summary>
+    public uint ToolLinkSvid { get; set; }
+    /// <summary>S5 last forwarded tool CEID (U4).</summary>
+    public uint LastCeidSvid { get; set; }
+    /// <summary>S6 when the EAP received it (A).</summary>
+    public uint LastTimeSvid { get; set; }
+    /// <summary>S7 sequence number of the last forwarded event (U4).</summary>
+    public uint SequenceSvid { get; set; }
+    /// <summary>The one CEID every tool event is forwarded under, with the fixed report
+    /// <c>L{ U4 tool CEID, A[16] receive time, U4 sequence }</c>.</summary>
+    public uint ForwardCeid { get; set; }
+    /// <summary>The CEID sent when the EAP's link to the tool changes, with <c>L{ U1 }</c>.</summary>
+    public uint LinkCeid { get; set; }
 
     /// <summary>The address the EAP gave, 2026-10-26.</summary>
     public const string DefaultRemoteHost = "10.2.3.120";
     public const int DefaultRemotePort = 20347;
 
-    /// <summary>Two missed 30 s heartbeats plus a margin.</summary>
-    public const double DefaultHeartbeatTimeoutSeconds = 75;
+    /// <summary>Two missed 30 s polls plus a margin.</summary>
+    public const double DefaultSilenceTimeoutSeconds = 75;
 
-    /// <summary>Range Save accepts. Under 35 s a healthy 30 s heartbeat would time out.</summary>
-    public const double MinHeartbeatTimeoutSeconds = 35, MaxHeartbeatTimeoutSeconds = 600;
+    /// <summary>Range Save accepts. Under 35 s a healthy 30 s poll would time out.</summary>
+    public const double MinSilenceTimeoutSeconds = 35, MaxSilenceTimeoutSeconds = 600;
 
-    public ToolEventTcpSettings Clone() => new()
+    /// <summary>S1–S7 in order.</summary>
+    public uint[] StatusSvids => new[]
     {
-        Enabled = Enabled,
-        RemoteHost = RemoteHost,
-        RemotePort = RemotePort,
-        HeartbeatTimeoutSeconds = HeartbeatTimeoutSeconds,
+        WindowStateSvid, WindowCeidSvid, WindowStartSvid, ToolLinkSvid, LastCeidSvid, LastTimeSvid, SequenceSvid,
     };
+
+    /// <summary>Null when the nine ids are usable; otherwise what is wrong with them. Shared by
+    /// the tab's Save and the link, so the two cannot disagree about what "set" means.</summary>
+    public string? IdProblem()
+    {
+        var ids = StatusSvids.Concat(new[] { ForwardCeid, LinkCeid }).ToArray();
+        if (ids.Any(i => i == 0)) return "the EAP ids are not all set";
+        if (ids.Take(7).Distinct().Count() != 7) return "two of S1–S7 share an SVID";
+        if (ForwardCeid == LinkCeid) return "the forwarding and tool-link CEIDs are the same";
+        return null;
+    }
+
+    public EapLinkSettings Clone() => (EapLinkSettings)MemberwiseClone();
 }
 
 /// <summary>Which end of a process window a tool event marks.</summary>
