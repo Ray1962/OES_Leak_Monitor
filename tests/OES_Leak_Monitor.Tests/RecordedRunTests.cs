@@ -123,9 +123,9 @@ public class RecordedRunTests
             "never reached Communicating");
 
         var alarms = new List<(string Alid, bool Set)>();
-        host.AlarmReceived += m =>
+        host.AlarmReportReceived += m =>
         {
-            lock (alarms) { alarms.Add((m.SecsItem![1].GetString(), (m.SecsItem[0].FirstValue<byte>() & 0x80) != 0)); }
+            lock (alarms) { alarms.Add((m.Raw.SecsItem![1].GetString(), (m.Raw.SecsItem[0].FirstValue<byte>() & 0x80) != 0)); }
         };
 
         var replay = Replay.Run(path, snapshot => bridge.OnSample(snapshot),

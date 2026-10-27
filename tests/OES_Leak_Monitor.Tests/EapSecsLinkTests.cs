@@ -50,9 +50,18 @@ public sealed class EapSecsLinkTests : IDisposable
     {
         /// <param name="servesS4">False: a platform with no S4 at all (spec Q5), so an S1F3 that
         /// asks for 6004 gets an empty item back. The tool-link report then cannot exist either.</param>
-        public FakeEap(bool servesS4 = true)
+        /// <param name="agreedNames">True: S1–S7 and the two CEIDs carry the spec's agreed names
+        /// (#66), so the OES can find them by S1F11/S1F23. False: a platform that named them its
+        /// own way ("S1" … "S7", events unnamed).</param>
+        public FakeEap(bool servesS4 = true, bool agreedNames = false)
         {
             _servesS4 = servesS4;
+            _names = agreedNames
+                ? new[] { "PM3_WINDOW_STATE", "PM3_WINDOW_CEID", "PM3_WINDOW_START", "PM3_TOOL_LINK", "PM3_LAST_CEID", "PM3_LAST_TIME", "PM3_EVENT_SEQ" }
+                : new[] { "S1", "S2", "S3", "S4", "S5", "S6", "S7" };
+            EventNames = agreedNames
+                ? new Dictionary<uint, string> { [6100] = "PM3_EVENT_FORWARD", [6101] = "PM3_TOOL_LINK_CHANGED" }
+                : new Dictionary<uint, string>();
             PredefinedReports = servesS4
                 ? new Dictionary<uint, uint[]> { [6200] = new uint[] { 6005, 6006, 6007 }, [6201] = new uint[] { 6004 } }
                 : new Dictionary<uint, uint[]> { [6200] = new uint[] { 6005, 6006, 6007 } };
@@ -62,6 +71,8 @@ public sealed class EapSecsLinkTests : IDisposable
         }
 
         private readonly bool _servesS4;
+        private readonly string[] _names;
+        public IReadOnlyDictionary<uint, string> EventNames { get; }
         public byte State = 2, ToolLink = 1;
         public uint WindowCeid, LastCeid, Seq;
         public string WindowStart = "", LastTime = "";
@@ -71,13 +82,13 @@ public sealed class EapSecsLinkTests : IDisposable
 
         public IEnumerable<SvDefinition> CreateStatusVariables(IEquipmentContext equipment)
         {
-            yield return new SvDefinition(6001, "S1", "", () => U1(State));
-            yield return new SvDefinition(6002, "S2", "", () => U4(WindowCeid));
-            yield return new SvDefinition(6003, "S3", "", () => A(WindowStart));
-            if (_servesS4) yield return new SvDefinition(6004, "S4", "", () => U1(ToolLink));
-            yield return new SvDefinition(6005, "S5", "", () => U4(LastCeid));
-            yield return new SvDefinition(6006, "S6", "", () => TimeAsU4 ? U4(0) : A(LastTime));
-            yield return new SvDefinition(6007, "S7", "", () => U4(Seq));
+            yield return new SvDefinition(6001, _names[0], "", () => U1(State));
+            yield return new SvDefinition(6002, _names[1], "", () => U4(WindowCeid));
+            yield return new SvDefinition(6003, _names[2], "", () => A(WindowStart));
+            if (_servesS4) yield return new SvDefinition(6004, _names[3], "", () => U1(ToolLink));
+            yield return new SvDefinition(6005, _names[4], "", () => U4(LastCeid));
+            yield return new SvDefinition(6006, _names[5], "", () => TimeAsU4 ? U4(0) : A(LastTime));
+            yield return new SvDefinition(6007, _names[6], "", () => U4(Seq));
         }
 
         public IReadOnlyDictionary<string, string[]> RemoteCommands { get; } = new Dictionary<string, string[]>();
@@ -478,6 +489,134 @@ public sealed class EapSecsLinkTests : IDisposable
 
         Assert.Equal(EapLinkState.IdsMissing, link.Status.State);
         Assert.Contains("S2, S3", link.Status.Detail);
+    }
+
+    // ---------------------------------------------------------------- ids by name (#66)
+
+    private static readonly uint[] AgreedIds = { 6001, 6002, 6003, 6004, 6005, 6006, 6007, 6100, 6101 };
+
+    /// <summary>
+    /// The link test with an EAP that uses the agreed names: on connect the OES asks for the
+    /// namelists by itself and finds all nine ids — and still enables nothing and tells the
+    /// engine nothing. The S1F3 it sends checks the formats of what it found; it is not a poll.
+    /// </summary>
+    [Fact]
+    public async Task OnALinkTest_TheIdsAreFoundByName_AndTheWindowIsLeftAlone()
+    {
+        using var log = new LogCapture();
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap(agreedNames: true) { State = 1, WindowCeid = ProcessStart };
+        await using (var eap = new Eap(profile, port))
+        using (var link = Link(log.Logger, silence: TimeSpan.FromMilliseconds(400)))
+        {
+            link.Configure(NoIds(port), 30);
+
+            Assert.True(await Wait(() => link.Status.Discovery is not null));
+            var d = link.Status.Discovery!;
+            Assert.Equal("", d.Problem);
+            Assert.All(d.Matches, m => Assert.Equal(EapIdMatchState.Found, m.State));
+            Assert.Equal(AgreedIds, d.Matches.Select(m => m.Id));
+            Assert.True(eap.Saw("S1F23 -> S1F24"));
+            Assert.True(eap.Saw("S1F3 -> S1F4 (7 SV)"));
+
+            await Task.Delay(800);
+            Assert.False(eap.Saw("S2F37"));
+            Assert.Empty(_reports);
+        }
+
+        Assert.Contains(log.Lines(), l => l.Contains("EapIdsLookedUp") && l.Contains("9 of 9 agreed names found"));
+    }
+
+    /// <summary>A platform with its own names: nothing is found, the reason is per id, and every
+    /// name it did report is kept for checking by hand.</summary>
+    [Fact]
+    public async Task WithOtherNames_NothingIsFound_AndEveryNameIsKept()
+    {
+        int port = SecsTestPort.Free();
+        await using var eap = new Eap(new FakeEap(agreedNames: false), port);
+        using var link = Link();
+        link.Configure(NoIds(port), 30);
+
+        Assert.True(await Wait(() => link.Status.Discovery is not null));
+        var d = link.Status.Discovery!;
+        Assert.Equal("", d.Problem);
+        Assert.Equal(EapIdMatchState.NotFound, d.Matches.Single(m => m.Label == "S1").State);
+        Assert.Equal(EapIdMatchState.NotProvided, d.Matches.Single(m => m.Label == "S4").State);
+        Assert.False(d.HasOffer);
+        Assert.Contains(d.StatusVariables, v => v.Svid == 6001 && v.Name == "S1");
+        Assert.False(eap.Saw("S1F3 ->"));   // nothing found, nothing to check
+    }
+
+    /// <summary>A found id answering the wrong kind of value is flagged but still offered.</summary>
+    [Fact]
+    public async Task AFoundIdOfTheWrongFormat_IsFlaggedNotWithheld()
+    {
+        int port = SecsTestPort.Free();
+        await using var eap = new Eap(new FakeEap(agreedNames: true) { TimeAsU4 = true }, port);
+        using var link = Link();
+        link.Configure(NoIds(port), 30);
+
+        Assert.True(await Wait(() => link.Status.Discovery is not null));
+        var s6 = link.Status.Discovery!.Matches.Single(m => m.Label == "S6");
+        Assert.Equal(EapIdMatchState.WrongType, s6.State);
+        Assert.Equal(6006u, s6.Id);
+        Assert.True(s6.Offered);
+    }
+
+    /// <summary>
+    /// On a configured link nothing is looked up by itself; "Read ids" checks the entered ids
+    /// against the names on demand. Use these ids fills the fields and marks them unsaved — it
+    /// never saves — and a field that already held the found id is not marked as differing.
+    /// </summary>
+    [Fact]
+    public async Task OnTheTab_ReadThenUse_FillsTheFieldsWithoutSaving()
+    {
+        int port = SecsTestPort.Free();
+        await using var eap = new Eap(new FakeEap(agreedNames: true), port);
+        using var link = Link();
+        using var bridge = new SecsBridge(null, _dir, _dir, () => default);
+        var configured = To(port);
+        configured.WindowStateSvid = 7001;   // a typo the lookup should catch
+        link.Configure(configured, 30);
+        Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected));
+        await Task.Delay(300);
+        Assert.Null(link.Status.Discovery);   // a configured link does not look up by itself
+
+        var saved = new List<ToolEventSettings>();
+        var vm = new EapViewModel(bridge, new ToolEventSettings { Eap = configured }, saved.Add, link);
+        vm.SetRole(isEngineerOrHigher: true);
+        Assert.True(vm.ReadIdsCommand.CanExecute(null));
+        await link.DiscoverIdsAsync();
+
+        var rows = vm.DiscoveryRows;
+        Assert.True(rows.Single(r => r.Label == "S1").Differs);
+        Assert.False(rows.Single(r => r.Label == "S2").Differs);
+        Assert.Equal(7001u, vm.WindowStateSvid);   // reading wrote nothing
+
+        vm.UseIdsCommand.Execute(null);
+
+        Assert.Equal(6001u, vm.WindowStateSvid);
+        Assert.True(vm.HasUnsavedChanges);
+        Assert.Empty(saved);
+        Assert.DoesNotContain(vm.DiscoveryRows, r => r.Differs);
+    }
+
+    /// <summary>Read and Use are Engineer actions, like the fields they fill.</summary>
+    [Fact]
+    public async Task ReadAndUse_NeedAnEngineer()
+    {
+        int port = SecsTestPort.Free();
+        await using var eap = new Eap(new FakeEap(agreedNames: true), port);
+        using var link = Link();
+        using var bridge = new SecsBridge(null, _dir, _dir, () => default);
+        link.Configure(NoIds(port), 30);
+        Assert.True(await Wait(() => link.Status.Discovery is not null));
+
+        var vm = new EapViewModel(bridge, new ToolEventSettings { Eap = NoIds(port) }, _ => { }, link);
+        Assert.False(vm.ReadIdsCommand.CanExecute(null));
+        Assert.False(vm.UseIdsCommand.CanExecute(null));
+        vm.SetRole(isEngineerOrHigher: true);
+        Assert.True(vm.UseIdsCommand.CanExecute(null));
     }
 
     // ---------------------------------------------------------------- polling

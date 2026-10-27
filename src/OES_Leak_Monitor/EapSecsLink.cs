@@ -38,9 +38,11 @@ public sealed record EapStatusReading(byte WindowState, uint WindowCeid, string 
 /// <param name="LinkTestOnly">No EAP ids are set (<see cref="EapLinkSettings.IsLinkTestOnly"/>):
 /// the link connects and goes online, and nothing more.</param>
 /// <param name="Peer">The EAP's MDLN and SOFTREV from its S1F2, "" until it has answered.</param>
+/// <param name="Discovery">The last time the EAP's ids were looked up by name (#66), or null.</param>
+/// <param name="Discovering">A lookup is in flight.</param>
 public sealed record EapLinkStatus(EapLinkState State, string Endpoint, DateTime? ConnectedSince,
     EapStatusReading? LastReading, string LastEvent, bool Silent, string Detail, string ToolLinkGap = "",
-    bool LinkTestOnly = false, string Peer = "")
+    bool LinkTestOnly = false, string Peer = "", EapIdDiscovery? Discovery = null, bool Discovering = false)
 {
     public static readonly EapLinkStatus Disabled = new(EapLinkState.Disabled, "", null, null, "", false, "");
 }
@@ -222,7 +224,10 @@ public sealed class EapSecsLink : IDisposable
                 TimeSyncIntervalMs = 0,
             });
         host.Log += line => OnHostLog(endpoint, line);
-        host.EventReportReceived += m => OnEventReport(s, m);
+        host.EventReportReceived += r => OnEventReport(s, r);
+        // Since Aqusen.Secs 0.9.0 the library refuses an S6F11 it cannot parse (ack 1) and never
+        // raises it as an event; this is where such a report from the EAP is still recorded.
+        host.ReportRejected += (_, reason) => LogRejected($"the EAP sent a report the SECS library could not read: {reason}");
         _host = host;
 
         _runCts = new CancellationTokenSource();
@@ -318,6 +323,8 @@ public sealed class EapSecsLink : IDisposable
             // point may reach the engine, and Heard() is never called, so the silence timer stays
             // disarmed: a test connection cannot set the process window to unknown.
             OnConnected(endpoint, linkTestOnly: true);
+            // With no ids yet, finding them is the next thing anyone wants: ask once, on connect.
+            await DiscoverAsync(host, endpoint);
             return true;
         }
         var ceids = s.EnabledCeids;
@@ -430,6 +437,75 @@ public sealed class EapSecsLink : IDisposable
         Update(st => st with { State = EapLinkState.Connecting, ConnectedSince = null, Detail = $"connection lost: {reason}" });
     }
 
+    // ---- finding the ids by name (#66) -------------------------------------------------
+
+    private int _discovering;
+
+    /// <summary>
+    /// Looks the EAP's ids up by their agreed names, on the running link. Does nothing unless
+    /// connected, or while a lookup is already running. The result lands in
+    /// <see cref="EapLinkStatus.Discovery"/>; nothing is written to the settings — the EAP tab
+    /// offers it, and only Save makes it the configuration.
+    /// </summary>
+    public Task DiscoverIdsAsync()
+    {
+        GemHost? host;
+        string endpoint;
+        lock (_gate)
+        {
+            host = _host;
+            endpoint = _status.Endpoint;
+        }
+        if (host is null || _status.State != EapLinkState.Connected) return Task.CompletedTask;
+        return DiscoverAsync(host, endpoint);
+    }
+
+    /// <summary>
+    /// S1F11 and S1F23 for everything, then one S1F3 of what was found to check its formats.
+    /// None of it reaches the engine and none of it counts as hearing from the EAP: the S1F3 here
+    /// checks a guess, it does not state the window.
+    /// </summary>
+    private async Task DiscoverAsync(GemHost host, string endpoint)
+    {
+        if (Interlocked.Exchange(ref _discovering, 1) == 1) return;
+        try
+        {
+            Update(st => st with { Discovering = true });
+            var svs = await host.QueryStatusNamelistAsync(Array.Empty<uint>());
+            var events = await host.QueryEventNamelistAsync(Array.Empty<uint>());
+            foreach (var v in svs.Entries ?? Array.Empty<StatusVariableName>())
+                Trace($"[EAP] SVID {v.Svid} = \"{v.Name}\"" + (v.Units.Length > 0 ? $" ({v.Units})" : ""));
+            foreach (var e in events.Entries ?? Array.Empty<CollectionEventName>())
+                Trace($"[EAP] CEID {e.Ceid} = \"{e.Name}\", VID {{{string.Join(",", e.Vids)}}}");
+
+            string problem = (svs.Succeeded, events.Succeeded) switch
+            {
+                (false, false) => $"the EAP does not support name queries (S1F11: {svs.Error}; S1F23: {events.Error}) — enter the ids manually",
+                _ when (svs.Entries?.Count ?? 0) == 0 && (events.Entries?.Count ?? 0) == 0 =>
+                    "the EAP answered S1F11 and S1F23 with empty lists — enter the ids manually",
+                _ => "",
+            };
+            var matches = EapIdDiscovery.Match(svs.Entries, events.Entries);
+            var check = EapIdDiscovery.SvidsToCheck(matches);
+            if (problem.Length == 0 && check.Length > 0)
+            {
+                var read = await host.QueryStatusAsync(check);
+                matches = EapIdDiscovery.CheckFormats(matches, read.Values);
+            }
+            var discovery = new EapIdDiscovery(DateTime.Now, matches,
+                svs.Entries ?? Array.Empty<StatusVariableName>(), events.Entries ?? Array.Empty<CollectionEventName>(), problem);
+            Trace($"[EAP] ids by name: {discovery.Summary}");
+            _log?.LogSystemEvent(problem.Length > 0 ? LogSeverity.Warning : LogSeverity.Information, "EapIdsLookedUp",
+                $"EAP at {endpoint}: {discovery.Summary}", related: $"Endpoint={endpoint}");
+            Update(st => st with { Discovery = discovery, Discovering = false });
+        }
+        finally
+        {
+            Update(st => st with { Discovering = false });
+            Interlocked.Exchange(ref _discovering, 0);
+        }
+    }
+
     // ---- reading S1–S7 -------------------------------------------------------------
 
     private async Task PollAsync(EapLinkSettings s, GemHost host)
@@ -496,25 +572,19 @@ public sealed class EapSecsLink : IDisposable
     // ---- events ---------------------------------------------------------------------
 
     /// <summary>One S6F11 (already acknowledged by the library). Receive thread.</summary>
-    private void OnEventReport(EapLinkSettings s, SecsMessage message)
+    private void OnEventReport(EapLinkSettings s, EventReport eventReport)
     {
-        // L,3 { DATAID, CEID, L { L,2 { RPTID, L values } } }
-        var body = message.SecsItem;
-        if (body is not { Format: SecsFormat.List, Count: 3 } || SecsBridge.ParseCeid(body[1]) is not { } ceid)
-        {
-            LogRejected("S6F11 is not L,3 { DATAID, CEID, reports }");
-            return;
-        }
+        // The library has checked the S6F11's structure; what is left is whether it is the
+        // platform's fixed layout. Values are positional (one report, read by place).
+        uint ceid = eventReport.Ceid;
         bool isLink = s.HasLinkCeid && ceid == s.LinkCeid;
         if (ceid != s.ForwardCeid && !isLink) return;   // not ours: the EAP may report more
-        var reports = body[2];
-        if (reports.Format != SecsFormat.List || reports.Count != 1 ||
-            reports[0] is not { Format: SecsFormat.List, Count: 2 } report || report[1].Format != SecsFormat.List)
+        if (eventReport.Reports.Count != 1)
         {
             LogRejected($"CEID {ceid} should carry exactly one report (is it enabled, and its report linked?)");
             return;
         }
-        var values = report[1];
+        var values = eventReport.Reports[0].Values;
         if (isLink)
         {
             uint? link = values.Count == 1 ? SecsBridge.ParseCeid(values[0]) : null;
@@ -557,13 +627,6 @@ public sealed class EapSecsLink : IDisposable
         var ack = _eventSink(toolCeid, time);
         if (ack == ToolEventAck.Ignored) LogIgnoredOnce(toolCeid);
         Update(st => st with { LastEvent = $"tool CEID {toolCeid} at {time:HH:mm:ss}, SEQ {seq}" });
-    }
-
-    private static string Describe(Item list)
-    {
-        var parts = new List<string>();
-        for (int i = 0; i < list.Count; i++) parts.Add(list[i].Format.ToString());
-        return string.Join("/", parts);
     }
 
     private static string Describe(IReadOnlyList<Item> list)

@@ -104,6 +104,54 @@
                     <TextBox Text="{Binding LinkCeid}" Style="{StaticResource IdBox}" AutomationProperties.Name="Tool-link CEID"/>
                 </WrapPanel>
 
+                <!-- The ids found by name (#66): the EAP's S1F11/S1F23 namelists matched against the
+                     spec's agreed names. Read never writes a field; Use fills them, and only Save
+                     makes them the configuration — the ids decide how the window is read. -->
+                <StackPanel Margin="0,0,0,6">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Read ids from EAP" Command="{Binding ReadIdsCommand}" Padding="10,2" Margin="0,0,8,0"
+                                ToolTip="Asks the connected EAP for its variable and event names (S1F11, S1F23) and matches them against the agreed names (spec §4). Writes nothing. Done once by itself when a link with no ids connects."/>
+                        <Button Content="Use these ids" Command="{Binding UseIdsCommand}" Padding="10,2" Margin="0,0,12,0"
+                                ToolTip="Copies the ids found into the fields above. Not a save: check them, then Save &amp; apply. Ids not found, or found twice, are left as they are."/>
+                        <TextBlock Text="{Binding DiscoveryText}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="1100"
+                                   AutomationProperties.Name="EAP id lookup"/>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding DiscoveryRows}" AutoGenerateColumns="False"
+                              IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False"
+                              CanUserDeleteRows="False" CanUserReorderColumns="False"
+                              GridLinesVisibility="Horizontal" Background="White"
+                              Margin="0,4,0,0" HorizontalAlignment="Left"
+                              Visibility="{Binding ShowsDiscovery, Converter={StaticResource BoolToVis}}"
+                              AutomationProperties.Name="EAP ids by name">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Attention}" Value="True">
+                                        <Setter Property="Foreground" Value="DarkOrange"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Differs}" Value="True">
+                                        <Setter Property="Background" Value="#FFF3CD"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Id" Binding="{Binding Label}" Width="110"/>
+                            <DataGridTextColumn Header="Agreed name" Binding="{Binding Name}" Width="190"/>
+                            <DataGridTextColumn Header="Found" Binding="{Binding Found}" Width="100"/>
+                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="100"/>
+                            <DataGridTextColumn Header="In the field" Binding="{Binding Current}" Width="100"/>
+                            <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="420"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <Expander Header="Every name the EAP reported" Margin="0,4,0,0"
+                              Visibility="{Binding ShowsDiscovery, Converter={StaticResource BoolToVis}}">
+                        <TextBox Text="{Binding DiscoveryNamesText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
+                                 MaxHeight="160" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                                 AutomationProperties.Name="EAP names reported"/>
+                    </Expander>
+                </StackPanel>
+
                 <!-- Tool events. Two kinds of field, labelled as such: the switch (with the CEID
                      table) is staged — adopted at the next acquisition start, because the table
                      names the classes the ratios refer to — while the window limit and the
