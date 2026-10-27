@@ -125,7 +125,17 @@ td code{white-space:nowrap;}
 </nav>
 <main>
 <h1 id="oes-leak-monitor--eap-製程事件介面規格secs方案-2b">OES Leak Monitor × EAP 製程事件介面規格（SECS，方案 2b）</h1>
-<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 OES Leak Monitor 怎麼向 EAP 取得主機台 <strong>PM3</strong> 的製程事件：EAP 以 SECS <strong>equipment</strong> 身分提供製程視窗的狀態變數，並以 S6F11 轉發主機台事件；OES 以 <strong>host</strong> 身分連入讀取。 <strong>狀態：</strong> 2026-10-27。OES 端已依本規格實作。<strong>本規格取代 2026-10-26 的 TCP 文字行規格（<code>eap-tool-event-tcp-spec-zh-TW</code>）</strong>，拿到舊版的請改依本規格。 <strong>一句話：</strong> OES 主動連到 EAP（預設 <code>10.2.3.120:20347</code>），上線後啟用兩個 CEID、讀 S1～S7，之後每 30 秒再讀一次；主機台每有一筆事件，EAP 就以<strong>一個固定的轉發 CEID</strong> 送 S6F11，報告內容固定為「主機台 CEID、EAP 收到的時間、序號」。</p></blockquote>
+<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 OES Leak Monitor 怎麼向 EAP 取得主機台 <strong>PM3</strong> 的製程事件：EAP 以 SECS <strong>equipment</strong> 身分提供製程視窗的狀態變數，並以 S6F11 轉發主機台事件；OES 以 <strong>host</strong> 身分連入讀取。 <strong>狀態：</strong> 2026-10-28（第二版）。OES 端已依本規格實作。<strong>本規格取代 2026-10-26 的 TCP 文字行規格（<code>eap-tool-event-tcp-spec-zh-TW</code>）</strong>，拿到舊版的請改依本規格。</p>
+<p><strong>本版與 2026-10-27 版的差異</strong>（EAP 端原本的實作不需要修改；以下都是放寬或新增的建議）：</p>
+<ol>
+<li><strong>S4 與連線狀態 CEID 改為選填</strong>（§4、§4.1、§4.2、Q5）。平台無法得知自己與主機台的連線狀態時，這兩項不必提供，OES 照樣連線；代價寫在 §4.2。
+</li>
+<li><strong>只連線測試</strong>（§4、§10 第 0 項）。識別碼還沒指定時，OES 只填 EAP 的位址、port、Device ID 就能先連線，只送 S1F13、S1F17、S1F1，用來先驗證網路與防火牆。
+</li>
+<li><strong>約定名稱</strong>（新增 §4.3、Q7、Q8、§9、§10 第 0a 項）。建議平台支援 S1F11／S1F23，並把 SVNAME／CENAME 設成 §4.3 的名稱，OES 就能自動帶出 9 個識別碼、核對有沒有填錯。不支援時照原本方式提供編號即可。
+</li>
+</ol>
+<p><strong>一句話：</strong> OES 主動連到 EAP（預設 <code>10.2.3.120:20347</code>），上線後啟用兩個 CEID、讀 S1～S7，之後每 30 秒再讀一次；主機台每有一筆事件，EAP 就以<strong>一個固定的轉發 CEID</strong> 送 S6F11，報告內容固定為「主機台 CEID、EAP 收到的時間、序號」。</p></blockquote>
 <h2 id="目錄">目錄</h2>
 <ul>
 <li><a href="#1-背景">1. 背景</a>
