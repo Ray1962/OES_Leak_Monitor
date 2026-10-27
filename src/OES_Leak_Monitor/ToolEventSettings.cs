@@ -120,7 +120,8 @@ public sealed class EapLinkSettings
     public uint WindowCeidSvid { get; set; }
     /// <summary>S3 when the open window started (A).</summary>
     public uint WindowStartSvid { get; set; }
-    /// <summary>S4 the EAP's SECS link to the tool (U1: 0 down / 1 up).</summary>
+    /// <summary>S4 the EAP's SECS link to the tool (U1: 0 down / 1 up). <b>Optional</b>: 0 means
+    /// the EAP does not provide it (spec Q5), and the S1F3 reads S1–S3, S5–S7 only.</summary>
     public uint ToolLinkSvid { get; set; }
     /// <summary>S5 last forwarded tool CEID (U4).</summary>
     public uint LastCeidSvid { get; set; }
@@ -131,7 +132,9 @@ public sealed class EapLinkSettings
     /// <summary>The one CEID every tool event is forwarded under, with the fixed report
     /// <c>L{ U4 tool CEID, A[16] receive time, U4 sequence }</c>.</summary>
     public uint ForwardCeid { get; set; }
-    /// <summary>The CEID sent when the EAP's link to the tool changes, with <c>L{ U1 }</c>.</summary>
+    /// <summary>The CEID sent when the EAP's link to the tool changes, with <c>L{ U1 }</c>.
+    /// <b>Optional</b>, like <see cref="ToolLinkSvid"/>: 0 means the EAP does not send it, and
+    /// S2F37 enables the forwarding CEID alone.</summary>
     public uint LinkCeid { get; set; }
 
     /// <summary>The address the EAP gave, 2026-10-26.</summary>
@@ -144,22 +147,60 @@ public sealed class EapLinkSettings
     /// <summary>Range Save accepts. Under 35 s a healthy 30 s poll would time out.</summary>
     public const double MinSilenceTimeoutSeconds = 35, MaxSilenceTimeoutSeconds = 600;
 
-    /// <summary>S1–S7 in order.</summary>
+    /// <summary>S1–S7 in order, 0 where unset.</summary>
     public uint[] StatusSvids => new[]
     {
         WindowStateSvid, WindowCeidSvid, WindowStartSvid, ToolLinkSvid, LastCeidSvid, LastTimeSvid, SequenceSvid,
     };
 
-    /// <summary>Null when the nine ids are usable; otherwise what is wrong with them. Shared by
-    /// the tab's Save and the link, so the two cannot disagree about what "set" means.</summary>
+    /// <summary>Whether the EAP provides S4, the state of its own link to the tool.</summary>
+    public bool HasToolLinkSvid => ToolLinkSvid != 0;
+
+    /// <summary>Whether the EAP sends the tool-link CEID when that link changes.</summary>
+    public bool HasLinkCeid => LinkCeid != 0;
+
+    /// <summary>What the S1F3 asks for: S1–S7 in order, without S4 when the EAP does not
+    /// provide it. The S1F4 comes back in this order.</summary>
+    public uint[] QueriedSvids => HasToolLinkSvid
+        ? StatusSvids
+        : new[] { WindowStateSvid, WindowCeidSvid, WindowStartSvid, LastCeidSvid, LastTimeSvid, SequenceSvid };
+
+    /// <summary>What S2F37 enables: the forwarding CEID, and the tool-link CEID when set.</summary>
+    public uint[] EnabledCeids => HasLinkCeid ? new[] { ForwardCeid, LinkCeid } : new[] { ForwardCeid };
+
+    /// <summary>Null when the ids are usable; otherwise what is wrong with them. Shared by the
+    /// tab's Save and the link, so the two cannot disagree about what "set" means. S4 and the
+    /// tool-link CEID may be 0 (not provided); the other seven may not.</summary>
     public string? IdProblem()
     {
-        var ids = StatusSvids.Concat(new[] { ForwardCeid, LinkCeid }).ToArray();
-        if (ids.Any(i => i == 0)) return "the EAP ids are not all set";
-        if (ids.Take(7).Distinct().Count() != 7) return "two of S1–S7 share an SVID";
-        if (ForwardCeid == LinkCeid) return "the forwarding and tool-link CEIDs are the same";
+        var required = new (string Name, uint Id)[]
+        {
+            ("S1", WindowStateSvid), ("S2", WindowCeidSvid), ("S3", WindowStartSvid), ("S5", LastCeidSvid),
+            ("S6", LastTimeSvid), ("S7", SequenceSvid), ("forwarding CEID", ForwardCeid),
+        };
+        var unset = required.Where(r => r.Id == 0).Select(r => r.Name).ToArray();
+        if (unset.Length > 0) return $"the EAP ids are not all set ({string.Join(", ", unset)})";
+        var svids = StatusSvids.Where(i => i != 0).ToArray();
+        if (svids.Distinct().Count() != svids.Length) return "two of S1–S7 share an SVID";
+        if (HasLinkCeid && ForwardCeid == LinkCeid) return "the forwarding and tool-link CEIDs are the same";
         return null;
     }
+
+    /// <summary>
+    /// Null when the EAP provides both S4 and the tool-link CEID; otherwise what the OES then
+    /// cannot see, for the log and the EAP tab. A lost EAP–tool link is still reported through
+    /// S1 = 2 — the EAP is asked to set it (spec E4/E5) — but no longer by a value of its own.
+    /// </summary>
+    public string? ToolLinkGap() => (HasToolLinkSvid, HasLinkCeid) switch
+    {
+        (true, true) => null,
+        (false, false) => "the EAP provides neither S4 nor the tool-link CEID: a lost link between the EAP " +
+                          "and the tool is seen only as S1 = 2, or when a window outlasts the tool-event max window",
+        (false, true) => "the EAP provides no S4: a change of its link to the tool is seen only through the " +
+                         "tool-link CEID, and one that event missed is not corrected by the 30 s S1F3",
+        (true, false) => "the EAP sends no tool-link CEID: a change of its link to the tool is seen at the " +
+                         "next 30 s S1F3 instead of when it happens",
+    };
 
     public EapLinkSettings Clone() => (EapLinkSettings)MemberwiseClone();
 }

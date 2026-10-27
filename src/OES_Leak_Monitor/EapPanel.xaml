@@ -29,6 +29,9 @@
                                AutomationProperties.Name="EAP link" TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left"/>
                     <TextBlock Text="{Binding EapDetailText}" Foreground="{Binding EapLinkBrush}"
                                AutomationProperties.Name="EAP link detail" TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding EapToolLinkText}" Foreground="DarkOrange"
+                               AutomationProperties.Name="EAP tool link note" TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left"
+                               Visibility="{Binding ShowsToolLinkGap, Converter={StaticResource BoolToVis}}"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                             ToolTip="Which process window the leak monitor is judging in (VID 030–032). From the EAP link, or from S2F41 TOOL_EVENT if a SECS host sends it.">
@@ -74,9 +77,10 @@
                     </StackPanel>
                 </WrapPanel>
 
-                <!-- The nine ids the EAP assigns. 0 = not set: the link does not start until all are. -->
+                <!-- The nine ids the EAP assigns. 0 = not set: the link does not start until the seven
+                     required ones are. S4 and the tool-link CEID are optional (0 = the EAP does not provide them). -->
                 <WrapPanel Margin="0,2,0,0"
-                           ToolTip="The ids the EAP assigned (eap-tool-event-secs-spec §4). The link does not start until all nine are set and S1–S7 are distinct.">
+                           ToolTip="The ids the EAP assigned (eap-tool-event-secs-spec §4). The link does not start until S1–S3, S5–S7 and the forward CEID are set and S1–S7 are distinct. S4 and the tool-link CEID are optional: leave 0 when the EAP does not provide them.">
                     <TextBlock Text="EAP ids:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,6"/>
                     <TextBlock Text="S1 window state" Style="{StaticResource FieldLabel}"/>
                     <TextBox Text="{Binding WindowStateSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S1 SVID"/>
@@ -84,7 +88,8 @@
                     <TextBox Text="{Binding WindowCeidSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S2 SVID"/>
                     <TextBlock Text="S3 window start" Style="{StaticResource FieldLabel}"/>
                     <TextBox Text="{Binding WindowStartSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S3 SVID"/>
-                    <TextBlock Text="S4 tool link" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Text="S4 tool link (optional)" Style="{StaticResource FieldLabel}"
+                               ToolTip="0 = the EAP does not provide S4. The S1F3 then leaves it out, and a lost EAP–tool link is seen only through S1 = 2 or the tool-link CEID."/>
                     <TextBox Text="{Binding ToolLinkSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S4 SVID"/>
                     <TextBlock Text="S5 last CEID" Style="{StaticResource FieldLabel}"/>
                     <TextBox Text="{Binding LastCeidSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S5 SVID"/>
@@ -94,7 +99,8 @@
                     <TextBox Text="{Binding SequenceSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S7 SVID"/>
                     <TextBlock Text="Forward CEID" Style="{StaticResource FieldLabel}"/>
                     <TextBox Text="{Binding ForwardCeid}" Style="{StaticResource IdBox}" AutomationProperties.Name="Forward CEID"/>
-                    <TextBlock Text="Tool-link CEID" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Text="Tool-link CEID (optional)" Style="{StaticResource FieldLabel}"
+                               ToolTip="0 = the EAP does not send it. S2F37 then enables the forward CEID alone, and a change of the EAP–tool link is seen at the next 30 s S1F3 instead of at once."/>
                     <TextBox Text="{Binding LinkCeid}" Style="{StaticResource IdBox}" AutomationProperties.Name="Tool-link CEID"/>
                 </WrapPanel>
 

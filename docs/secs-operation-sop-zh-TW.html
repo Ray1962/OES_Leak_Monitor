@@ -709,7 +709,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <p>OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 <code>TOOL_EVENT</code>，改由 <strong>OES 以 SECS host 身分主動連到 EAP</strong>（方案 2b）：EAP 當 equipment，OES 連上後讀 EAP 的 S1～S7（PM3 目前的視窗等），之後每 30 秒再讀一次，並接收 EAP 以 S6F11 轉發的主機台事件。給平台方的規格是 <code>eap-tool-event-secs-spec-zh-TW</code>。12.1～12.3 的比值類別、CEID 對照表、<code>Use tool events</code> 照做，只是事件改從這條連線進來。</p>
 <p><strong>設定（Engineer）：</strong></p>
 <ol>
-<li>跟 EAP 平台確認監聽位址（現場為 <code>10.2.3.120:20347</code>）、Device ID，以及 <strong>EAP 指定的 9 個識別碼</strong>（S1～S7 的 SVID、轉發事件 CEID、主機台連線狀態 CEID），並把 <strong>OES PC 的 IP</strong> 交給對方，讓 EAP 主機的防火牆放行。填進規格書 §10 的現場設定紀錄。
+<li>跟 EAP 平台確認監聽位址（現場為 <code>10.2.3.120:20347</code>）、Device ID，以及 <strong>EAP 指定的 9 個識別碼</strong>（S1～S7 的 SVID、轉發事件 CEID、主機台連線狀態 CEID；其中 S4 與主機台連線狀態 CEID 是選填，平台不提供就填 0），並把 <strong>OES PC 的 IP</strong> 交給對方，讓 EAP 主機的防火牆放行。填進規格書 §10 的現場設定紀錄。
 </li>
 <li>到 <strong>EAP 分頁</strong>的 <code>EAP link (SECS host) — applies on save</code>：勾 <code>Connect to the EAP</code>，填 <code>EAP address</code>、<code>Port</code>、<code>Device ID</code>，<code>Silence timeout (s)</code> 用預設 75；在 <code>EAP ids</code> 填 9 個編號。
 </li>

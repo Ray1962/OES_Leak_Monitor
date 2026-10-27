@@ -185,7 +185,7 @@ td code{white-space:nowrap;}
 </tbody></table></div>
 <p>連上後 OES 讀 S1F2 的 MDLN／SOFTREV 並記入日誌，不做比對。</p>
 <h2 id="4-eap-需要提供的識別碼與資料">4. EAP 需要提供的識別碼與資料</h2>
-<p>下表的 S1～S7、兩個 CEID 共 <strong>9 個識別碼由 EAP 方指定</strong>，在 OES 的 EAP 分頁輸入（預設為 0，代表未設定；9 個都填、而且 S1～S7 不重複，OES 才會連線）。</p>
+<p>下表的 S1～S7、兩個 CEID 共 <strong>9 個識別碼由 EAP 方指定</strong>，在 OES 的 EAP 分頁輸入（預設為 0，代表未設定）。其中 <strong>S4 與連線狀態 CEID 是選填</strong>：平台做不到時填 0，OES 照樣連線（見 Q5）。其餘 7 個都要填，而且 S1～S7 不可重複，OES 才會連線。</p>
 <h3 id="41-svid供-oes-以-s1f3-讀取">4.1 SVID（供 OES 以 S1F3 讀取）</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>代號</th><th>名稱</th><th>格式</th><th>內容</th></tr></thead>
@@ -193,7 +193,7 @@ td code{white-space:nowrap;}
 <tr><td>S1</td><td>PM3 視窗狀態</td><td>U1</td><td><strong>0</strong> = 不在任何視窗內、<strong>1</strong> = 在視窗內、<strong>2</strong> = 不明（EAP 不知道 PM3 目前狀態）</td></tr>
 <tr><td>S2</td><td>目前視窗的 Start CEID</td><td>U4</td><td>S1 = 1 時為開啟這個視窗的<strong>主機台原始 CEID</strong>；其他情況為 0</td></tr>
 <tr><td>S3</td><td>目前視窗的開始時間</td><td>A[16]</td><td>S1 = 1 時為 EAP 收到該 Start 的時間；其他情況為空字串</td></tr>
-<tr><td>S4</td><td>EAP 與主機台的通訊狀態</td><td>U1</td><td><strong>0</strong> = 未通訊、<strong>1</strong> = 通訊中</td></tr>
+<tr><td>S4</td><td>EAP 與主機台的通訊狀態（<strong>選填</strong>）</td><td>U1</td><td><strong>0</strong> = 未通訊、<strong>1</strong> = 通訊中。平台不提供時，OES 的 S1F3 只讀 S1～S3、S5～S7</td></tr>
 <tr><td>S5</td><td>最後一筆轉發事件的主機台 CEID</td><td>U4</td><td>尚無事件時為 0</td></tr>
 <tr><td>S6</td><td>最後一筆事件的時間</td><td>A[16]</td><td>EAP 收到該事件的時間；尚無事件時為空字串</td></tr>
 <tr><td>S7</td><td>序號</td><td>U4</td><td>每轉發一筆事件加 1，EAP 重啟後從 0 開始</td></tr>
@@ -204,7 +204,7 @@ td code{white-space:nowrap;}
 <thead><tr><th>代號</th><th>名稱</th><th>觸發時機</th><th>報告（<strong>由平台固定，只有一份</strong>）</th></tr></thead>
 <tbody>
 <tr><td>轉發 CEID</td><td>PM3 事件轉發</td><td>EAP 收到主機台的任何事件時</td><td><code>L{ U4 主機台原始CEID, A[16] EAP收到的時間, U4 序號 }</code>，也就是 S5、S6、S7</td></tr>
-<tr><td>連線狀態 CEID</td><td>主機台通訊狀態改變</td><td>S4 改變時</td><td><code>L{ U1 S4 }</code></td></tr>
+<tr><td>連線狀態 CEID（<strong>選填</strong>）</td><td>主機台通訊狀態改變</td><td>S4 改變時</td><td><code>L{ U1 S4 }</code>。平台不提供時，OES 的 S2F37 只啟用轉發 CEID</td></tr>
 </tbody></table></div>
 <ul>
 <li><strong>只用一個轉發 CEID 送所有主機台事件</strong>，原始 CEID 放在報告第一個值。主機台新增事件時，只要改 OES 的 CEID 對照表，EAP 不用改。
@@ -212,6 +212,8 @@ td code{white-space:nowrap;}
 <li>報告內容<strong>依位置讀取</strong>，順序與格式必須和上表完全一致。OES 收到不符的報告（數量、順序或型別不對）會記錄並捨棄該筆事件，靠下一次 S1F3 補回視窗。報告格式之後若要變更，請事先通知。
 </li>
 <li>時間值是 <strong>EAP 收到事件的時間</strong>：主機台的事件報告不帶時間戳（2026-10-26 確認）。請一律填上，不要留空。
+</li>
+<li><strong>S4 與連線狀態 CEID 不提供時</strong>，OES 就看不到 EAP 與主機台之間的連線本身，只能從 <strong>S1 = 2</strong> 得知 EAP 不知道 PM3 的狀態（所以 E4、E5 的「S1 改為 2」更重要），或等 OES 端的視窗上限（600 秒）到期。只缺 S4 時，連線狀態改變只靠事件得知，漏掉的事件不會被 30 秒一次的 S1F3 補回；只缺連線狀態 CEID 時，改變要到下一次 S1F3 才會被發現。OES 會在系統日誌記一筆 <code>EapToolLinkNotMonitored</code>，EAP 分頁也會以橘字標示。
 </li>
 </ul>
 <p>本規格所說的「PM3 製程事件」至少包括：</p>
@@ -317,7 +319,7 @@ S1F4
 <tr><td>Q2</td><td>能否提供自訂 SVID，由平台程式維護？</td><td>✅ 可以（2026-10-26）</td></tr>
 <tr><td>Q3</td><td>報告是 host 動態定義，還是平台固定？</td><td>✅ <strong>平台固定</strong>（2026-10-26）。所以本規格不用 S2F33／S2F35，報告格式見 4.2</td></tr>
 <tr><td>Q4</td><td>主機台的事件報告有沒有時間戳？</td><td>✅ <strong>沒有</strong>（2026-10-26）。時間值填 EAP 收到的時間</td></tr>
-<tr><td>Q5</td><td>平台能否即時得知自己與主機台的通訊狀態（S4、連線狀態 CEID）？</td><td><strong>預設為必要，待廠商確認</strong>。做不到時，與主機台斷線期間 OES 只能靠 75 秒逾時或 OES 端的視窗上限（600 秒）發現</td></tr>
+<tr><td>Q5</td><td>平台能否即時得知自己與主機台的通訊狀態（S4、連線狀態 CEID）？</td><td><strong>建議提供，待廠商確認；不是連線的前提。</strong> 做不到時兩者在 OES 填 0，OES 照樣連線；與主機台斷線只能靠 S1 = 2 或 OES 端的視窗上限（600 秒）發現（見 4.2）</td></tr>
 <tr><td>Q6</td><td>逾時與間隔（S1F3 每 30 秒、OES 判定中斷 75 秒、事件 1 秒內送出）</td><td>✅ 可以配合（2026-10-26）</td></tr>
 </tbody></table></div>
 <p><strong>現場設定紀錄</strong>（上線時填寫，雙方各留一份）：</p>
@@ -347,14 +349,14 @@ S1F4
 <thead><tr><th>#</th><th>操作</th><th>預期結果</th></tr></thead>
 <tbody>
 <tr><td>1</td><td>OES 啟用連線</td><td>5.1 的步驟全部成功；OES EAP 分頁顯示綠色 <code>connected</code></td></tr>
-<tr><td>2</td><td>PM3 閒置時觀察</td><td>OES 每 30 秒讀一次 S1～S7：S1 = 0、S4 = 1</td></tr>
+<tr><td>2</td><td>PM3 閒置時觀察</td><td>OES 每 30 秒讀一次 S1～S7：S1 = 0、S4 = 1（不提供 S4 時，OES 讀 S1～S3、S5～S7，EAP 分頁顯示 <code>tool link not monitored</code>）</td></tr>
 <tr><td>3</td><td>主機台跑一次 PM3 Chamber Process</td><td>Start／End 各一筆 S6F11，1 秒內送出，報告為主機台 CEID、時間、序號；期間 S1 = 1、S2 = 3100439529；OES 顯示製程 A 視窗</td></tr>
 <tr><td>4</td><td>主機台跑一次 PM3 Chamber Clean</td><td>同上，S2 = 3099591660，OES 顯示製程 B 視窗</td></tr>
 <tr><td>5</td><td>轉發一筆不在 OES 對照表內的 CEID（例如 slit door）</td><td>OES 記錄、不處理；視窗不變</td></tr>
 <tr><td>6</td><td>PM3 製程進行中，重啟 OES</td><td>OES 重新連上，讀 S1～S7 後立刻恢復到正確的製程視窗，不必等下一筆事件</td></tr>
 <tr><td>7</td><td>PM3 製程進行中，拔掉 OES 的網路線 90 秒後接回</td><td>OES 在 75 秒時改為「不明」；接回後自動重連並恢復正確視窗</td></tr>
-<tr><td>8</td><td>中斷 EAP 與主機台的連線</td><td>EAP 送連線狀態 CEID（值 0），S1 = 2、S4 = 0；OES 改為「不明」</td></tr>
-<tr><td>9</td><td>恢復 EAP 與主機台的連線</td><td>連線狀態 CEID（值 1）；S1 在下一筆 PM3 製程事件後恢復正確值</td></tr>
+<tr><td>8</td><td>中斷 EAP 與主機台的連線</td><td>EAP 送連線狀態 CEID（值 0），S1 = 2、S4 = 0；OES 改為「不明」。不提供 S4／連線狀態 CEID 時，只驗 S1 = 2，OES 在下一次 S1F3 改為「不明」</td></tr>
+<tr><td>9</td><td>恢復 EAP 與主機台的連線</td><td>連線狀態 CEID（值 1，有提供時）；S1 在下一筆 PM3 製程事件後恢復正確值</td></tr>
 <tr><td>10</td><td>重啟 EAP</td><td>OES 自動重連；S7 = 0、S1 = 2，第一筆事件的序號為 1，OES 正常接受</td></tr>
 <tr><td>11</td><td>檢查 EAP 日誌</td><td>OES 沒有送過 S2F33、S2F35、S2F31、S2F41、S2F15</td></tr>
 </tbody></table></div>

@@ -21,8 +21,9 @@ public enum EapLinkState
     Connected,
 }
 
-/// <summary>S1–S7 as the last successful S1F3 read them.</summary>
-public sealed record EapStatusReading(byte WindowState, uint WindowCeid, string WindowStart, byte ToolLink,
+/// <summary>S1–S7 as the last successful S1F3 read them. <see cref="ToolLink"/> is null when the
+/// EAP does not provide S4 (<see cref="EapLinkSettings.HasToolLinkSvid"/>).</summary>
+public sealed record EapStatusReading(byte WindowState, uint WindowCeid, string WindowStart, byte? ToolLink,
     uint LastCeid, string LastTime, uint Sequence, DateTime ReadAt);
 
 /// <summary>
@@ -32,8 +33,10 @@ public sealed record EapStatusReading(byte WindowState, uint WindowCeid, string 
 /// <param name="Silent">No successful exchange for longer than the silence timeout: the link
 /// has told the engine the window is no longer known.</param>
 /// <param name="Detail">Why it is not connected, in words; "" when connected.</param>
+/// <param name="ToolLinkGap">What the OES cannot see because the EAP provides no S4 or no
+/// tool-link CEID (<see cref="EapLinkSettings.ToolLinkGap"/>); "" when it provides both.</param>
 public sealed record EapLinkStatus(EapLinkState State, string Endpoint, DateTime? ConnectedSince,
-    EapStatusReading? LastReading, string LastEvent, bool Silent, string Detail)
+    EapStatusReading? LastReading, string LastEvent, bool Silent, string Detail, string ToolLinkGap = "")
 {
     public static readonly EapLinkStatus Disabled = new(EapLinkState.Disabled, "", null, null, "", false, "");
 }
@@ -222,9 +225,21 @@ public sealed class EapSecsLink : IDisposable
         var token = _runCts.Token;
         Interlocked.Exchange(ref _lastGoodTicks, DateTime.Now.Ticks);
         _silenceArmed = false;
-        Update(_ => EapLinkStatus.Disabled with { State = EapLinkState.Connecting, Endpoint = endpoint });
+        Update(_ => EapLinkStatus.Disabled with
+        {
+            State = EapLinkState.Connecting, Endpoint = endpoint, ToolLinkGap = s.ToolLinkGap() ?? "",
+        });
         Trace($"[EAP] connecting to {endpoint} as host (device {s.DeviceId}); ids: S1-S7 = " +
-              $"{string.Join(",", s.StatusSvids)}, forward CEID {s.ForwardCeid}, link CEID {s.LinkCeid}");
+              $"{string.Join(",", s.StatusSvids.Select(i => i == 0 ? "-" : i.ToString(CultureInfo.InvariantCulture)))}, " +
+              $"forward CEID {s.ForwardCeid}, link CEID {(s.HasLinkCeid ? s.LinkCeid.ToString(CultureInfo.InvariantCulture) : "not provided")}");
+        if (s.ToolLinkGap() is { } gap)
+        {
+            // Once per start, not per connect: it is a fact about the configuration, and a
+            // reconnect every few minutes would bury it.
+            Trace($"[EAP] tool link not monitored: {gap}");
+            _log?.LogSystemEvent(LogSeverity.Information, "EapToolLinkNotMonitored",
+                $"EAP link to {endpoint}: {gap}", related: $"Endpoint={endpoint}");
+        }
         host.Start();
         host.Enable();
         _runTask = Task.Run(() => RunAsync(s, host, endpoint, token));
@@ -290,11 +305,13 @@ public sealed class EapSecsLink : IDisposable
     {
         await host.GoOnlineAsync();
         await host.AreYouThereAsync();   // S1F2 MDLN/SOFTREV: logged to the trace, not compared
-        if (!await host.EnableEventReportsAsync(true, new[] { s.ForwardCeid, s.LinkCeid }))
+        var ceids = s.EnabledCeids;
+        string named = string.Join(" and ", ceids);
+        if (!await host.EnableEventReportsAsync(true, ceids))
         {
-            Update(st => st with { Detail = $"the EAP refused S2F37 for CEID {s.ForwardCeid}, {s.LinkCeid}" });
+            Update(st => st with { Detail = $"the EAP refused S2F37 for CEID {string.Join(", ", ceids)}" });
             LogThrottled("enable", LogSeverity.Warning, "EapLinkSetupFailed",
-                $"The EAP at {endpoint} refused to enable CEID {s.ForwardCeid} and {s.LinkCeid} (S2F37); " +
+                $"The EAP at {endpoint} refused to enable CEID {named} (S2F37); " +
                 "check the ids on the EAP tab against the EAP's", related: $"Endpoint={endpoint}");
             return false;
         }
@@ -381,22 +398,26 @@ public sealed class EapSecsLink : IDisposable
 
     private async Task PollAsync(EapLinkSettings s, GemHost host)
     {
-        var result = await host.QueryStatusAsync(s.StatusSvids);
+        var result = await host.QueryStatusAsync(s.QueriedSvids);
         if (!result.Succeeded)
         {
             LogThrottled("poll", LogSeverity.Warning, "EapStatusQueryFailed",
                 $"Reading S1–S7 from the EAP failed: {result.Error}");
             return;
         }
-        if (ParseReading(result.Values!) is not { } reading)
+        if (ParseReading(result.Values!, s.HasToolLinkSvid) is not { } reading)
         {
-            LogRejected($"S1F4 for S1–S7 is not U1, U4, A, U1, U4, A, U4 ({Describe(result.Values!)})");
+            LogRejected(s.HasToolLinkSvid
+                ? $"S1F4 for S1–S7 is not U1, U4, A, U1, U4, A, U4 ({Describe(result.Values!)})"
+                : $"S1F4 for S1–S3, S5–S7 is not U1, U4, A, U4, A, U4 ({Describe(result.Values!)})");
             return;
         }
         Heard();
         Update(st => st with { LastReading = reading });
         CheckSequence(reading.Sequence, fromEvent: false);
 
+        // S4 = 0 overrides S1: the EAP cannot know the window without the tool. With no S4
+        // (null) the EAP is relied on to set S1 = 2 itself, as the spec asks (E4/E5).
         var report = reading.ToolLink == 0
             ? new ToolContextReport(ToolContextReportState.Unknown, 0, "the EAP reports no SECS link to the tool")
             : reading.WindowState switch
@@ -411,17 +432,21 @@ public sealed class EapSecsLink : IDisposable
             LogRejected($"S2 = {reading.WindowCeid} is an End event in the CEID table");
     }
 
-    /// <summary>S1–S7 in their fixed formats, or null. Strings are accepted empty (no window,
-    /// nothing received yet); numbers are read the tolerant way <c>TOOL_EVENT</c> reads a CEID.</summary>
-    public static EapStatusReading? ParseReading(IReadOnlyList<Item> v)
+    /// <summary>S1–S7 in their fixed formats, or null — six values, S4 left out, when
+    /// <paramref name="hasToolLink"/> is false (the order <see cref="EapLinkSettings.QueriedSvids"/>
+    /// asked for). Strings are accepted empty (no window, nothing received yet); numbers are read
+    /// the tolerant way <c>TOOL_EVENT</c> reads a CEID.</summary>
+    public static EapStatusReading? ParseReading(IReadOnlyList<Item> v, bool hasToolLink = true)
     {
-        if (v.Count != 7) return null;
+        if (v.Count != (hasToolLink ? 7 : 6)) return null;
+        int after = hasToolLink ? 1 : 0;   // S5–S7 move up one when S4 is not there
         uint? state = SecsBridge.ParseCeid(v[0]), winCeid = SecsBridge.ParseCeid(v[1]),
-              link = SecsBridge.ParseCeid(v[3]), lastCeid = SecsBridge.ParseCeid(v[4]), seq = SecsBridge.ParseCeid(v[6]);
-        if (state is not (0 or 1 or 2) || winCeid is null || link is not (0 or 1) || lastCeid is null || seq is null)
-            return null;
-        if (Text(v[2]) is not { } winStart || Text(v[5]) is not { } lastTime) return null;
-        return new EapStatusReading((byte)state.Value, winCeid.Value, winStart, (byte)link.Value,
+              lastCeid = SecsBridge.ParseCeid(v[3 + after]), seq = SecsBridge.ParseCeid(v[5 + after]);
+        uint? link = hasToolLink ? SecsBridge.ParseCeid(v[3]) : null;
+        if (state is not (0 or 1 or 2) || winCeid is null || lastCeid is null || seq is null) return null;
+        if (hasToolLink && link is not (0 or 1)) return null;
+        if (Text(v[2]) is not { } winStart || Text(v[4 + after]) is not { } lastTime) return null;
+        return new EapStatusReading((byte)state.Value, winCeid.Value, winStart, (byte?)link,
             lastCeid.Value, lastTime, seq.Value, DateTime.Now);
     }
 
@@ -444,7 +469,8 @@ public sealed class EapSecsLink : IDisposable
             LogRejected("S6F11 is not L,3 { DATAID, CEID, reports }");
             return;
         }
-        if (ceid != s.ForwardCeid && ceid != s.LinkCeid) return;   // not ours: the EAP may report more
+        bool isLink = s.HasLinkCeid && ceid == s.LinkCeid;
+        if (ceid != s.ForwardCeid && !isLink) return;   // not ours: the EAP may report more
         var reports = body[2];
         if (reports.Format != SecsFormat.List || reports.Count != 1 ||
             reports[0] is not { Format: SecsFormat.List, Count: 2 } report || report[1].Format != SecsFormat.List)
@@ -453,7 +479,7 @@ public sealed class EapSecsLink : IDisposable
             return;
         }
         var values = report[1];
-        if (ceid == s.LinkCeid)
+        if (isLink)
         {
             uint? link = values.Count == 1 ? SecsBridge.ParseCeid(values[0]) : null;
             if (link is not (0 or 1))
