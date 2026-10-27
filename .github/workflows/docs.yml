@@ -1,0 +1,17 @@
+# The generated operator docs are what the fab reads. This fails a push or PR whose HTML
+# was not regenerated from its Markdown, or whose publish lists disagree.
+# (The .NET build and tests need the local NuGet feed and Windows, so they are not here.)
+name: docs
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generated HTML is current; publish lists agree
+        run: python3 tools/check-docs.py
