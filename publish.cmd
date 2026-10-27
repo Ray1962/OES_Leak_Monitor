@@ -80,6 +80,8 @@ for %%F in (
     golden-run-baseline-troubleshooting-zh-TW.html
     baseline-builder-sop-zh-TW.html
     secs-ratio-svid-example-zh-TW.html
+    fdc-integration-spec-zh-TW.html
+    eap-tool-event-secs-spec-zh-TW.html
     check-oes-connect.ps1
     check-oes-connect.cmd
 ) do (
@@ -109,6 +111,8 @@ if defined MISSING (
     echo    python3 tools\md2html.py docs\golden-run-baseline-troubleshooting-zh-TW.md docs\golden-run-baseline-troubleshooting-zh-TW.html "OES Leak Monitor Golden Run baseline troubleshooting"
     echo    python3 tools\md2html.py docs\baseline-builder-sop-zh-TW.md docs\baseline-builder-sop-zh-TW.html "OES Leak Monitor Baseline Builder SOP"
     echo    python3 tools\md2html.py docs\secs-ratio-svid-example-zh-TW.md docs\secs-ratio-svid-example-zh-TW.html "OES Leak Monitor Species Ratio SVID examples"
+    echo    python3 tools\md2html.py docs\fdc-integration-spec-zh-TW.md docs\fdc-integration-spec-zh-TW.html "OES Leak Monitor FDC integration spec"
+    echo    python3 tools\md2html.py docs\eap-tool-event-secs-spec-zh-TW.md docs\eap-tool-event-secs-spec-zh-TW.html "OES Leak Monitor EAP interface spec"
     echo.
     echo  secs-acceptance-sheet-zh-TW.html has NO Markdown source - it is a form,
     echo  hand-authored as HTML. Do not regenerate it; restore it from git.
@@ -118,7 +122,7 @@ if defined MISSING (
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 22 files present ***
+echo  *** PUBLISH SUCCEEDED - all 24 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -141,6 +145,9 @@ echo    baseline-builder-sop-zh-TW.html
 echo                               building a Golden Run from recordings on disk
 echo    secs-ratio-svid-example-zh-TW.html
 echo                               per-ratio SVID worked examples for the host
+echo    fdc-integration-spec-zh-TW.html    interface spec for the FDC (the SECS host)
+echo    eap-tool-event-secs-spec-zh-TW.html
+echo                               interface spec for the EAP (process events)
 echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
 echo.
 
