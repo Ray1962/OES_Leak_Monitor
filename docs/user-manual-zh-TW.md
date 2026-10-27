@@ -1173,7 +1173,8 @@ OES 在這條連線上是 **host**，主動連到 EAP（預設 `10.2.3.120:20347
 | 顯示 | 意思 |
 |---|---|
 | `EAP link: not in use` | 沒有啟用 |
-| `EAP link: not started — the EAP ids are not all set`（橘） | 已勾選連線，但 9 個 EAP 識別碼還沒填齊，或有重複，所以不會連線 |
+| `EAP link: not started — the EAP ids are not all set (…)`（橘） | 已勾選連線，但必填的 EAP 識別碼還沒填齊（括號內列出缺哪幾個），或有重複，所以不會連線 |
+| `Tool link not fully monitored — …`（橘，第三行） | EAP 不提供 S4 或連線狀態 CEID（`S4 tool link`／`Tool-link CEID` 填 0）。連線照常運作，這行說明 OES 因此看不到什麼 |
 | `EAP link: connected to … (since hh:mm:ss)`（綠） | 已連上，事件也已啟用 |
 | `EAP link: connecting to … — …`（紅） | 連不上或斷線，會自動重試；破折號後面是原因 |
 | `Last S1F3 hh:mm:ss · PM3 … · tool link up · SEQ n · last event: …` | 最後一次讀 S1～S7 的時間與內容，以及最後一筆轉發事件 |
@@ -1188,7 +1189,7 @@ OES 在這條連線上是 **host**，主動連到 EAP（預設 `10.2.3.120:20347
 | `Connect to the EAP` | 預設不勾 |
 | `EAP address`／`Port`／`Device ID` | 預設 `10.2.3.120`／`20347`／`0`；EAP 若另開 HSMS port 或主備切換到別的 IP，在這裡改 |
 | `Silence timeout (s)` | 預設 75，可設 35～600 |
-| `EAP ids`：S1～S7、`Forward CEID`、`Tool-link CEID` | EAP 方指定的 9 個編號，預設是 0（未設定）。全部填齊而且不重複，連線才會啟動 |
+| `EAP ids`：S1～S7、`Forward CEID`、`Tool-link CEID` | EAP 方指定的 9 個編號，預設是 0（未設定）。`S4 tool link (optional)` 和 `Tool-link CEID (optional)` 是選填：EAP 不提供就留 0。其餘 7 個填齊而且不重複，連線才會啟動 |
 
 收到的事件會不會被採用，仍由下方 `Use tool events` 決定。收送的每一則訊息都記在 `Logs\eap_YYYYMMDD.log`（不是 `secs_` 那個檔），分頁最下方有路徑。
 
@@ -1603,7 +1604,7 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 
 EAP 分頁最上方那一行會寫原因。依序檢查：
 
-1. **`not started — the EAP ids are not all set`（或 `… share an SVID`）** —— 9 個 EAP 識別碼沒填齊或有重複。照 EAP 方給的編號在 EAP 分頁填好，Save & apply。
+1. **`not started — the EAP ids are not all set`（或 `… share an SVID`）** —— 必填的 EAP 識別碼沒填齊（訊息括號內列出缺哪幾個）或有重複。照 EAP 方給的編號在 EAP 分頁填好，Save & apply。S4 和 `Tool-link CEID` 可以留 0。
 2. **`connecting to … — cannot reach the EAP (…目標電腦拒絕連線)`** —— EAP 那邊沒有在該 port 監聽。請 EAP 平台確認服務已啟動、位址與 port 和 EAP 分頁填的一致。
 3. **`connecting to … — cannot reach the EAP (…)` 其他原因，或一直停在 `connecting…`** —— 網路不通，或 EAP 主機的防火牆擋了 OES PC 的 IP。請 IT 確認 OES PC 能連到 EAP 的位址與 port。
 4. **系統日誌有 `EapLinkSetupFailed`** —— 連上了，但 EAP 拒絕啟用事件：`Forward CEID`／`Tool-link CEID` 和 EAP 的編號不一致。

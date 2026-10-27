@@ -101,10 +101,26 @@ public sealed class EapViewModel : INotifyPropertyChanged
                 0 => "outside any window",
                 _ => "state unknown",
             };
-            return $"Last S1F3 {r.ReadAt:HH:mm:ss} · PM3 {state} · tool link {(r.ToolLink == 1 ? "up" : "DOWN")} · SEQ {r.Sequence}" +
+            string link = r.ToolLink switch { 1 => "up", 0 => "DOWN", _ => "not monitored (no S4)" };
+            return $"Last S1F3 {r.ReadAt:HH:mm:ss} · PM3 {state} · tool link {link} · SEQ {r.Sequence}" +
                    (s.LastEvent.Length > 0 ? $" · last event: {s.LastEvent}" : "");
         }
     }
+
+    /// <summary>Third status line, shown only while the EAP provides no S4 or no tool-link CEID:
+    /// what the OES then cannot see. Says so rather than let "tool link up" go unmentioned.</summary>
+    public string EapToolLinkText
+    {
+        get
+        {
+            var s = LinkStatus;
+            return s.State is EapLinkState.Disabled or EapLinkState.IdsMissing || s.ToolLinkGap.Length == 0
+                ? ""
+                : "Tool link not fully monitored — " + s.ToolLinkGap + ".";
+        }
+    }
+
+    public bool ShowsToolLinkGap => EapToolLinkText.Length > 0;
 
     public Brush EapLinkBrush => LinkStatus switch
     {
@@ -287,7 +303,7 @@ public sealed class EapViewModel : INotifyPropertyChanged
                    $"({EapLinkSettings.MinSilenceTimeoutSeconds:0}–{EapLinkSettings.MaxSilenceTimeoutSeconds:0}). " +
                    "The OES reads the EAP every 30 s; a shorter timeout fires on a healthy link.";
         if (Eap.Enabled && Eap.IdProblem() is { } ids)
-            return ids + " — enter the nine ids the EAP assigned.";
+            return ids + " — enter the ids the EAP assigned (S4 and the tool-link CEID may stay 0 if it provides neither).";
         return "";
     }
 
@@ -304,6 +320,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(EapLinkText));
         OnPropertyChanged(nameof(EapDetailText));
+        OnPropertyChanged(nameof(EapToolLinkText));
+        OnPropertyChanged(nameof(ShowsToolLinkGap));
         OnPropertyChanged(nameof(EapLinkBrush));
         OnPropertyChanged(nameof(EapLogFilePath));
     }

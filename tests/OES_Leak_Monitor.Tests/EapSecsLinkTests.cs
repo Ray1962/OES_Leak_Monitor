@@ -48,6 +48,20 @@ public sealed class EapSecsLinkTests : IDisposable
     /// </summary>
     private sealed class FakeEap : IDeviceProfile
     {
+        /// <param name="servesS4">False: a platform with no S4 at all (spec Q5), so an S1F3 that
+        /// asks for 6004 gets an empty item back. The tool-link report then cannot exist either.</param>
+        public FakeEap(bool servesS4 = true)
+        {
+            _servesS4 = servesS4;
+            PredefinedReports = servesS4
+                ? new Dictionary<uint, uint[]> { [6200] = new uint[] { 6005, 6006, 6007 }, [6201] = new uint[] { 6004 } }
+                : new Dictionary<uint, uint[]> { [6200] = new uint[] { 6005, 6006, 6007 } };
+            PredefinedEventLinks = servesS4
+                ? new Dictionary<uint, uint[]> { [6100] = new uint[] { 6200 }, [6101] = new uint[] { 6201 } }
+                : new Dictionary<uint, uint[]> { [6100] = new uint[] { 6200 } };
+        }
+
+        private readonly bool _servesS4;
         public byte State = 2, ToolLink = 1;
         public uint WindowCeid, LastCeid, Seq;
         public string WindowStart = "", LastTime = "";
@@ -60,7 +74,7 @@ public sealed class EapSecsLinkTests : IDisposable
             yield return new SvDefinition(6001, "S1", "", () => U1(State));
             yield return new SvDefinition(6002, "S2", "", () => U4(WindowCeid));
             yield return new SvDefinition(6003, "S3", "", () => A(WindowStart));
-            yield return new SvDefinition(6004, "S4", "", () => U1(ToolLink));
+            if (_servesS4) yield return new SvDefinition(6004, "S4", "", () => U1(ToolLink));
             yield return new SvDefinition(6005, "S5", "", () => U4(LastCeid));
             yield return new SvDefinition(6006, "S6", "", () => TimeAsU4 ? U4(0) : A(LastTime));
             yield return new SvDefinition(6007, "S7", "", () => U4(Seq));
@@ -70,17 +84,9 @@ public sealed class EapSecsLinkTests : IDisposable
         public IReadOnlyList<HostAction> HostActions { get; } = Array.Empty<HostAction>();
         public IReadOnlyList<EquipmentAction> EquipmentActions { get; } = Array.Empty<EquipmentAction>();
 
-        public IReadOnlyDictionary<uint, uint[]> PredefinedReports { get; } = new Dictionary<uint, uint[]>
-        {
-            [6200] = new uint[] { 6005, 6006, 6007 },
-            [6201] = new uint[] { 6004 },
-        };
+        public IReadOnlyDictionary<uint, uint[]> PredefinedReports { get; }
 
-        public IReadOnlyDictionary<uint, uint[]> PredefinedEventLinks { get; } = new Dictionary<uint, uint[]>
-        {
-            [6100] = new uint[] { 6200 },
-            [6101] = new uint[] { 6201 },
-        };
+        public IReadOnlyDictionary<uint, uint[]> PredefinedEventLinks { get; }
 
         /// <summary>A tool event: SEQ + 1, S5/S6, the window per the STATE rules, then S6F11.</summary>
         public Task Forward(EquipmentSimulator eq, uint toolCeid, string time = "2026102714014000")
@@ -311,6 +317,95 @@ public sealed class EapSecsLinkTests : IDisposable
 
         Assert.True(await Wait(() => _reports.Any(r => r.State == ToolContextReportState.Unknown)));
         Assert.Contains("no SECS link", _reports.First(r => r.State == ToolContextReportState.Unknown).Reason);
+    }
+
+    // ---------------------------------------------------------------- S4 / tool-link CEID optional (#64)
+
+    private static EapLinkSettings WithoutToolLink(int port, bool keepLinkCeid = false)
+    {
+        var s = To(port);
+        s.ToolLinkSvid = 0;
+        if (!keepLinkCeid) s.LinkCeid = 0;
+        return s;
+    }
+
+    /// <summary>
+    /// The case #64 exists for: a platform with no S4 and no tool-link CEID. Configured with
+    /// both left 0, the OES still connects, enables the forwarding CEID alone, reads six
+    /// variables, takes the window from S1/S2 and the events as before — and logs, once, what it
+    /// can no longer see.
+    /// </summary>
+    [Fact]
+    public async Task WithNeitherProvided_TheLinkStillDeliversEventsAndTheWindow()
+    {
+        using var log = new LogCapture();
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap(servesS4: false) { State = 1, WindowCeid = ProcessStart, WindowStart = "2026102714014000" };
+        await using (var eap = new Eap(profile, port))
+        using (var link = Link(log.Logger, poll: TimeSpan.FromMilliseconds(300)))
+        {
+            link.Configure(WithoutToolLink(port), 30);
+
+            Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected && link.Status.LastReading is not null));
+            Assert.True(eap.Saw("S2F37 enable -> S2F38 ERACK=0 (1 enabled)"));
+            Assert.True(eap.Saw("S1F3 -> S1F4 (6 SV)"));
+            Assert.Null(link.Status.LastReading!.ToolLink);
+            Assert.Contains("neither S4 nor the tool-link CEID", link.Status.ToolLinkGap);
+            Assert.True(await Wait(() => _reports.Any(r => r.State == ToolContextReportState.InWindow && r.StartCeid == ProcessStart)));
+
+            await profile.Forward(eap.Equipment, ProcessEnd);
+            Assert.True(await Wait(() => _events.Any(e => e.Ceid == ProcessEnd)));
+
+            // Without S4 the EAP's own S1 = 2 is what says it lost the tool.
+            profile.State = 2;
+            Assert.True(await Wait(() => _reports.Any(r => r.State == ToolContextReportState.Unknown)));
+            // Several polls and a reconnect-free run: still one entry.
+            await Task.Delay(700);
+        }
+
+        var lines = log.Lines();
+        Assert.Single(lines, l => l.Contains("EapToolLinkNotMonitored"));
+        Assert.DoesNotContain(lines, l => l.Contains("EapReportRejected"));
+    }
+
+    /// <summary>The same platform with S4 still configured: the S1F3 asks for a variable the EAP
+    /// does not have, every reading is refused, and the window is never taken from it — the
+    /// failure leaving S4 at 0 avoids.</summary>
+    [Fact]
+    public async Task WithS4ConfiguredButNotServed_EveryReadingIsRefused()
+    {
+        using var log = new LogCapture();
+        int port = SecsTestPort.Free();
+        await using (var eap = new Eap(new FakeEap(servesS4: false) { State = 1, WindowCeid = ProcessStart }, port))
+        using (var link = Link(log.Logger))
+        {
+            link.Configure(To(port), 30);
+            Assert.True(await Wait(() => eap.Saw("S1F3 -> S1F4 (7 SV)")));
+            await Task.Delay(300);
+            Assert.Null(link.Status.LastReading);
+            Assert.DoesNotContain(_reports, r => r.State == ToolContextReportState.InWindow);
+        }
+
+        Assert.Contains(log.Lines(), l => l.Contains("EapReportRejected"));
+    }
+
+    /// <summary>No S4 but the tool-link CEID: the event alone still withdraws the window.</summary>
+    [Fact]
+    public async Task WithOnlyTheToolLinkCeid_ALinkDownEventStillReportsUnknown()
+    {
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap { State = 0 };
+        await using var eap = new Eap(profile, port);
+        using var link = Link();
+        link.Configure(WithoutToolLink(port, keepLinkCeid: true), 30);
+        Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected && link.Status.LastReading is not null));
+        Assert.True(eap.Saw("S1F3 -> S1F4 (6 SV)"));
+        Assert.Contains("no S4", link.Status.ToolLinkGap);
+        while (_reports.TryDequeue(out _)) { }
+
+        await profile.SetToolLink(eap.Equipment, up: false);
+
+        Assert.True(await Wait(() => _reports.Any(r => r.State == ToolContextReportState.Unknown && r.Reason.Contains("no SECS link"))));
     }
 
     // ---------------------------------------------------------------- polling

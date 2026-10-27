@@ -105,6 +105,7 @@ public sealed class ToolEventUiTests : IDisposable
     [InlineData("timeout")]
     [InlineData("host")]
     [InlineData("id-missing")]
+    [InlineData("forward-ceid-missing")]
     [InlineData("svid-duplicate")]
     [InlineData("ceid-duplicate")]
     public void AnUnusableEapLink_IsNotSaved(string what)
@@ -117,6 +118,7 @@ public sealed class ToolEventUiTests : IDisposable
             case "timeout": vm.EapSilenceTimeoutSeconds = 30; break;
             case "host": vm.EapHost = " "; break;
             case "id-missing": vm.SequenceSvid = 0; break;
+            case "forward-ceid-missing": vm.ForwardCeid = 0; break;
             case "svid-duplicate": vm.WindowCeidSvid = 6001; break;
             case "ceid-duplicate": vm.LinkCeid = 6100; break;
         }
@@ -124,6 +126,30 @@ public sealed class ToolEventUiTests : IDisposable
 
         Assert.Empty(saved);
         Assert.StartsWith("Not saved", vm.SaveMessage);
+    }
+
+    /// <summary>
+    /// S4 and the tool-link CEID are optional (#64, spec Q5): an EAP that cannot report its own
+    /// link to the tool still gives the OES its events and the window, so the link is saved with
+    /// either or both left 0 — and two optional zeros are not "two of S1–S7 share an SVID".
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void S4AndTheToolLinkCeid_MayBeLeftUnset(bool s4, bool linkCeid)
+    {
+        var (vm, saved) = Tab(Pm3());
+        vm.EapEnabled = true;
+        EnterIds(vm);
+        if (!s4) vm.ToolLinkSvid = 0;
+        if (!linkCeid) vm.LinkCeid = 0;
+        vm.SaveCommand.Execute(null);
+
+        var eap = Assert.Single(saved).Eap;
+        Assert.Equal("", vm.SaveMessage);
+        Assert.Equal(s4 ? 6004u : 0u, eap.ToolLinkSvid);
+        Assert.Equal(linkCeid ? 6101u : 0u, eap.LinkCeid);
     }
 
     /// <summary>Switched off, the ids may stay unset: someone filling the tab in before the EAP
