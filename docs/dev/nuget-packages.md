@@ -15,7 +15,7 @@ The local feed, the four in-house packages, what each upgrade changed for this a
 
 `nuget.config` also lists a second local source, `aqusen`, pointing at `Test_SECS\nupkgs`. Both on purpose: `local-aqst` is what makes a build reproducible on a machine with no `Test_SECS` checkout, `aqusen` is what picks up a fresh pack during development without a copy step. `Secs4Net` 2.4.4 comes from nuget.org (via `Aqusen.Secs`, and referenced directly for `SecsGemOptions`).
 
-The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj as the source of truth and update this table when it moves. Bumping `Aqst.OesApp.*` means editing `<Version>` in that library's csproj, re-packing (the `<PackageOutputPath>` writes straight into the local feed), then bumping the `<PackageReference>` here — and in `DualOes_PlasmaMonitor`'s own app and `template/`, which pin the same packages.
+The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj as the source of truth and update this table when it moves — `tools/check-docs.py` fails while the two disagree, or while the csproj references an in-house package the table does not list. Bumping `Aqst.OesApp.*` means editing `<Version>` in that library's csproj, re-packing (the `<PackageOutputPath>` writes straight into the local feed), then bumping the `<PackageReference>` here — and in `DualOes_PlasmaMonitor`'s own app and `template/`, which pin the same packages.
 
 `0.4.6` of the SDK is what supplied `OesAcquireMode` / `OesAverageMode`; it also stopped opting into `UAI_BackgroundRemove` implicitly, though `DeviceViewModel` still passes `EnableBackgroundRemove = true`, so this app's behaviour is unchanged.
 

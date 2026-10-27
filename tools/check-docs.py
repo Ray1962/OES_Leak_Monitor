@@ -12,6 +12,10 @@
 2. The operator docs the csproj copies into the publish folder (_OperatorDoc) must be the
    ones publish.cmd checks for. A doc added to one list and not the other either never
    ships or fails every publish.
+3. The package table in docs/dev/nuget-packages.md must name the version the app's csproj
+   references, and list every in-house package (Aqst.*, Aqusen.*) it references. The
+   table is what someone reads to learn which version to pack and copy into the local
+   feed; it said Aqusen.Secs 0.8.0 for as long as anyone remembered to check.
 
 Only pages md2html wrote are checked, recognised by the sidebar it always emits: an HTML
 page written by hand is left alone even when a .md sits beside it (docs/EAP ceid-events.html
@@ -77,12 +81,34 @@ def publish_lists_disagree():
     return problems
 
 
+PACKAGE_TABLE = "docs/dev/nuget-packages.md"
+APP_CSPROJ = "src/OES_Leak_Monitor/OES_Leak_Monitor.csproj"
+IN_HOUSE = ("Aqst.", "Aqusen.")
+
+
+def package_table_disagrees():
+    with open(os.path.join(ROOT, APP_CSPROJ), encoding="utf-8") as f:
+        referenced = dict(re.findall(r'<PackageReference Include="([^"]+)"\s+Version="([^"]+)"', f.read()))
+    with open(os.path.join(ROOT, PACKAGE_TABLE), encoding="utf-8") as f:
+        listed = dict(re.findall(r"^\| `([\w.]+)` \| ([^ |]+) \|", f.read(), re.MULTILINE))
+    problems = []
+    for name, version in sorted(listed.items()):
+        if name not in referenced:
+            problems.append(f"{PACKAGE_TABLE} lists {name} {version}, which {APP_CSPROJ} does not reference")
+        elif referenced[name] != version:
+            problems.append(f"{PACKAGE_TABLE} says {name} {version}; {APP_CSPROJ} references {referenced[name]}")
+    for name in sorted(n for n in referenced if n.startswith(IN_HOUSE) and n not in listed):
+        problems.append(f"{APP_CSPROJ} references in-house package {name} {referenced[name]}, "
+                        f"which the table in {PACKAGE_TABLE} does not list")
+    return problems
+
+
 if __name__ == "__main__":
     fix = "--fix" in sys.argv[1:]
-    problems = stale_docs(fix) + publish_lists_disagree()
+    problems = stale_docs(fix) + publish_lists_disagree() + package_table_disagrees()
     for p in problems:
         print(p)
     failed = [p for p in problems if not p.startswith("regenerated ")]
     if not problems:
-        print("docs: all generated HTML is current; publish lists agree")
+        print("docs: all generated HTML is current; publish lists agree; package table matches the csproj")
     sys.exit(1 if failed else 0)
