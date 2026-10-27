@@ -93,6 +93,26 @@ OES Leak Monitor 裝在主機台 PM3 上，用電漿光譜偵測腔體漏氣。P
 - 時間值是 **EAP 收到事件的時間**：主機台的事件報告不帶時間戳（2026-10-26 確認）。請一律填上，不要留空。
 - **S4 與連線狀態 CEID 不提供時**，OES 就看不到 EAP 與主機台之間的連線本身，只能從 **S1 = 2** 得知 EAP 不知道 PM3 的狀態（所以 E4、E5 的「S1 改為 2」更重要），或等 OES 端的視窗上限（600 秒）到期。只缺 S4 時，連線狀態改變只靠事件得知，漏掉的事件不會被 30 秒一次的 S1F3 補回；只缺連線狀態 CEID 時，改變要到下一次 S1F3 才會被發現。OES 會在系統日誌記一筆 `EapToolLinkNotMonitored`，EAP 分頁也會以橘字標示。
 
+### 4.3 約定名稱（建議，供 OES 自動帶出識別碼）
+
+平台若支援 S1F11（Status Variable Namelist）與 S1F23（Collection Event Namelist），請把 SVNAME／CENAME 設成下表。OES 連上後會查詢這兩份清單，依名稱帶出 9 個識別碼供工程師確認，不必手抄編號，也能核對已輸入的編號有沒有填反（S1 與 S4 都是 U1、值都是 0／1，只看格式分不出來）。
+
+| 識別碼 | SVNAME／CENAME |
+|---|---|
+| S1 | `PM3_WINDOW_STATE` |
+| S2 | `PM3_WINDOW_CEID` |
+| S3 | `PM3_WINDOW_START` |
+| S4 | `PM3_TOOL_LINK` |
+| S5 | `PM3_LAST_CEID` |
+| S6 | `PM3_LAST_TIME` |
+| S7 | `PM3_EVENT_SEQ` |
+| 轉發 CEID | `PM3_EVENT_FORWARD` |
+| 連線狀態 CEID | `PM3_TOOL_LINK_CHANGED` |
+
+- OES 依名稱**完全比對**（去掉前後空白、不分大小寫），不做模糊比對。找不到或有兩個以上同名的，該項不帶出並說明原因；S4、連線狀態 CEID 找不到時視為「不提供」。
+- 帶出的編號只填進 OES EAP 分頁的欄位，**仍要工程師按 Save 才生效**，OES 不會自動存檔。
+- 這一節是建議，不是連線的前提（見 Q7、Q8）。平台不支援或名稱不同時，照原本的方式由 EAP 方提供編號、在 OES 輸入即可。
+
 本規格所說的「PM3 製程事件」至少包括：
 
 | 主機台 CEID（Start／End） | 事件 |
@@ -203,6 +223,8 @@ EAP 方不需要實作本節，但了解它有助於判讀雙方的日誌。
 | Q4 | 主機台的事件報告有沒有時間戳？ | ✅ **沒有**（2026-10-26）。時間值填 EAP 收到的時間 |
 | Q5 | 平台能否即時得知自己與主機台的通訊狀態（S4、連線狀態 CEID）？ | **建議提供，待廠商確認；不是連線的前提。** 做不到時兩者在 OES 填 0，OES 照樣連線；與主機台斷線只能靠 S1 = 2 或 OES 端的視窗上限（600 秒）發現（見 4.2） |
 | Q6 | 逾時與間隔（S1F3 每 30 秒、OES 判定中斷 75 秒、事件 1 秒內送出） | ✅ 可以配合（2026-10-26） |
+| Q7 | 平台是否支援 S1F11／S1F12（狀態變數名稱清單）與 S1F23／S1F24（事件名稱清單）？ | **建議，待廠商確認；不是連線的前提。** 不支援時，OES 分頁寫明「EAP does not support name queries」，改由人工輸入編號 |
+| Q8 | 平台能否使用 4.3 的約定名稱？ | **建議，待廠商確認；不是連線的前提。** 名稱不同時，OES 仍會列出平台回報的全部名稱，供人工核對 |
 
 **現場設定紀錄**（上線時填寫，雙方各留一份）：
 
@@ -221,7 +243,7 @@ EAP 方不需要實作本節，但了解它有助於判讀雙方的日誌。
 
 **`Test_SECS`**（OES 方提供的 SECS 測試程式，Windows，不需安裝 OES）內建兩個設定檔：
 
-- **OES (2b host)**：角色選 **Host (active)**，連到 EAP 平台後依序按「1. Establish and go online」「2. Enable the EAP events」「3. Read S1–S7」，就是 OES 上線時的同一套步驟。日誌的 `[OES]` 行寫出 S1～S7 的值與意思；收到的每筆 S6F11 依 4.2 的格式解讀，寫在 `[EAP]` 行，格式不符會寫 `REJECTED` 並說明原因。
+- **OES (2b host)**：角色選 **Host (active)**，連到 EAP 平台後依序按「1. Establish and go online」「2. Enable the EAP events」「3. Read S1–S7」，就是 OES 上線時的同一套步驟；「4. Read SV names」「5. Read event names」送 S1F11／S1F23，逐一寫出 4.3 的約定名稱落在哪個編號（找不到、重複或與目前編號不同時會標出）。日誌的 `[OES]` 行寫出 S1～S7 的值與意思；收到的每筆 S6F11 依 4.2 的格式解讀，寫在 `[EAP]` 行，格式不符會寫 `REJECTED` 並說明原因。
 - **EAP (PM3 event forwarder)**：角色選 **Equipment simulator (passive)**，假扮 EAP，提供本規格的 S1～S7 與兩個 CEID，可以按鈕送各種事件。供 OES 方測試，也可以給 EAP 廠商當參考實作。
 
 兩個設定檔的預設編號是 S1～S7 = 6001～6007、轉發 CEID = 6100、連線狀態 CEID = 6101、RPTID = 6200／6201。平台的編號不同時，在 `Test_SECS.exe` 旁放一份 `eap-ids.json`（欄位見 `Test_SECS` 的整合指南），沒寫的欄位維持預設。
@@ -231,6 +253,7 @@ EAP 方不需要實作本節，但了解它有助於判讀雙方的日誌。
 | # | 操作 | 預期結果 |
 |---|---|---|
 | 0 | 只連線（識別碼尚未指定）：OES 只填 EAP 的位址、port、Device ID，識別碼全部留 0 | OES 連上、送 S1F17 與 S1F1；EAP 分頁顯示橘色 `connected to … — <EAP 的型號 版本> … link test only`；EAP 日誌沒有 S2F37、S1F3 |
+| 0a | 依名稱帶出識別碼（平台支援 Q7、Q8 時）：接續第 0 項 | OES 自動送 S1F11、S1F23，EAP 分頁表格 9 項都是 ✓；按「Use these ids」填入、Save & apply 後進入第 1 項。EAP 日誌沒有 S2F37 |
 | 1 | OES 啟用連線 | 5.1 的步驟全部成功；OES EAP 分頁顯示綠色 `connected` |
 | 2 | PM3 閒置時觀察 | OES 每 30 秒讀一次 S1～S7：S1 = 0、S4 = 1（不提供 S4 時，OES 讀 S1～S3、S5～S7，EAP 分頁顯示 `tool link not monitored`） |
 | 3 | 主機台跑一次 PM3 Chamber Process | Start／End 各一筆 S6F11，1 秒內送出，報告為主機台 CEID、時間、序號；期間 S1 = 1、S2 = 3100439529；OES 顯示製程 A 視窗 |

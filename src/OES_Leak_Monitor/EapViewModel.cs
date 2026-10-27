@@ -50,6 +50,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
         _link = link;
         _save = save;
         SaveCommand = new RelayCommand(Save, () => CanEdit);
+        ReadIdsCommand = new RelayCommand(ReadIds, () => CanEdit && LinkStatus is { State: EapLinkState.Connected, Discovering: false });
+        UseIdsCommand = new RelayCommand(UseIds, () => CanEdit && LinkStatus.Discovery is { HasOffer: true });
         LoadFrom(settings);
 
         // The engine's tool status reaches the bridge (VIDs 030–032 read it there), so the tab
@@ -60,6 +62,13 @@ public sealed class EapViewModel : INotifyPropertyChanged
     }
 
     public RelayCommand SaveCommand { get; }
+
+    /// <summary>Looks the EAP's ids up by name (#66). Engineer+, and only while connected.</summary>
+    public RelayCommand ReadIdsCommand { get; }
+
+    /// <summary>Copies what the lookup found into the id fields. Not a save: the fields turn
+    /// "unsaved", and only Save &amp; apply makes them the configuration.</summary>
+    public RelayCommand UseIdsCommand { get; }
 
     /// <summary>Lines of feedback from the last Save (why it was refused).</summary>
     public string SaveMessage { get; private set; } = "";
@@ -126,6 +135,77 @@ public sealed class EapViewModel : INotifyPropertyChanged
     }
 
     public bool ShowsToolLinkGap => EapToolLinkText.Length > 0;
+
+    // ---- the EAP's ids found by name (#66) ----------------------------------------------
+
+    /// <summary>One line on the last lookup: when, and how many agreed names were found.</summary>
+    public string DiscoveryText
+    {
+        get
+        {
+            var s = LinkStatus;
+            if (s.Discovering) return "Asking the EAP for its names (S1F11, S1F23)…";
+            if (s.Discovery is not { } d)
+                return s.State == EapLinkState.Connected
+                    ? "Not looked up yet — Read ids from EAP asks the EAP for the agreed names."
+                    : "Connect to the EAP to look its ids up by name.";
+            return $"Read {d.At:HH:mm:ss}: {d.Summary}";
+        }
+    }
+
+    public bool ShowsDiscovery => LinkStatus.Discovery is { Problem.Length: 0 };
+
+    /// <summary>
+    /// The lookup beside the ids in the fields. <see cref="EapIdRow.Differs"/> marks a found id
+    /// that is not the one entered — the check an engineer runs on a configured link, and the
+    /// reason "Read ids" never overwrites anything by itself.
+    /// </summary>
+    public IReadOnlyList<EapIdRow> DiscoveryRows =>
+        LinkStatus.Discovery is { Problem.Length: 0 } d
+            ? d.Matches.Select(m =>
+            {
+                uint current = EapIdDiscovery.Current(Eap, m.Label);
+                string found = m.State is EapIdMatchState.Found or EapIdMatchState.WrongType ? m.Id.ToString() : "—";
+                string state = m.State switch
+                {
+                    EapIdMatchState.Found => "✓",
+                    EapIdMatchState.WrongType => "wrong type",
+                    EapIdMatchState.NotFound => "not found",
+                    EapIdMatchState.NotProvided => "not provided",
+                    _ => "ambiguous",
+                };
+                bool differs = m.Offered && m.Id != current;
+                return new EapIdRow(m.Label, m.Name, found, state, current == 0 ? "—" : current.ToString(), differs,
+                    m.State is not (EapIdMatchState.Found or EapIdMatchState.NotProvided), m.Note);
+            }).ToList()
+            : Array.Empty<EapIdRow>();
+
+    /// <summary>Every SVID and CEID the EAP named, for checking by hand when the names are not
+    /// the agreed ones. Also in the EAP traffic log.</summary>
+    public string DiscoveryNamesText =>
+        LinkStatus.Discovery is { } d
+            ? string.Join(Environment.NewLine,
+                d.StatusVariables.Select(v => $"SVID {v.Svid}  {v.Name}" + (v.Units.Length > 0 ? $"  ({v.Units})" : ""))
+                 .Concat(d.Events.Select(e => $"CEID {e.Ceid}  {e.Name}  VID {{{string.Join(",", e.Vids)}}}")))
+            : "";
+
+    private void ReadIds()
+    {
+        if (_link is null) return;
+        _ = System.Threading.Tasks.Task.Run(_link.DiscoverIdsAsync);
+    }
+
+    private void UseIds()
+    {
+        if (LinkStatus.Discovery is not { HasOffer: true } d) return;
+        var before = Eap.Clone();
+        d.ApplyTo(Eap);
+        if (before.StatusSvids.SequenceEqual(Eap.StatusSvids) && before.ForwardCeid == Eap.ForwardCeid &&
+            before.LinkCeid == Eap.LinkCeid)
+            return;
+        _dirty = true;
+        RaiseAll();
+    }
 
     public Brush EapLinkBrush => LinkStatus switch
     {
@@ -259,6 +339,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
             _canEdit = value;
             OnPropertyChanged();
             SaveCommand.RaiseCanExecuteChanged();
+            ReadIdsCommand.RaiseCanExecuteChanged();
+            UseIdsCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -331,6 +413,17 @@ public sealed class EapViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ShowsToolLinkGap));
         OnPropertyChanged(nameof(EapLinkBrush));
         OnPropertyChanged(nameof(EapLogFilePath));
+        RaiseDiscovery();
+        ReadIdsCommand.RaiseCanExecuteChanged();
+        UseIdsCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseDiscovery()
+    {
+        OnPropertyChanged(nameof(DiscoveryText));
+        OnPropertyChanged(nameof(ShowsDiscovery));
+        OnPropertyChanged(nameof(DiscoveryRows));
+        OnPropertyChanged(nameof(DiscoveryNamesText));
     }
 
     private void RaiseToolPending()
@@ -364,6 +457,7 @@ public sealed class EapViewModel : INotifyPropertyChanged
         _dirty = true;
         OnPropertyChanged(property);
         OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(DiscoveryRows));   // "differs from the field" follows the field
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -371,3 +465,9 @@ public sealed class EapViewModel : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
+
+/// <summary>One row of the EAP tab's "ids by name" table.</summary>
+/// <param name="Differs">The EAP offers an id other than the one in the field.</param>
+/// <param name="Attention">Not simply found: wrong type, not found or ambiguous.</param>
+public sealed record EapIdRow(string Label, string Name, string Found, string State, string Current, bool Differs,
+    bool Attention, string Note);

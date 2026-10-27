@@ -1191,6 +1191,9 @@ OES 在這條連線上是 **host**，主動連到 EAP（預設 `10.2.3.120:20347
 | `EAP address`／`Port`／`Device ID` | 預設 `10.2.3.120`／`20347`／`0`；EAP 若另開 HSMS port 或主備切換到別的 IP，在這裡改 |
 | `Silence timeout (s)` | 預設 75，可設 35～600 |
 | `EAP ids`：S1～S7、`Forward CEID`、`Tool-link CEID` | EAP 方指定的 9 個編號，預設是 0（未設定）。`S4 tool link (optional)` 和 `Tool-link CEID (optional)` 是選填：EAP 不提供就留 0。其餘 7 個填齊而且不重複，連線才會啟動 |
+| `Read ids from EAP` | 向已連上的 EAP 查詢狀態變數與事件的名稱（S1F11、S1F23），依規格約定的名稱找出 9 個編號，結果列在下方表格。**不會改動任何欄位**。識別碼全部是 0 的連線測試，連上時會自動查一次 |
+| 名稱查詢表格 | 每個識別碼一列：約定名稱、找到的編號、狀態（✓／`wrong type`／`not found`／`not provided`／`ambiguous`）、欄位目前的值、說明。找到的編號和欄位不同時，整列以黃底標出，用來核對已輸入的編號；狀態不是 ✓ 的以橘字標出。`Every name the EAP reported` 展開後是平台回報的全部名稱，名稱和約定不同時照它人工核對 |
+| `Use these ids` | 把找到的編號填進上面的欄位（找不到或重複的維持原值，選填的找不到時填 0）。**這不是存檔**：欄位會顯示 `Unsaved changes`，確認後按 Save & apply 才生效 |
 
 收到的事件會不會被採用，仍由下方 `Use tool events` 決定。收送的每一則訊息都記在 `Logs\eap_YYYYMMDD.log`（不是 `secs_` 那個檔），分頁最下方有路徑。
 

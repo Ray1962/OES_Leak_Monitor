@@ -86,15 +86,15 @@ internal sealed class SecsHarness : IAsyncDisposable
         // S6F11 carries L{3} DATAID, CEID, reports — the CEID is U4 (only ALID is ASCII).
         h._host.EventReportReceived += m =>
         {
-            lock (h._ceids) { h._ceids.Add(m.SecsItem![1].FirstValue<uint>()); }
+            lock (h._ceids) { h._ceids.Add(m.Raw.SecsItem![1].FirstValue<uint>()); }
         };
-        h._host.AlarmReceived += m =>
+        h._host.AlarmReportReceived += m =>
         {
-            lock (h._alids) { h._alids.Add(m.SecsItem![1].GetString()); }
+            lock (h._alids) { h._alids.Add(m.Raw.SecsItem![1].GetString()); }
         };
-        h._host.TraceDataReceived += m =>
+        h._host.TraceReportReceived += m =>
         {
-            var body = m.SecsItem!;
+            var body = m.Raw.SecsItem!;
             var values = new List<Item>();
             for (var i = 0; i < body[3].Count; i++)
             {
