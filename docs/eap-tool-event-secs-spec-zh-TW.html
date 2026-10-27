@@ -185,7 +185,7 @@ td code{white-space:nowrap;}
 </tbody></table></div>
 <p>連上後 OES 讀 S1F2 的 MDLN／SOFTREV 並記入日誌，不做比對。</p>
 <h2 id="4-eap-需要提供的識別碼與資料">4. EAP 需要提供的識別碼與資料</h2>
-<p>下表的 S1～S7、兩個 CEID 共 <strong>9 個識別碼由 EAP 方指定</strong>，在 OES 的 EAP 分頁輸入（預設為 0，代表未設定）。其中 <strong>S4 與連線狀態 CEID 是選填</strong>：平台做不到時填 0，OES 照樣連線（見 Q5）。其餘 7 個都要填，而且 S1～S7 不可重複，OES 才會連線。</p>
+<p>下表的 S1～S7、兩個 CEID 共 <strong>9 個識別碼由 EAP 方指定</strong>，在 OES 的 EAP 分頁輸入（預設為 0，代表未設定）。其中 <strong>S4 與連線狀態 CEID 是選填</strong>：平台做不到時填 0，OES 照樣連線（見 Q5）。其餘 7 個都要填，而且 S1～S7 不可重複，OES 才會正式運作。<strong>7 個必填的全部是 0 時，OES 只做連線測試</strong>：連上、S1F17、S1F1，不送 S2F37、不讀 S1F3、不影響製程視窗，EAP 分頁顯示 EAP 回的型號與版本。這讓現場在 EAP 指定識別碼之前，就能先驗證位址、port、Device ID 與防火牆（見 §10 第 0 項）。只填了一部分則不會連線，並列出缺哪幾個。</p>
 <h3 id="41-svid供-oes-以-s1f3-讀取">4.1 SVID（供 OES 以 S1F3 讀取）</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>代號</th><th>名稱</th><th>格式</th><th>內容</th></tr></thead>
@@ -348,6 +348,7 @@ S1F4
 <div class="tablewrap"><table>
 <thead><tr><th>#</th><th>操作</th><th>預期結果</th></tr></thead>
 <tbody>
+<tr><td>0</td><td>只連線（識別碼尚未指定）：OES 只填 EAP 的位址、port、Device ID，識別碼全部留 0</td><td>OES 連上、送 S1F17 與 S1F1；EAP 分頁顯示橘色 <code>connected to … — &lt;EAP 的型號 版本&gt; … link test only</code>；EAP 日誌沒有 S2F37、S1F3</td></tr>
 <tr><td>1</td><td>OES 啟用連線</td><td>5.1 的步驟全部成功；OES EAP 分頁顯示綠色 <code>connected</code></td></tr>
 <tr><td>2</td><td>PM3 閒置時觀察</td><td>OES 每 30 秒讀一次 S1～S7：S1 = 0、S4 = 1（不提供 S4 時，OES 讀 S1～S3、S5～S7，EAP 分頁顯示 <code>tool link not monitored</code>）</td></tr>
 <tr><td>3</td><td>主機台跑一次 PM3 Chamber Process</td><td>Start／End 各一筆 S6F11，1 秒內送出，報告為主機台 CEID、時間、序號；期間 S1 = 1、S2 = 3100439529；OES 顯示製程 A 視窗</td></tr>

@@ -130,7 +130,9 @@ public class AppSettingsDefaultsTests
         Assert.Equal(75, eap.SilenceTimeoutSeconds);
         Assert.All(eap.StatusSvids, id => Assert.Equal(0u, id));
         Assert.Equal(0u, eap.ForwardCeid);
-        Assert.NotNull(eap.IdProblem());
+        // No ids at all is the link-test-only configuration (#65), not a half-filled one.
+        Assert.True(eap.IsLinkTestOnly);
+        Assert.Null(eap.IdProblem());
     }
 
     /// <summary>

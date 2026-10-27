@@ -35,8 +35,12 @@ public sealed record EapStatusReading(byte WindowState, uint WindowCeid, string 
 /// <param name="Detail">Why it is not connected, in words; "" when connected.</param>
 /// <param name="ToolLinkGap">What the OES cannot see because the EAP provides no S4 or no
 /// tool-link CEID (<see cref="EapLinkSettings.ToolLinkGap"/>); "" when it provides both.</param>
+/// <param name="LinkTestOnly">No EAP ids are set (<see cref="EapLinkSettings.IsLinkTestOnly"/>):
+/// the link connects and goes online, and nothing more.</param>
+/// <param name="Peer">The EAP's MDLN and SOFTREV from its S1F2, "" until it has answered.</param>
 public sealed record EapLinkStatus(EapLinkState State, string Endpoint, DateTime? ConnectedSince,
-    EapStatusReading? LastReading, string LastEvent, bool Silent, string Detail, string ToolLinkGap = "")
+    EapStatusReading? LastReading, string LastEvent, bool Silent, string Detail, string ToolLinkGap = "",
+    bool LinkTestOnly = false, string Peer = "")
 {
     public static readonly EapLinkStatus Disabled = new(EapLinkState.Disabled, "", null, null, "", false, "");
 }
@@ -227,12 +231,15 @@ public sealed class EapSecsLink : IDisposable
         _silenceArmed = false;
         Update(_ => EapLinkStatus.Disabled with
         {
-            State = EapLinkState.Connecting, Endpoint = endpoint, ToolLinkGap = s.ToolLinkGap() ?? "",
+            State = EapLinkState.Connecting, Endpoint = endpoint, LinkTestOnly = s.IsLinkTestOnly,
+            ToolLinkGap = s.IsLinkTestOnly ? "" : s.ToolLinkGap() ?? "",
         });
         Trace($"[EAP] connecting to {endpoint} as host (device {s.DeviceId}); ids: S1-S7 = " +
               $"{string.Join(",", s.StatusSvids.Select(i => i == 0 ? "-" : i.ToString(CultureInfo.InvariantCulture)))}, " +
               $"forward CEID {s.ForwardCeid}, link CEID {(s.HasLinkCeid ? s.LinkCeid.ToString(CultureInfo.InvariantCulture) : "not provided")}");
-        if (s.ToolLinkGap() is { } gap)
+        if (s.IsLinkTestOnly)
+            Trace("[EAP] link test only: no EAP ids are set, so nothing is enabled, read or applied");
+        else if (s.ToolLinkGap() is { } gap)
         {
             // Once per start, not per connect: it is a fact about the configuration, and a
             // reconnect every few minutes would bury it.
@@ -289,7 +296,7 @@ public sealed class EapSecsLink : IDisposable
                 setUp = await SetUpAsync(s, host, endpoint);
                 nextPoll = DateTime.Now + PollInterval;
             }
-            else if (setUp && (DateTime.Now >= nextPoll || _pollNow))
+            else if (setUp && !s.IsLinkTestOnly && (DateTime.Now >= nextPoll || _pollNow))
             {
                 _pollNow = false;
                 await PollAsync(s, host);
@@ -304,7 +311,15 @@ public sealed class EapSecsLink : IDisposable
     private async Task<bool> SetUpAsync(EapLinkSettings s, GemHost host, string endpoint)
     {
         await host.GoOnlineAsync();
-        await host.AreYouThereAsync();   // S1F2 MDLN/SOFTREV: logged to the trace, not compared
+        await host.AreYouThereAsync();   // S1F2 MDLN/SOFTREV: to the trace, and to Peer via OnHostLog
+        if (s.IsLinkTestOnly)
+        {
+            // The link is proven; with no ids there is nothing to enable or read. Nothing past this
+            // point may reach the engine, and Heard() is never called, so the silence timer stays
+            // disarmed: a test connection cannot set the process window to unknown.
+            OnConnected(endpoint, linkTestOnly: true);
+            return true;
+        }
         var ceids = s.EnabledCeids;
         string named = string.Join(" and ", ceids);
         if (!await host.EnableEventReportsAsync(true, ceids))
@@ -315,7 +330,7 @@ public sealed class EapSecsLink : IDisposable
                 "check the ids on the EAP tab against the EAP's", related: $"Endpoint={endpoint}");
             return false;
         }
-        OnConnected(endpoint);
+        OnConnected(endpoint, linkTestOnly: false);
         await PollAsync(s, host);
         return true;
     }
@@ -339,6 +354,7 @@ public sealed class EapSecsLink : IDisposable
     private void OnHostLog(string endpoint, string line)
     {
         Trace(line);
+        if (PeerOf(line) is { } peer) Update(st => st with { Peer = peer });
         if (line.Contains("[ERR]", StringComparison.Ordinal))
             _lastHostError = line[(line.IndexOf("[ERR]", StringComparison.Ordinal) + 5)..].Trim();
         else if (line.Contains("Start T5 Timer", StringComparison.Ordinal) && _status.State != EapLinkState.Connected)
@@ -369,14 +385,34 @@ public sealed class EapSecsLink : IDisposable
         }
     }
 
-    private void OnConnected(string endpoint)
+    /// <summary>
+    /// MDLN and SOFTREV from the transport's log of an incoming S1F2, or null for any other line.
+    /// <c>GemHost.AreYouThereAsync</c> hands nothing back, and <c>SecsMessage.ToString()</c> omits
+    /// the body, so the formatted body the transport logs (<c>&lt;A [n] "…"&gt;</c> per item) is the
+    /// only place the answer appears. A format this does not recognise just leaves Peer empty.
+    /// </summary>
+    public static string? PeerOf(string line)
+    {
+        if (!line.StartsWith("<-- ", StringComparison.Ordinal) || !line.Contains("'S1F2'", StringComparison.Ordinal))
+            return null;
+        var texts = PeerText.Matches(line).Select(m => m.Groups[1].Value.Trim()).Where(t => t.Length > 0).ToArray();
+        return texts.Length == 0 ? null : string.Join(" ", texts.Take(2));
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex PeerText =
+        new(@"<A \[\d+\] ""([^""]*)""", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private void OnConnected(string endpoint, bool linkTestOnly)
     {
         var now = DateTime.Now;
         string after = _outageSince is { } since
             ? $" after {(now - since).TotalMinutes:0.#} min, {_failedAttempts} failed attempt(s)"
             : "";
         _log?.LogSystemEvent(LogSeverity.Information, "EapLinkConnected",
-            $"Connected to the EAP at {endpoint}{after}; events enabled", related: $"Endpoint={endpoint}");
+            linkTestOnly
+                ? $"Connected to the EAP at {endpoint}{after}; link test only — no EAP ids are set, so no events " +
+                  "are enabled or read and the process window is not touched"
+                : $"Connected to the EAP at {endpoint}{after}; events enabled", related: $"Endpoint={endpoint}");
         _failedAttempts = 0;
         _outageSince = null;
         Update(st => st with { State = EapLinkState.Connected, Endpoint = endpoint, ConnectedSince = now, Detail = "" });

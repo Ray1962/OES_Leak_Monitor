@@ -152,6 +152,21 @@ public sealed class ToolEventUiTests : IDisposable
         Assert.Equal(linkCeid ? 6101u : 0u, eap.LinkCeid);
     }
 
+    /// <summary>Switched on with no ids at all is the link test (#65): saved, so a site can check
+    /// the address and firewall before the EAP has assigned its ids.</summary>
+    [Fact]
+    public void WithTheLinkOnAndNoIds_ItSavesAsALinkTest()
+    {
+        var (vm, saved) = Tab(Pm3());
+        vm.EapEnabled = true;
+        vm.SaveCommand.Execute(null);
+
+        var eap = Assert.Single(saved).Eap;
+        Assert.True(eap.Enabled);
+        Assert.True(eap.IsLinkTestOnly);
+        Assert.Equal("", vm.SaveMessage);
+    }
+
     /// <summary>Switched off, the ids may stay unset: someone filling the tab in before the EAP
     /// has assigned them can still save the tool-event switches.</summary>
     [Fact]
@@ -171,13 +186,14 @@ public sealed class ToolEventUiTests : IDisposable
         Assert.Equal("", vm.EapDetailText);
     }
 
-    /// <summary>Switched on with the ids not set, the link does not start and the status line
-    /// says so in words — not a red "cannot connect" that sends someone to check the network.</summary>
+    /// <summary>Switched on with the ids half filled in, the link does not start and the status
+    /// line says so in words — not a red "cannot connect" that sends someone to check the network.
+    /// (None at all is the link test, #65, which does start.)</summary>
     [Fact]
     public void WithIdsMissing_TheStatusSaysTheLinkIsNotStarted()
     {
         using var link = new EapSecsLink(null, _dir, (_, _) => ToolEventAck.Accepted, _ => ToolEventAck.Accepted);
-        link.Configure(new EapLinkSettings { Enabled = true }, 30);
+        link.Configure(new EapLinkSettings { Enabled = true, WindowStateSvid = 6001 }, 30);
         var vm = new EapViewModel(_bridge, Pm3(), _ => { }, link);
 
         Assert.Equal(EapLinkState.IdsMissing, link.Status.State);

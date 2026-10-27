@@ -168,17 +168,30 @@ public sealed class EapLinkSettings
     /// <summary>What S2F37 enables: the forwarding CEID, and the tool-link CEID when set.</summary>
     public uint[] EnabledCeids => HasLinkCeid ? new[] { ForwardCeid, LinkCeid } : new[] { ForwardCeid };
 
-    /// <summary>Null when the ids are usable; otherwise what is wrong with them. Shared by the
-    /// tab's Save and the link, so the two cannot disagree about what "set" means. S4 and the
-    /// tool-link CEID may be 0 (not provided); the other seven may not.</summary>
+    /// <summary>The seven ids the link cannot run without, named as the EAP tab names them.</summary>
+    private (string Name, uint Id)[] Required => new (string Name, uint Id)[]
+    {
+        ("S1", WindowStateSvid), ("S2", WindowCeidSvid), ("S3", WindowStartSvid), ("S5", LastCeidSvid),
+        ("S6", LastTimeSvid), ("S7", SequenceSvid), ("forwarding CEID", ForwardCeid),
+    };
+
+    /// <summary>
+    /// None of the seven required ids is set: the link only proves it can reach the EAP (#65) —
+    /// online, S1F1 — and reads nothing, enables nothing, reports nothing to the engine. It is
+    /// how a site checks the address, port, device id and firewall before the EAP has assigned
+    /// its ids. Judged on the required set alone, so an optional S4 or tool-link CEID typed in
+    /// early does not turn it into a half-filled configuration.
+    /// </summary>
+    public bool IsLinkTestOnly => Required.All(r => r.Id == 0);
+
+    /// <summary>Null when the ids are usable — including none set at all, which is
+    /// <see cref="IsLinkTestOnly"/>; otherwise what is wrong with them. Shared by the tab's Save
+    /// and the link, so the two cannot disagree about what "set" means. S4 and the tool-link
+    /// CEID may be 0 (not provided); once any of the other seven is set, all of them must be.</summary>
     public string? IdProblem()
     {
-        var required = new (string Name, uint Id)[]
-        {
-            ("S1", WindowStateSvid), ("S2", WindowCeidSvid), ("S3", WindowStartSvid), ("S5", LastCeidSvid),
-            ("S6", LastTimeSvid), ("S7", SequenceSvid), ("forwarding CEID", ForwardCeid),
-        };
-        var unset = required.Where(r => r.Id == 0).Select(r => r.Name).ToArray();
+        if (IsLinkTestOnly) return null;
+        var unset = Required.Where(r => r.Id == 0).Select(r => r.Name).ToArray();
         if (unset.Length > 0) return $"the EAP ids are not all set ({string.Join(", ", unset)})";
         var svids = StatusSvids.Where(i => i != 0).ToArray();
         if (svids.Distinct().Count() != svids.Length) return "two of S1–S7 share an SVID";

@@ -79,7 +79,9 @@ public sealed class EapViewModel : INotifyPropertyChanged
                 EapLinkState.Disabled => "EAP link: not in use",
                 EapLinkState.IdsMissing => $"EAP link: not started — {s.Detail}",
                 EapLinkState.Connected => $"EAP link: connected to {s.Endpoint}" +
-                                          (s.ConnectedSince is { } c ? $" (since {c:HH:mm:ss})" : ""),
+                                          (s.Peer.Length > 0 ? $" — {s.Peer}" : "") +
+                                          (s.ConnectedSince is { } c ? $" (since {c:HH:mm:ss})" : "") +
+                                          (s.LinkTestOnly ? " — link test only (EAP ids not set); no events are read" : ""),
                 _ => $"EAP link: connecting to {s.Endpoint}" + (s.Detail.Length > 0 ? $" — {s.Detail}" : "…"),
             };
         }
@@ -92,6 +94,9 @@ public sealed class EapViewModel : INotifyPropertyChanged
         {
             var s = LinkStatus;
             if (s.State is EapLinkState.Disabled or EapLinkState.IdsMissing) return "";
+            if (s.LinkTestOnly)
+                return "Enter the ids the EAP assigned and Save & apply to start reading S1–S7 and receiving its events. " +
+                       "Until then the process window is untouched.";
             if (s.Silent)
                 return $"Nothing from the EAP for {EapSilenceTimeoutSeconds:0} s — the process window has been set to unknown.";
             if (s.LastReading is not { } r) return "Nothing read yet.";
@@ -127,6 +132,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
         { State: EapLinkState.Disabled } => Brushes.Gray,
         { State: EapLinkState.IdsMissing } => Brushes.DarkOrange,
         { Silent: true } => Brushes.DarkOrange,
+        // Reachable but not yet doing its job: green would read as "events are arriving".
+        { State: EapLinkState.Connected, LinkTestOnly: true } => Brushes.DarkOrange,
         { State: EapLinkState.Connected } => Brushes.ForestGreen,
         _ => Brushes.Firebrick,
     };

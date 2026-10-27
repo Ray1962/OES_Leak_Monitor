@@ -408,6 +408,78 @@ public sealed class EapSecsLinkTests : IDisposable
         Assert.True(await Wait(() => _reports.Any(r => r.State == ToolContextReportState.Unknown && r.Reason.Contains("no SECS link"))));
     }
 
+    // ---------------------------------------------------------------- link test only (#65)
+
+    private static EapLinkSettings NoIds(int port) => new() { Enabled = true, RemoteHost = "127.0.0.1", RemotePort = port };
+
+    /// <summary>
+    /// With no ids the link proves the address, port and device id and does nothing else: online
+    /// and S1F1 (the EAP's model shown), no S2F37, no S1F3 — and nothing reaches the engine, not a
+    /// forwarded event and not an "unknown" from the silence timer, however long it waits.
+    /// </summary>
+    [Fact]
+    public async Task WithNoIds_ItOnlyConnects_AndNeverTouchesTheWindow()
+    {
+        using var log = new LogCapture();
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap { State = 1, WindowCeid = ProcessStart };
+        await using (var eap = new Eap(profile, port))
+        using (var link = Link(log.Logger, silence: TimeSpan.FromMilliseconds(400), poll: TimeSpan.FromMilliseconds(200)))
+        {
+            link.Configure(NoIds(port), 30);
+
+            Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected));
+            Assert.True(link.Status.LinkTestOnly);
+            Assert.True(await Wait(() => link.Status.Peer == "FAKE-EAP 1.0"));
+            Assert.True(eap.Saw("S1F17"));
+
+            // Well past the silence timeout and several poll intervals, and an event the EAP
+            // sends anyway: none of it may reach the engine.
+            await eap.Equipment.SendEventAsync(6100);
+            await Task.Delay(1500);
+            Assert.False(eap.Saw("S2F37"));
+            Assert.False(eap.Saw("S1F3 ->"));
+            Assert.Empty(_reports);
+            Assert.Empty(_events);
+            Assert.False(link.Status.Silent);
+        }
+
+        Assert.Contains(log.Lines(), l => l.Contains("EapLinkConnected") && l.Contains("link test only"));
+    }
+
+    /// <summary>Entering the ids and saving turns the test link into the real one, by the
+    /// existing hot-apply: S2F37, S1F3, the window.</summary>
+    [Fact]
+    public async Task EnteringTheIds_TurnsTheLinkTestIntoTheLink()
+    {
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap { State = 1, WindowCeid = ProcessStart };
+        await using var eap = new Eap(profile, port);
+        using var link = Link();
+        link.Configure(NoIds(port), 30);
+        Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected && link.Status.LinkTestOnly));
+
+        link.Configure(To(port), 30);
+
+        Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected && !link.Status.LinkTestOnly &&
+                                     link.Status.LastReading is not null));
+        Assert.True(eap.Saw("S2F37 enable -> S2F38 ERACK=0 (2 enabled)"));
+        Assert.True(await Wait(() => _reports.Any(r => r.State == ToolContextReportState.InWindow && r.StartCeid == ProcessStart)));
+    }
+
+    /// <summary>Half the ids is not a link test: it does not start, and says what is missing.</summary>
+    [Fact]
+    public void WithSomeIdsSet_ItDoesNotStart()
+    {
+        using var link = Link();
+        var settings = NoIds(SecsTestPort.Free());
+        settings.WindowStateSvid = 6001;
+        link.Configure(settings, 30);
+
+        Assert.Equal(EapLinkState.IdsMissing, link.Status.State);
+        Assert.Contains("S2, S3", link.Status.Detail);
+    }
+
     // ---------------------------------------------------------------- polling
 
     /// <summary>Each S1F3 states the window: in one, with the Start CEID, or unknown when the EAP

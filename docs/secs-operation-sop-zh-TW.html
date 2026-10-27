@@ -711,7 +711,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）</code></pre>
 <ol>
 <li>跟 EAP 平台確認監聽位址（現場為 <code>10.2.3.120:20347</code>）、Device ID，以及 <strong>EAP 指定的 9 個識別碼</strong>（S1～S7 的 SVID、轉發事件 CEID、主機台連線狀態 CEID；其中 S4 與主機台連線狀態 CEID 是選填，平台不提供就填 0），並把 <strong>OES PC 的 IP</strong> 交給對方，讓 EAP 主機的防火牆放行。填進規格書 §10 的現場設定紀錄。
 </li>
-<li>到 <strong>EAP 分頁</strong>的 <code>EAP link (SECS host) — applies on save</code>：勾 <code>Connect to the EAP</code>，填 <code>EAP address</code>、<code>Port</code>、<code>Device ID</code>，<code>Silence timeout (s)</code> 用預設 75；在 <code>EAP ids</code> 填 9 個編號。
+<li>到 <strong>EAP 分頁</strong>的 <code>EAP link (SECS host) — applies on save</code>：勾 <code>Connect to the EAP</code>，填 <code>EAP address</code>、<code>Port</code>、<code>Device ID</code>，<code>Silence timeout (s)</code> 用預設 75。<strong>EAP 還沒給識別碼時，<code>EAP ids</code> 全部留 0 先存檔</strong>：OES 只做連線測試（狀態列橘色 <code>link test only</code>，並顯示 EAP 回的型號與版本），用來確認網路、防火牆與 Device ID，不影響量測。拿到識別碼後，在 <code>EAP ids</code> 填入 9 個編號（S4 與主機台連線狀態 CEID 不提供就留 0）。
 </li>
 <li>按 <strong>Save &amp; apply</strong>，<strong>立即生效</strong>，不用重新開始採集。編號沒填齊或有重複時存檔會被擋下，並說明原因。
 </li>
