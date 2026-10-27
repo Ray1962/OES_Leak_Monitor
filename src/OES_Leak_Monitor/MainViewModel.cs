@@ -51,7 +51,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly SecsBridge _secs;
     // The EAP's plain-TCP event link: the same main-tool events as SECS TOOL_EVENT, for a site
     // whose SECS host is the FDC. Built with the engine, configured from secs.toolEvents.tcp.
-    private readonly EapEventLink _eapLink;
+    private readonly EapSecsLink _eapLink;
     private readonly List<DeviceViewModel> _devices;
 
     // Whether the spectrometer has ever been connected this run. "Connection lost" is a
@@ -335,12 +335,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // before the first frame gets the truth; a later change sends CEID 507.
         _secs.OnSlotTable(_leakMonitorEngine.SlotTable);
         _leakMonitorEngine.SlotIdentityChanged += _secs.OnSlotIdentityChanged;
-        // Both sources of main-tool events feed the same engine entry point; the TCP link also
-        // reports the window its heartbeat states. Hot-applied, like the window limit: it is a
+        // Both sources of main-tool events feed the same engine entry point; the EAP link also
+        // reports the window its S1F3 reads. Hot-applied, like the window limit: it is a
         // transport and names no class.
-        _eapLink = new EapEventLink(_systemLogger, _paths.LogDirectory,
+        _eapLink = new EapSecsLink(_systemLogger, _paths.LogDirectory,
             _leakMonitorEngine.ReceiveToolEvent, _leakMonitorEngine.ReportToolContext);
-        Secs = new SecsViewModel(_secs, settings.Secs, PersistSecsSettings, _eapLink);
+        Secs = new SecsViewModel(_secs, settings.Secs, PersistSecsSettings);
+        Eap = new EapViewModel(_secs, settings.Secs.ToolEvents ?? new ToolEventSettings(), PersistToolEvents, _eapLink);
         // Main-tool process events forwarded by the EAP (S2F41 TOOL_EVENT) go straight to the
         // engine; the bridge only parses and answers. The table is adopted now — start-up is an
         // acquisition start as far as configuration goes — and thereafter only when acquisition
@@ -349,12 +350,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _leakMonitorEngine.ToolStatusChanged += _secs.OnToolStatus;
         _savedToolEvents = settings.Secs.ToolEvents?.Clone() ?? new ToolEventSettings();
         _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
-        Secs.SetToolEventsInForce(_savedToolEvents);   // what the SECS tab compares a saved table to
-        // The hot-applied half (the window time limit): now, and again on every SECS-tab save.
+        Eap.SetToolEventsInForce(_savedToolEvents);   // what the EAP tab compares a saved table to
+        // The hot-applied half (the window time limit): now, and again on every EAP-tab save.
         _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
         UpdateTestModeContext();
         _secs.Configure(settings.Secs);
-        _eapLink.Configure(settings.Secs.ToolEvents?.Tcp, settings.Secs.LogRetentionDays);
+        _eapLink.Configure(settings.Secs.ToolEvents?.Eap, settings.Secs.LogRetentionDays);
 
         // One-click diagnostic bundle, on the Logs tab and deliberately ungated. Constructed last
         // because GatherDiagnostics() reads nearly everything above it.
@@ -398,6 +399,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         BaselineBuilder.SetRole(IsEngineerOrHigher);
         Replay.SetRole(IsEngineerOrHigher);
         Secs.SetRole(IsEngineerOrHigher);
+        Eap.SetRole(IsEngineerOrHigher);
 
         UpdateRecorderStatus();
 
@@ -446,7 +448,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             _leakMonitorEngine.ReloadRatios();
             _leakMonitorEngine.ConfigureToolEvents(_savedToolEvents);
-            Secs.SetToolEventsInForce(_savedToolEvents);   // the saved table is now the one in force
+            Eap.SetToolEventsInForce(_savedToolEvents);   // the saved table is now the one in force
             UpdateTestModeContext();   // the banner names whether tool events are in use
             _systemLogger.LogSystemEvent(LogSeverity.Information, "LeakMonitorRatiosApplied",
                 "Species-ratio configuration (re)applied on OES acquisition start");
@@ -598,6 +600,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         BaselineBuilder.SetRole(IsEngineerOrHigher);
         Replay.SetRole(IsEngineerOrHigher);
         Secs.SetRole(IsEngineerOrHigher);
+        Eap.SetRole(IsEngineerOrHigher);
 
         RaiseCanExec();
     }
@@ -890,14 +893,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         try
         {
             var onDisk = _settingsService.Load();
+            // The tool events belong to the EAP tab: keep what it last saved, whatever this tab's
+            // copy says, or a SECS save would undo an EAP save made since this tab loaded.
+            secs.ToolEvents = onDisk.Secs?.ToolEvents?.Clone() ?? secs.ToolEvents ?? new ToolEventSettings();
             onDisk.Secs = secs;
             _settingsService.Save(onDisk);
-            // Saved now, applied on the next acquisition start — see _savedToolEvents. The
-            // hot-applied half takes effect at once: it names no class.
-            _savedToolEvents = secs.ToolEvents?.Clone() ?? new ToolEventSettings();
-            _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
-            _eapLink.Configure(_savedToolEvents.Tcp, secs.LogRetentionDays);
-            UpdateTestModeContext();
+            _eapLink.Configure(secs.ToolEvents.Eap, secs.LogRetentionDays);   // retention may have changed
             _systemLogger.LogSystemEvent(LogSeverity.Information, "SecsSettingsSaved",
                 "SECS interface settings saved",
                 related: $"User={AccessControl.CurrentUsername ?? "(guest)"},Enabled={secs.Enabled}," +
@@ -909,6 +910,40 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _systemLogger.LogError("SecsSettings_Persist_Failed", ex, "");
         }
         _secs.Configure(secs);
+    }
+
+    /// <summary>
+    /// Persists the EAP tab's settings — the tool events and the EAP link — into
+    /// <c>secs.toolEvents</c>, leaving the rest of the SECS section as it is on disk (same
+    /// read-modify-write idiom, mirrored by <see cref="PersistSecsSettings"/>). The switch and
+    /// the table are saved now and adopted at the next acquisition start (see
+    /// <c>_savedToolEvents</c>); the window limit, the test-mode switch and the link take
+    /// effect at once — none of them names a class.
+    /// </summary>
+    private void PersistToolEvents(ToolEventSettings tools)
+    {
+        int retention = 30;
+        try
+        {
+            var onDisk = _settingsService.Load();
+            onDisk.Secs ??= new SecsSettings();
+            onDisk.Secs.ToolEvents = tools.Clone();
+            retention = onDisk.Secs.LogRetentionDays;
+            _settingsService.Save(onDisk);
+            _systemLogger.LogSystemEvent(LogSeverity.Information, "ToolEventSettingsSaved",
+                "EAP tab settings saved (tool events and the EAP link)",
+                related: $"User={AccessControl.CurrentUsername ?? "(guest)"},ToolEvents={tools.Enabled}," +
+                         $"EapLink={tools.Eap?.Enabled == true}",
+                value: tools.Eap is { } e ? $"{e.RemoteHost}:{e.RemotePort} deviceId={e.DeviceId}" : "");
+        }
+        catch (Exception ex)
+        {
+            _systemLogger.LogError("ToolEventSettings_Persist_Failed", ex, "");
+        }
+        _savedToolEvents = tools.Clone();
+        _leakMonitorEngine.ConfigureToolEventsLive(_savedToolEvents);
+        _eapLink.Configure(_savedToolEvents.Eap, retention);
+        UpdateTestModeContext();
     }
 
     /// <summary>Persists the Recordings line view's wavelength set, same read-modify-write
@@ -996,6 +1031,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>SECS tab: interface status (any role) and its settings (Engineer+).</summary>
     public SecsViewModel Secs { get; }
+
+    /// <summary>The EAP tab: the SECS link to the EAP and the main tool's process events.</summary>
+    public EapViewModel Eap { get; }
 
     public DiagnosticsViewModel Diagnostics { get; }
 

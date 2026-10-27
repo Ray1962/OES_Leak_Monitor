@@ -1,0 +1,173 @@
+<UserControl x:Class="OES_Leak_Monitor.EapPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:OES_Leak_Monitor">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Foreground" Value="#445"/>
+        </Style>
+        <Style x:Key="IdBox" TargetType="TextBox">
+            <Setter Property="Width" Value="90"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,14,6"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Background="#F4F6FA">
+
+        <!-- Status. Ungated: "is the OES getting the tool's process from the EAP?" is a question an
+             Operator gets asked, and the answer must not need a sign-in. -->
+        <Border Background="White" BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel>
+                <StackPanel ToolTip="The OES connects to the EAP as a SECS host (scheme 2b), reads S1–S7 every 30 s and receives the forwarded tool events as S6F11. Every message is in Log\eap_yyyyMMdd.log.">
+                    <TextBlock Text="{Binding EapLinkText}" Foreground="{Binding EapLinkBrush}" FontWeight="SemiBold"
+                               AutomationProperties.Name="EAP link" TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding EapDetailText}" Foreground="{Binding EapLinkBrush}"
+                               AutomationProperties.Name="EAP link detail" TextWrapping="Wrap" MaxWidth="1000" HorizontalAlignment="Left"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
+                            ToolTip="Which process window the leak monitor is judging in (VID 030–032). From the EAP link, or from S2F41 TOOL_EVENT if a SECS host sends it.">
+                    <TextBlock Text="{Binding ToolContextText}" Foreground="#334" Margin="0,0,16,0"
+                               AutomationProperties.Name="Tool event context" TextWrapping="Wrap" MaxWidth="760"/>
+                    <TextBlock Text="{Binding ToolLastEventText}" Foreground="#334" Margin="0,0,16,0"
+                               AutomationProperties.Name="Last tool event"/>
+                    <TextBlock Text="{Binding ToolEventCountText}" Foreground="#334"
+                               AutomationProperties.Name="Tool event count"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Settings. Engineer+ only; the tab itself is open to all, so the controls carry the gate. -->
+        <Border Background="#FAFAFA" BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,8"
+                IsEnabled="{Binding CanEdit}">
+            <StackPanel>
+                <!-- The EAP link: all applies on save; a transport names no class. -->
+                <WrapPanel>
+                    <TextBlock Text="EAP link (SECS host) — applies on save:" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="0,0,12,6"/>
+                    <CheckBox Content="Connect to the EAP" IsChecked="{Binding EapEnabled}"
+                              AutomationProperties.Name="Connect to the EAP"
+                              VerticalAlignment="Center" Margin="0,0,20,6"
+                              ToolTip="The OES connects to the EAP as a SECS host. What the events do is still decided by 'Use tool events' and the CEID table below."/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                        <TextBlock Text="EAP address:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding EapHost}" Width="120" VerticalAlignment="Center" AutomationProperties.Name="EAP address"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                        <TextBlock Text="Port:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding EapPort}" Width="60" VerticalAlignment="Center" AutomationProperties.Name="EAP port"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                        <TextBlock Text="Device ID:" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding EapDeviceId}" Width="50" VerticalAlignment="Center" AutomationProperties.Name="EAP device id"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="Silence timeout (s):" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding EapSilenceTimeoutSeconds}" Width="60" VerticalAlignment="Center"
+                                 AutomationProperties.Name="EAP silence timeout seconds"
+                                 ToolTip="With no successful S1F3 and no event from the EAP for this long, the process window is set to unknown. A dropped connection alone does not do this. 35–600 s; the OES reads the EAP every 30 s."/>
+                    </StackPanel>
+                </WrapPanel>
+
+                <!-- The nine ids the EAP assigns. 0 = not set: the link does not start until all are. -->
+                <WrapPanel Margin="0,2,0,0"
+                           ToolTip="The ids the EAP assigned (eap-tool-event-secs-spec §4). The link does not start until all nine are set and S1–S7 are distinct.">
+                    <TextBlock Text="EAP ids:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,6"/>
+                    <TextBlock Text="S1 window state" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding WindowStateSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S1 SVID"/>
+                    <TextBlock Text="S2 window CEID" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding WindowCeidSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S2 SVID"/>
+                    <TextBlock Text="S3 window start" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding WindowStartSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S3 SVID"/>
+                    <TextBlock Text="S4 tool link" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding ToolLinkSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S4 SVID"/>
+                    <TextBlock Text="S5 last CEID" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding LastCeidSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S5 SVID"/>
+                    <TextBlock Text="S6 last time" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding LastTimeSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S6 SVID"/>
+                    <TextBlock Text="S7 sequence" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding SequenceSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S7 SVID"/>
+                    <TextBlock Text="Forward CEID" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding ForwardCeid}" Style="{StaticResource IdBox}" AutomationProperties.Name="Forward CEID"/>
+                    <TextBlock Text="Tool-link CEID" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding LinkCeid}" Style="{StaticResource IdBox}" AutomationProperties.Name="Tool-link CEID"/>
+                </WrapPanel>
+
+                <!-- Tool events. Two kinds of field, labelled as such: the switch (with the CEID
+                     table) is staged — adopted at the next acquisition start, because the table
+                     names the classes the ratios refer to — while the window limit and the
+                     test-mode switch apply on save. -->
+                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Padding="0,6,0,2" Margin="0,4,0,4">
+                    <WrapPanel>
+                        <TextBlock Text="Tool events:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,6"/>
+                        <CheckBox Content="Use tool events — takes effect at next acquisition start"
+                                  IsChecked="{Binding ToolEventsEnabled}"
+                                  AutomationProperties.Name="Use tool events"
+                                  VerticalAlignment="Center" Margin="0,0,20,6"
+                                  ToolTip="The main tool's process events decide which class-scoped ratios judge. Staged with the CEID table: saved now, applied when acquisition next starts (Stop, then Start)."/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                            <TextBlock Text="Max window (s) — applies on save:" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding ToolMaxWindowSeconds}" Width="60" VerticalAlignment="Center"
+                                     AutomationProperties.Name="Max window seconds"
+                                     ToolTip="A window open longer than this lost its End: it closes and ratios are judged as without tool events until the next edge. 10–86400 s; a process A step is 38–63 s."/>
+                        </StackPanel>
+                        <CheckBox Content="Apply tool events in test mode — applies on save"
+                                  IsChecked="{Binding ToolApplyInTestMode}"
+                                  AutomationProperties.Name="Apply tool events in test mode"
+                                  VerticalAlignment="Center" Margin="0,0,0,6"
+                                  ToolTip="Off by default: a synthetic spectrum is not the chamber. On, the tool's window is applied to test-mode spectra, so the windows can be exercised on a machine with no spectrometer. Never applies during a replay."/>
+                    </WrapPanel>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="Save &amp; apply" Command="{Binding SaveCommand}"
+                            Padding="14,4" MinWidth="110" Margin="0,0,12,0" FontWeight="Bold"
+                            ToolTip="Writes these settings to settings.json. The EAP link, the window limit and the test-mode switch apply at once; the tool-event switch and table at the next acquisition start."/>
+                    <TextBlock VerticalAlignment="Center" Foreground="#B8860B" FontWeight="SemiBold" Text="Unsaved changes"
+                               Visibility="{Binding HasUnsavedChanges, Converter={StaticResource BoolToVis}}"/>
+                    <TextBlock VerticalAlignment="Center" Foreground="Firebrick" Margin="12,0,0,0" TextWrapping="Wrap" MaxWidth="900"
+                               Text="{Binding SaveMessage}" AutomationProperties.Name="EAP save message"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- The CEID table, read-only and ungated: everyone may see what the tool's events mean,
+             and a disabled grid would grey it out for exactly the people reading it. -->
+        <Border Background="#FAFAFA" BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="10,6">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Tool event CEID table (as saved):" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBlock Text="Edited in settings.json (secs.toolEvents.mappings); takes effect at the next acquisition start."
+                               Foreground="#777" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="{Binding ToolTablePendingText}" Foreground="#B8860B" FontWeight="SemiBold"
+                           Margin="0,4,0,0" TextWrapping="Wrap"
+                           AutomationProperties.Name="Tool table pending"
+                           Visibility="{Binding ToolTablePending, Converter={StaticResource BoolToVis}}"/>
+                <DataGrid ItemsSource="{Binding ToolEventMappings}" AutoGenerateColumns="False"
+                          IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False"
+                          CanUserDeleteRows="False" CanUserReorderColumns="False"
+                          GridLinesVisibility="Horizontal" Background="White"
+                          MaxHeight="220" Margin="0,4,0,0"
+                          AutomationProperties.Name="Tool event CEID table">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="CEID" Binding="{Binding Ceid}" Width="110"/>
+                        <DataGridTextColumn Header="Class" Binding="{Binding ClassName}" Width="100"/>
+                        <DataGridTextColumn Header="Edge" Binding="{Binding Edge}" Width="60"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="320"/>
+                        <DataGridTextColumn Header="Plasma threshold" Binding="{Binding PlasmaThreshold}" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <TextBlock Margin="0,6,0,0" Foreground="#777" FontFamily="Consolas" FontSize="11"
+                           Text="{Binding EapLogFilePath, StringFormat=EAP traffic log: {0}}" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+    </ScrollViewer>
+</UserControl>

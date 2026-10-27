@@ -8,8 +8,8 @@ using Xunit;
 namespace OES_Leak_Monitor.Tests;
 
 /// <summary>
-/// The tool-event controls on the SECS tab and the Leak Monitor banner (#34), at the
-/// view-model seam.
+/// The EAP tab — the EAP link's settings and status, and the tool-event controls moved there
+/// from the SECS tab (#58) — and the Leak Monitor banner (#34), at the view-model seam.
 ///
 /// <para>What this guards: the section has two kinds of field. <c>Enabled</c> and the CEID
 /// table are <b>staged</b> — saved now, adopted when acquisition next starts, because the table
@@ -49,58 +49,92 @@ public sealed class ToolEventUiTests : IDisposable
         },
     };
 
-    private (SecsViewModel Vm, List<SecsSettings> Saved) Tab(ToolEventSettings tools)
+    private (EapViewModel Vm, List<ToolEventSettings> Saved) Tab(ToolEventSettings tools)
     {
-        var saved = new List<SecsSettings>();
-        var vm = new SecsViewModel(_bridge, new SecsSettings { ToolEvents = tools }, saved.Add);
+        var saved = new List<ToolEventSettings>();
+        var vm = new EapViewModel(_bridge, tools, saved.Add);
         vm.SetRole(isEngineerOrHigher: true);
         return (vm, saved);
+    }
+
+    /// <summary>A complete, distinct set of the nine EAP ids, as the vendor would assign them.</summary>
+    private static void EnterIds(EapViewModel vm)
+    {
+        vm.WindowStateSvid = 6001; vm.WindowCeidSvid = 6002; vm.WindowStartSvid = 6003;
+        vm.ToolLinkSvid = 6004; vm.LastCeidSvid = 6005; vm.LastTimeSvid = 6006; vm.SequenceSvid = 6007;
+        vm.ForwardCeid = 6100; vm.LinkCeid = 6101;
     }
 
     // ---------------------------------------------------------------- settings
 
     /// <summary>
-    /// The EAP link's four fields reach settings.json through the same Save, and the CEID table
-    /// rides along untouched.
+    /// The link's fields and the nine ids reach settings.json through the tab's Save, and the
+    /// CEID table — which the tab does not edit — rides along untouched.
     /// </summary>
     [Fact]
-    public void Saving_CarriesTheEapLinkFields()
+    public void Saving_CarriesTheEapLinkFieldsAndIds()
     {
         var (vm, saved) = Tab(Pm3());
 
         vm.EapEnabled = true;
         vm.EapHost = "10.2.3.121";
         vm.EapPort = 20348;
-        vm.EapHeartbeatTimeoutSeconds = 90;
+        vm.EapDeviceId = 3;
+        vm.EapSilenceTimeoutSeconds = 90;
+        EnterIds(vm);
         vm.SaveCommand.Execute(null);
 
-        var tools = Assert.Single(saved).ToolEvents;
-        Assert.True(tools.Tcp.Enabled);
-        Assert.Equal("10.2.3.121", tools.Tcp.RemoteHost);
-        Assert.Equal(20348, tools.Tcp.RemotePort);
-        Assert.Equal(90, tools.Tcp.HeartbeatTimeoutSeconds);
-        Assert.Equal(2, tools.Mappings.Count);
+        var eap = Assert.Single(saved).Eap;
+        Assert.True(eap.Enabled);
+        Assert.Equal("10.2.3.121", eap.RemoteHost);
+        Assert.Equal(20348, eap.RemotePort);
+        Assert.Equal(3, eap.DeviceId);
+        Assert.Equal(90, eap.SilenceTimeoutSeconds);
+        Assert.Equal(new uint[] { 6001, 6002, 6003, 6004, 6005, 6006, 6007 }, eap.StatusSvids);
+        Assert.Equal(6100u, eap.ForwardCeid);
+        Assert.Equal(6101u, eap.LinkCeid);
+        Assert.Equal(2, saved[0].Mappings.Count);
     }
 
     /// <summary>
-    /// A heartbeat timeout shorter than 35 s fires on a healthy link (the EAP sends one every
-    /// 30 s), and an enabled link with no address has nowhere to go: neither is saved.
+    /// What cannot work is not saved, and the tab says why: a silence timeout under 35 s fires on
+    /// a healthy 30 s poll, an enabled link needs an address and all nine ids, and S1–S7 and the
+    /// two CEIDs must be distinct or a value would be read from the wrong variable.
     /// </summary>
     [Theory]
-    [InlineData(30, "10.2.3.120")]
-    [InlineData(601, "10.2.3.120")]
-    [InlineData(75, " ")]
-    public void AnUnusableEapLink_IsNotSaved(double timeout, string host)
+    [InlineData("timeout")]
+    [InlineData("host")]
+    [InlineData("id-missing")]
+    [InlineData("svid-duplicate")]
+    [InlineData("ceid-duplicate")]
+    public void AnUnusableEapLink_IsNotSaved(string what)
     {
         var (vm, saved) = Tab(Pm3());
-
         vm.EapEnabled = true;
-        vm.EapHost = host;
-        vm.EapHeartbeatTimeoutSeconds = timeout;
+        EnterIds(vm);
+        switch (what)
+        {
+            case "timeout": vm.EapSilenceTimeoutSeconds = 30; break;
+            case "host": vm.EapHost = " "; break;
+            case "id-missing": vm.SequenceSvid = 0; break;
+            case "svid-duplicate": vm.WindowCeidSvid = 6001; break;
+            case "ceid-duplicate": vm.LinkCeid = 6100; break;
+        }
         vm.SaveCommand.Execute(null);
 
         Assert.Empty(saved);
-        Assert.Contains(vm.Traffic, l => l.Contains("not saved") && l.Contains("EAP"));
+        Assert.StartsWith("Not saved", vm.SaveMessage);
+    }
+
+    /// <summary>Switched off, the ids may stay unset: someone filling the tab in before the EAP
+    /// has assigned them can still save the tool-event switches.</summary>
+    [Fact]
+    public void WithTheLinkOff_IdsAreNotRequired()
+    {
+        var (vm, saved) = Tab(Pm3());
+        vm.ToolMaxWindowSeconds = 300;
+        vm.SaveCommand.Execute(null);
+        Assert.Single(saved);
     }
 
     [Fact]
@@ -109,6 +143,20 @@ public sealed class ToolEventUiTests : IDisposable
         var (vm, _) = Tab(Pm3());
         Assert.Equal("EAP link: not in use", vm.EapLinkText);
         Assert.Equal("", vm.EapDetailText);
+    }
+
+    /// <summary>Switched on with the ids not set, the link does not start and the status line
+    /// says so in words — not a red "cannot connect" that sends someone to check the network.</summary>
+    [Fact]
+    public void WithIdsMissing_TheStatusSaysTheLinkIsNotStarted()
+    {
+        using var link = new EapSecsLink(null, _dir, (_, _) => ToolEventAck.Accepted, _ => ToolEventAck.Accepted);
+        link.Configure(new EapLinkSettings { Enabled = true }, 30);
+        var vm = new EapViewModel(_bridge, Pm3(), _ => { }, link);
+
+        Assert.Equal(EapLinkState.IdsMissing, link.Status.State);
+        Assert.Contains("not started", vm.EapLinkText);
+        Assert.Contains("ids", vm.EapLinkText);
     }
 
     /// <summary>
@@ -125,7 +173,7 @@ public sealed class ToolEventUiTests : IDisposable
         vm.ToolApplyInTestMode = true;
         vm.SaveCommand.Execute(null);
 
-        var tools = Assert.Single(saved).ToolEvents;
+        var tools = Assert.Single(saved);
         Assert.True(tools.Enabled);
         Assert.Equal(120, tools.MaxWindowSeconds);
         Assert.True(tools.ApplyInTestMode);
@@ -150,7 +198,7 @@ public sealed class ToolEventUiTests : IDisposable
         vm.SaveCommand.Execute(null);
 
         Assert.Empty(saved);
-        Assert.Contains(vm.Traffic, l => l.StartsWith("[CFG] not saved") && l.Contains("window"));
+        Assert.Contains("window", vm.SaveMessage);
     }
 
     /// <summary>The table is shown as saved, one row per mapping, in the words the tool uses.</summary>
@@ -192,7 +240,7 @@ public sealed class ToolEventUiTests : IDisposable
         Assert.True(vm.ToolTablePending);
         Assert.Contains("restart acquisition", vm.ToolTablePendingText);
 
-        vm.SetToolEventsInForce(saved[^1].ToolEvents);  // the acquisition start adopts it
+        vm.SetToolEventsInForce(saved[^1]);             // the acquisition start adopts it
         Assert.False(vm.ToolTablePending);
 
         vm.SetToolEventsInForce(Pm3(enabled: false));   // off with rows == off without

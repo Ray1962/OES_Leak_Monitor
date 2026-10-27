@@ -336,6 +336,9 @@
             <TabItem Header="SECS" x:Name="SecsTab">
                 <local:SecsPanel DataContext="{Binding Secs}"/>
             </TabItem>
+            <TabItem Header="EAP" x:Name="EapTab">
+                <local:EapPanel DataContext="{Binding Eap}"/>
+            </TabItem>
         </TabControl>
     </Grid>
 </Window>

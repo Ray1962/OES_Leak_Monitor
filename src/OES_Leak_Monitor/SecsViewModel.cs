@@ -29,7 +29,6 @@ public sealed class SecsViewModel : INotifyPropertyChanged
     public const int MaxTrafficLines = 500;
 
     private readonly SecsBridge _bridge;
-    private readonly EapEventLink? _eapLink;
     private readonly Action<SecsSettings> _save;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
@@ -38,11 +37,9 @@ public sealed class SecsViewModel : INotifyPropertyChanged
     private bool _canEdit;
     private bool _dirty;
 
-    public SecsViewModel(SecsBridge bridge, SecsSettings settings, Action<SecsSettings> save,
-        EapEventLink? eapLink = null)
+    public SecsViewModel(SecsBridge bridge, SecsSettings settings, Action<SecsSettings> save)
     {
         _bridge = bridge;
-        _eapLink = eapLink;
         _save = save;
 
         SaveCommand = new RelayCommand(Save, () => CanEdit);
@@ -55,9 +52,6 @@ public sealed class SecsViewModel : INotifyPropertyChanged
 
         _bridge.StateChanged += (_, _) => _dispatcher.BeginInvoke(RaiseStatus);
         _bridge.Traffic += (_, line) => _dispatcher.BeginInvoke(() => AppendTraffic(line));
-        _bridge.ToolContextChanged += (_, _) => _dispatcher.BeginInvoke(RaiseToolStatus);
-        if (_eapLink is not null)
-            _eapLink.StatusChanged += _ => _dispatcher.BeginInvoke(RaiseEapStatus);
     }
 
     // ---- commands ----------------------------------------------------------
@@ -100,34 +94,6 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         : _bridge.StatusText;
 
     public string ControlStateText => _bridge.ControlStateText;
-
-    /// <summary>Which process window the leak monitor is judging in, and the last tool event.</summary>
-    public string ToolEventStatus => _bridge.ToolEventStatusText;
-
-    /// <summary>The window the leak monitor is judging in, as the engine last published it.</summary>
-    public string ToolContextText
-    {
-        get
-        {
-            var s = _bridge.ToolStatus;
-            return s.State switch
-            {
-                ToolEventContext.Disabled => "Tool events: not in use",
-                ToolEventContext.InWindow => $"Tool events: in window {s.WindowClass}",
-                ToolEventContext.OutsideWindow => "Tool events: outside any window",
-                _ => "Tool events: window unknown — ratios judged as without tool events " +
-                     "(no window edge yet, the last window timed out, or not applied to these spectra)",
-            };
-        }
-    }
-
-    /// <summary>The last event the EAP forwarded, received or ignored alike.</summary>
-    public string ToolLastEventText => _bridge.ToolStatus.LastTime is { } t
-        ? $"Last tool event: CEID {_bridge.ToolStatus.LastCeid} at {t:HH:mm:ss}"
-        : "Last tool event: none received yet";
-
-    /// <summary>How many have arrived this run — "is the EAP forwarding anything?" as a number.</summary>
-    public string ToolEventCountText => $"Tool events received this run: {_bridge.ToolStatus.ReceivedCount}";
 
     public string ProfileTemplatePath => _bridge.ProfileTemplatePath;
     public string EffectiveProfilePath => _bridge.EffectiveProfilePath;
@@ -282,165 +248,6 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         set => Set(v => _edited.LogRetentionDays = v, _edited.LogRetentionDays, value);
     }
 
-    // ---- tool events (S2F41 TOOL_EVENT) ------------------------------------
-    //
-    // Two kinds of field, and the tab must say which is which. The switch and the CEID table are
-    // STAGED — saved now, adopted by the engine when acquisition next starts, because the table
-    // names the classes the ratios refer to. The window limit and the test-mode switch are
-    // HOT-APPLIED on save: they name no class.
-
-    /// <summary>Lowest and highest window limit Save accepts. A process A step is 38–63 s, so a
-    /// limit under 10 s closes every window mid-step; over a day it no longer limits anything.</summary>
-    public const double MinWindowSeconds = 10, MaxWindowSecondsLimit = 86400;
-
-    private ToolEventSettings Tools => _edited.ToolEvents ??= new ToolEventSettings();
-
-    /// <summary>Staged: takes effect when acquisition next starts.</summary>
-    public bool ToolEventsEnabled
-    {
-        get => Tools.Enabled;
-        set => Set(v => Tools.Enabled = v, Tools.Enabled, value);
-    }
-
-    /// <summary>Hot-applied on save.</summary>
-    public double ToolMaxWindowSeconds
-    {
-        get => Tools.MaxWindowSeconds;
-        set => Set(v => Tools.MaxWindowSeconds = v, Tools.MaxWindowSeconds, value);
-    }
-
-    /// <summary>Hot-applied on save.</summary>
-    public bool ToolApplyInTestMode
-    {
-        get => Tools.ApplyInTestMode;
-        set => Set(v => Tools.ApplyInTestMode = v, Tools.ApplyInTestMode, value);
-    }
-
-    /// <summary>One row of the read-only CEID table, worded for the screen.</summary>
-    public sealed record ToolEventMappingRow(uint Ceid, string ClassName, string Edge, string Name, string PlasmaThreshold);
-
-    /// <summary>The CEID table as saved. Read-only here: it is edited in settings.json
-    /// (<c>secs.toolEvents.mappings</c>) — it changes rarely, and a grid editor for it would cost
-    /// more than it saves.</summary>
-    public IReadOnlyList<ToolEventMappingRow> ToolEventMappings => Tools.Mappings
-        .Select(m => new ToolEventMappingRow(
-            m.Ceid,
-            string.IsNullOrWhiteSpace(m.ClassName) ? "(record only)" : m.ClassName.Trim(),
-            m.Edge.ToString(),
-            m.Name,
-            m.PlasmaThreshold > 0
-                ? m.PlasmaThreshold.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
-                : "inherit"))
-        .ToList();
-
-    // What was last saved, and what the engine adopted at the last acquisition start. The saved
-    // table is not in force until then, and the screen has to say so.
-    private ToolEventSettings _persistedTools = new();
-    private ToolEventSettings? _toolsInForce;
-
-    /// <summary>
-    /// The host reports what the engine adopted — at start-up and at every acquisition start —
-    /// so the tab can tell a saved table from the one in force.
-    /// </summary>
-    public void SetToolEventsInForce(ToolEventSettings? inForce)
-    {
-        _toolsInForce = inForce?.Clone();
-        RaiseToolPending();
-    }
-
-    /// <summary>True when the saved switch or table differs from the one the engine is using.</summary>
-    public bool ToolTablePending =>
-        _toolsInForce is not null && !ToolEventSettings.SameStaged(_persistedTools, _toolsInForce);
-
-    public string ToolTablePendingText => ToolTablePending
-        ? "Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it."
-        : "";
-
-    // ---- the EAP's TCP event link ------------------------------------------
-    //
-    // Status is ungated like the rest of the tool-event status: "is the EAP talking to us" is an
-    // Operator's question. The four settings are hot-applied on save.
-
-    private ToolEventTcpSettings Tcp => Tools.Tcp ??= new ToolEventTcpSettings();
-
-    public bool EapEnabled
-    {
-        get => Tcp.Enabled;
-        set => Set(v => Tcp.Enabled = v, Tcp.Enabled, value);
-    }
-
-    public string EapHost
-    {
-        get => Tcp.RemoteHost;
-        set => Set(v => Tcp.RemoteHost = v, Tcp.RemoteHost, value);
-    }
-
-    public int EapPort
-    {
-        get => Tcp.RemotePort;
-        set => Set(v => Tcp.RemotePort = v, Tcp.RemotePort, value);
-    }
-
-    public double EapHeartbeatTimeoutSeconds
-    {
-        get => Tcp.HeartbeatTimeoutSeconds;
-        set => Set(v => Tcp.HeartbeatTimeoutSeconds = v, Tcp.HeartbeatTimeoutSeconds, value);
-    }
-
-    private EapLinkStatus EapStatus => _eapLink?.Status ?? EapLinkStatus.Disabled;
-
-    /// <summary>First status line: whether the link is up, and to where.</summary>
-    public string EapLinkText
-    {
-        get
-        {
-            var s = EapStatus;
-            return s.State switch
-            {
-                EapLinkState.Disabled => "EAP link: not in use",
-                EapLinkState.Connected => $"EAP link: connected to {s.Endpoint}" +
-                                          (s.ConnectedSince is { } c ? $" (since {c:HH:mm:ss})" : ""),
-                EapLinkState.Connecting => $"EAP link: connecting to {s.Endpoint}…",
-                _ => $"EAP link: not connected to {s.Endpoint} — retrying every 10 s ({s.Detail})",
-            };
-        }
-    }
-
-    /// <summary>Second status line: what was last heard, or why the window is no longer trusted.</summary>
-    public string EapDetailText
-    {
-        get
-        {
-            var s = EapStatus;
-            if (s.State == EapLinkState.Disabled) return "";
-            if (s.Silent)
-                return $"No line from the EAP for {EapHeartbeatTimeoutSeconds:0} s — the process window has been set to unknown.";
-            if (s.LastLineAt is not { } last) return "Nothing received yet.";
-            string text = $"Last line {last:HH:mm:ss}";
-            if (s.LastHeartbeat is { } hb)
-            {
-                string state = hb.State switch
-                {
-                    ToolContextReportState.InWindow => $"in window (CEID {hb.WindowCeid})",
-                    ToolContextReportState.Outside => "outside any window",
-                    _ => "state unknown",
-                };
-                text += $" · heartbeat: PM3 {state} · tool link {(hb.ToolLink ? "up" : "DOWN")} · SEQ {hb.Seq}";
-            }
-            return text;
-        }
-    }
-
-    public Brush EapLinkBrush => EapStatus switch
-    {
-        { State: EapLinkState.Disabled } => Brushes.Gray,
-        { Silent: true } => Brushes.DarkOrange,
-        { State: EapLinkState.Connected } => Brushes.ForestGreen,
-        _ => Brushes.Firebrick,
-    };
-
-    public string EapLogFilePath => _eapLink?.LogFilePath ?? "";
-
     // ---- operations --------------------------------------------------------
 
     /// <summary>Replaces the edit buffer with what is on disk. Called at construction and after
@@ -448,7 +255,6 @@ public sealed class SecsViewModel : INotifyPropertyChanged
     public void LoadFrom(SecsSettings settings)
     {
         _edited = Clone(settings ?? new SecsSettings());
-        _persistedTools = Tools.Clone();
         _dirty = false;
         RaiseAll();
     }
@@ -546,10 +352,8 @@ public sealed class SecsViewModel : INotifyPropertyChanged
     private void Persist()
     {
         _save(Clone(_edited));
-        _persistedTools = Tools.Clone();
         _dirty = false;
         OnPropertyChanged(nameof(HasUnsavedChanges));
-        RaiseToolPending();
     }
 
     /// <summary>Returns "" when the staged settings are usable, otherwise the first problem.</summary>
@@ -583,28 +387,6 @@ public sealed class SecsViewModel : INotifyPropertyChanged
                 return $"{name} = {value} s is out of range (1–3600).";
             }
         }
-        double window = Tools.MaxWindowSeconds;
-        if (double.IsNaN(window) || window < MinWindowSeconds || window > MaxWindowSecondsLimit)
-        {
-            return $"tool-event max window = {window} s is out of range ({MinWindowSeconds:0}–{MaxWindowSecondsLimit:0}). " +
-                   "A process A step is 38–63 s; a limit shorter than a step closes every window mid-step.";
-        }
-        if (Tcp.Enabled && string.IsNullOrWhiteSpace(Tcp.RemoteHost))
-        {
-            return "the EAP link needs the EAP's address.";
-        }
-        if (Tcp.RemotePort is < 1 or > 65535)
-        {
-            return $"EAP port {Tcp.RemotePort} is out of range.";
-        }
-        double hb = Tcp.HeartbeatTimeoutSeconds;
-        if (double.IsNaN(hb) || hb < ToolEventTcpSettings.MinHeartbeatTimeoutSeconds ||
-            hb > ToolEventTcpSettings.MaxHeartbeatTimeoutSeconds)
-        {
-            return $"EAP heartbeat timeout = {hb} s is out of range " +
-                   $"({ToolEventTcpSettings.MinHeartbeatTimeoutSeconds:0}–{ToolEventTcpSettings.MaxHeartbeatTimeoutSeconds:0}). " +
-                   "The EAP sends a heartbeat every 30 s; a shorter timeout fires on a healthy link.";
-        }
         return "";
     }
 
@@ -632,34 +414,9 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         RefreshMissingRows();   // a start may have written the profile, or a save named another
     }
 
-    private void RaiseToolStatus()
-    {
-        OnPropertyChanged(nameof(ToolEventStatus));
-        OnPropertyChanged(nameof(ToolContextText));
-        OnPropertyChanged(nameof(ToolLastEventText));
-        OnPropertyChanged(nameof(ToolEventCountText));
-    }
-
-    private void RaiseEapStatus()
-    {
-        OnPropertyChanged(nameof(EapLinkText));
-        OnPropertyChanged(nameof(EapDetailText));
-        OnPropertyChanged(nameof(EapLinkBrush));
-        OnPropertyChanged(nameof(EapLogFilePath));
-    }
-
-    private void RaiseToolPending()
-    {
-        OnPropertyChanged(nameof(ToolTablePending));
-        OnPropertyChanged(nameof(ToolTablePendingText));
-    }
-
     private void RaiseAll()
     {
         RaiseStatus();
-        RaiseToolStatus();
-        RaiseToolPending();
-        RaiseEapStatus();
         foreach (var name in new[]
                  {
                      nameof(Enabled), nameof(ReportAlarms), nameof(ReportEvents), nameof(ReportInTestMode),
@@ -667,9 +424,6 @@ public sealed class SecsViewModel : INotifyPropertyChanged
                      nameof(IpAddress), nameof(Port), nameof(DeviceId), nameof(ModelName),
                      nameof(SoftwareRevision), nameof(T3), nameof(T5), nameof(T6), nameof(T7), nameof(T8),
                      nameof(LogRetentionDays), nameof(ReportingSummary), nameof(HasUnsavedChanges),
-                     nameof(ToolEventsEnabled), nameof(ToolMaxWindowSeconds), nameof(ToolApplyInTestMode),
-                     nameof(ToolEventMappings),
-                     nameof(EapEnabled), nameof(EapHost), nameof(EapPort), nameof(EapHeartbeatTimeoutSeconds),
                  })
         {
             OnPropertyChanged(name);
@@ -707,8 +461,8 @@ public sealed class SecsViewModel : INotifyPropertyChanged
         T3 = s.T3, T5 = s.T5, T6 = s.T6, T7 = s.T7, T8 = s.T8,
         ProfileFileName = s.ProfileFileName,
         LogRetentionDays = s.LogRetentionDays,
-        // The tab edits three of its fields; the CEID table it only shows. Save writes the whole
-        // object back, and a field the clone forgets is a mapping table wiped by the next Save.
+        // Edited on the EAP tab, not here; carried so the object stays whole. The host keeps the
+        // copy on disk when this tab saves (MainViewModel.PersistSecsSettings).
         ToolEvents = s.ToolEvents?.Clone() ?? new ToolEventSettings(),
     };
 

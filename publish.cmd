@@ -82,7 +82,6 @@ for %%F in (
     secs-ratio-svid-example-zh-TW.html
     check-oes-connect.ps1
     check-oes-connect.cmd
-    eap-link-sim.ps1
 ) do (
     if not exist "%PUBFOLDER%\%%F" set "MISSING=!MISSING! %%F"
 )
@@ -119,7 +118,7 @@ if defined MISSING (
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 23 files present ***
+echo  *** PUBLISH SUCCEEDED - all 22 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -143,7 +142,6 @@ echo                               building a Golden Run from recordings on disk
 echo    secs-ratio-svid-example-zh-TW.html
 echo                               per-ratio SVID worked examples for the host
 echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
-echo    eap-link-sim.ps1           EAP link simulator (SECS SOP section 12.7)
 echo.
 
 if exist "%PUBFOLDER%" start "" explorer "%PUBFOLDER%"
