@@ -37,7 +37,7 @@
 4. **`SetupTestMode()` 回傳 `true`——被當成連線成功。**
    於是稽核 CSV 記的是 Information 等級的 `Connect ok`。唯一破綻是 `Serial=TEST_MODE_SIMULATOR`，而那需要事先知道要看它。
 
-完整的回退路徑（六條）與各自的判別方式，見手冊 §9.1 與 `CLAUDE.md` 的〈The Visual C++ runtime ships app-local〉。
+完整的回退路徑（六條）與各自的判別方式，見手冊 §9.1 與 `docs/dev/build-and-publish.md` 的〈The Visual C++ runtime ships app-local〉。
 
 ## 3. 為什麼查了兩個小時
 

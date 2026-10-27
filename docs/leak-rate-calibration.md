@@ -8,7 +8,7 @@
 > 輔助讀數，不取代警報判斷。
 
 相關程式：`LeakMonitorEngine`、`RatioMonitor`、`LineIntensityExtractor`、
-`LeakMonitorSettings`（見 `CLAUDE.md` 的 Leak Monitor 段落）。
+`LeakMonitorSettings`（見 `docs/dev/leak-engine.md` 的 Leak Monitor 一節）。
 
 ---
 
