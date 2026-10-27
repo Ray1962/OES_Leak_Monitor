@@ -7,7 +7,7 @@
 > [`Satellite_SECS_Specification_v2.md`](Satellite_SECS_Specification_v2.md)（`ss=27` 章節、
 > §5 ALID、§6 CEID）；兩者衝突時以該份為準，且必須回頭修正本文件。
 >
-> 相關程式：`LeakMonitorEngine`、`MainViewModel`、`AppSettings`（見 `CLAUDE.md`）。
+> 相關程式：`LeakMonitorEngine`、`MainViewModel`、`AppSettings`（見 `docs/dev/`）。
 > 通訊函式庫：`Aqusen.Secs`（維護於 `Ray1962/Test_SECS`，整合方式見該 repo 的 `整合指南.md`）。
 
 **狀態：** 已實作，並有自動化測試（§13.2–13.3，38 個）。連線、S1F3、S5F5 已在真機驗證；
