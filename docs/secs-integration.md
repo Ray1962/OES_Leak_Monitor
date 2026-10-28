@@ -599,6 +599,7 @@ SECS 部分當初是 38 個測試。整個測試專案（含洩漏引擎、批�
 | `RatioSlotTableTests` | 引擎槽位表：建構後即有、校正後波長且 `settings.json` 不變、`u` 前綴、重排後 Key→槽位正確；只改門檻／平滑不通知，改譜線／模式／擷取／啟用／名稱／增刪／重排／波長校正各通知一次；第 11 列不算槽位 |
 | `SecsRatioSlotTests` | 槽位綁定（經 `SvBindings`，與 S1F3 同一條路）：沒有幀時身分正確、空槽位、重排前的快照以 Key 對應不錯槽、無值與非數字送 0、絕對模式 07／09 = 0、`PerRatio` 依 Key |
 | `SecsRatioSlotWireTests` | loopback：S1F3 讀槽位 1～3 的身分（沒有任何幀）與即時量、重排後收到 CEID 507 且讀得到新身分、只改門檻收不到、S2F23 能追蹤槽位 VID（不需升級 `Aqusen.Secs`） |
+| `SecsHostContractTests` | loopback：函式庫決定、Host 會撞到的回覆。S1F3 遇到 profile 沒有的 SVID 在原位置回空 `L`；一個 Trace 最多 64 個 SVID（65 → TIAACK 1）、同時最多 4 個 Trace（第 5 個 → TIAACK 2）；Host 斷線重連後 Trace 照跑、SMPLN 接續、報告登錄表保留，**Restart interface 則全部清掉**；DRACK／LRACK 只檢查格式（未定義的 VID／RPTID 回 0，之後在報告裡是空 `L`，格式錯才回 3）；ERACK 一律 0；S2F37 停用的 CEID **照送**、只是報告清單為空 |
 | `SecsProfileRowsTests` | 補列：以 2026-09-04 的真實範本（`SecsProfileFixtures`）為舊 profile，既有每一行逐字保留、改號改名的列不動、刪掉的列補回、編號衝突拒絕且其他照補、尾逗號、行尾註解、CRLF、非清單的區段 |
 | `RatioSetupReorderTests` | Ratio Setup 的 ▲／▼：Guest／Operator 不能按、首列不能上移末列不能下移、移動是暫存（Save 才寫入、Revert 還原順序）、Save + `ReloadRatios` 後槽位表依新順序且只通知一次、每組比值 `MeasuresSameAs` 不變、鎖存警報與基準在移動後保留 |
 | `SecsProfileRowsButtonTests` | 補列按鈕：Guest／Operator 不能按、沒有可補時停用並說明、`.bak` 與補列前相同、`SecsProfileRowsAdded`、保留 BOM、同秒備份不覆蓋；loopback 的 `SecsProfileRowsWireTests`：舊 profile 對 `TOOL_EVENT` 回 HCACK 1，補列並重啟後不再是 1 |
