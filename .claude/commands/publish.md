@@ -8,14 +8,21 @@ target PC needs no .NET install).
 
 Steps:
 
-1. Check that the versions pinned in `OES_Leak_Monitor.csproj` exist in
-   `/mnt/c/Users/infor/source/repos/Ray1962/LocalPackages` (`ls` the folder) —
-   at the time of writing `Aqst.OesApp.Core` **0.1.10**, `Aqst.OesApp.Wpf`
-   **0.1.16**, `Aqst.OesSpectrometer` **0.6.2**, `Aqusen.Secs` **0.8.0**. Read
-   the csproj rather than trusting these numbers; they move. If an
-   `Aqst.OesApp.*` package is missing, STOP and tell the user to `dotnet pack`
-   it from the sibling repo `Ray1962/DualOes_PlasmaMonitor` first — do not
-   continue. A missing `Aqusen.Secs` is packed from `Ray1962/Test_SECS`.
+1. Read the in-house versions from the csproj — it is the only place they are
+   written down for this step:
+
+   ```
+   grep -E 'PackageReference Include="(Aqst|Aqusen)\.' src/OES_Leak_Monitor/OES_Leak_Monitor.csproj
+   ```
+
+   and check that each `<Id>.<Version>.nupkg` exists in
+   `/mnt/c/Users/infor/source/repos/Ray1962/LocalPackages` (`ls` the folder).
+   If one is missing, STOP — do not continue — and tell the user where it
+   comes from: `Aqst.OesApp.*` is `dotnet pack`ed from the sibling repo
+   `Ray1962/DualOes_PlasmaMonitor`, `Aqst.OesSpectrometer` from
+   `Ray1962/Aqst.OesSpectrometer`, and `Aqusen.Secs` from `Ray1962/Test_SECS`
+   (copy its nupkg into `LocalPackages`; `docs/dev/nuget-packages.md` has the
+   steps).
 
 2. Run the publish. This is a WPF/Windows build, so use the Windows .NET SDK
    (the WSL shell has no native `dotnet`):
