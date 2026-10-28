@@ -30,6 +30,8 @@ public sealed class EapSecsLinkTests : IDisposable
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "oeslm-eap2b-" + Guid.NewGuid().ToString("N"));
     private readonly ConcurrentQueue<(uint Ceid, DateTime Time)> _events = new();
     private readonly ConcurrentQueue<ToolContextReport> _reports = new();
+    // Both sinks in arrival order, for the cases where which came first is the point.
+    private readonly ConcurrentQueue<string> _order = new();
     private ToolEventAck _reportAck = ToolEventAck.Accepted;
 
     public EapSecsLinkTests() => Directory.CreateDirectory(_dir);
@@ -129,8 +131,8 @@ public sealed class EapSecsLinkTests : IDisposable
 
     private EapSecsLink Link(SystemLogger? log = null, TimeSpan? silence = null, TimeSpan? poll = null) =>
         new(log, _dir,
-            (ceid, t) => { _events.Enqueue((ceid, t)); return ToolEventAck.Accepted; },
-            r => { _reports.Enqueue(r); return _reportAck; })
+            (ceid, t) => { _events.Enqueue((ceid, t)); _order.Enqueue($"event {ceid}"); return ToolEventAck.Accepted; },
+            r => { _reports.Enqueue(r); _order.Enqueue($"report {r.State}"); return _reportAck; })
         {
             PollInterval = poll ?? TimeSpan.FromSeconds(30),
             SilenceTimeoutOverride = silence ?? TimeSpan.FromSeconds(60),
@@ -732,6 +734,187 @@ public sealed class EapSecsLinkTests : IDisposable
         var lines = log.Lines();
         Assert.Single(lines, l => l.Contains("EapLinkConnectFailed"));
         Assert.Contains(lines, l => l.Contains("EapLinkConnected") && l.Contains("failed attempt"));
+    }
+
+    // ---------------------------------------------------------------- events only (#74)
+
+    /// <summary>Events only, with S1–S7 left as typed: the switch, not the ids, decides.</summary>
+    private static EapLinkSettings EventsOnly(int port, bool linkCeid = true)
+    {
+        var s = To(port);
+        s.EventsOnly = true;
+        if (!linkCeid) s.LinkCeid = 0;
+        return s;
+    }
+
+    private int Unknowns => _reports.Count(r => r.State == ToolContextReportState.Unknown);
+
+    /// <summary>
+    /// The case #74 exists for: the EAP has not assigned S1–S7, and only the forwarding CEID is
+    /// set. The OES goes online and enables the CEIDs, never sends S1F3, reports the window
+    /// unknown — nothing says where it is — and hands forwarded events on as in full mode.
+    /// </summary>
+    [Fact]
+    public async Task EventsOnly_EnablesTheCeids_NeverReadsS1ToS7_AndStillDeliversEvents()
+    {
+        using var log = new LogCapture();
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap();
+        await using (var eap = new Eap(profile, port))
+        using (var link = Link(log.Logger, poll: TimeSpan.FromMilliseconds(200)))
+        {
+            link.Configure(new EapLinkSettings { Enabled = true, RemoteHost = "127.0.0.1", RemotePort = port, EventsOnly = true, ForwardCeid = 6100 }, 30);
+
+            Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected));
+            Assert.True(link.Status.EventsOnly);
+            Assert.True(eap.Saw("S2F37 enable -> S2F38 ERACK=0 (1 enabled)"));
+            var unknown = Assert.Single(_reports);
+            Assert.Equal(ToolContextReportState.Unknown, unknown.State);
+            Assert.Contains("events-only", unknown.Reason);
+
+            await profile.Forward(eap.Equipment, ProcessStart);
+            Assert.True(await Wait(() => _events.Any(e => e.Ceid == ProcessStart)));
+
+            await Task.Delay(700);   // several poll intervals
+            Assert.False(eap.Saw("S1F3"));
+            Assert.Null(link.Status.LastReading);
+            Assert.Contains("S1–S7 are not read", link.Status.ToolLinkGap);
+        }
+
+        var lines = log.Lines();
+        Assert.Single(lines, l => l.Contains("EapEventsOnly"));
+        Assert.DoesNotContain(lines, l => l.Contains("EapToolLinkNotMonitored"));
+    }
+
+    /// <summary>
+    /// The heartbeat is S1F1: answered, it keeps a link with no events heard well past the
+    /// silence timeout; once the EAP is gone, the silence reports unknown — once.
+    /// </summary>
+    [Fact]
+    public async Task EventsOnly_S1F1IsTheHeartbeat()
+    {
+        int port = SecsTestPort.Free();
+        using var link = Link(silence: TimeSpan.FromMilliseconds(800), poll: TimeSpan.FromMilliseconds(200));
+        link.Configure(EventsOnly(port), 30);
+        await using (var eap = new Eap(new FakeEap(), port))
+        {
+            Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected));
+            await Task.Delay(2000);
+            Assert.False(link.Status.Silent);
+            Assert.Equal(1, Unknowns);   // the connect's, nothing more
+        }
+
+        Assert.True(await Wait(() => link.Status.Silent));
+        await Task.Delay(1000);
+        Assert.Equal(2, Unknowns);
+        Assert.Contains("nothing from the EAP", _reports.Last(r => r.State == ToolContextReportState.Unknown).Reason);
+    }
+
+    /// <summary>Full mode keeps the window over a reconnect because the S1F3 after it corrects
+    /// it; events only has nothing to correct with, so every reconnect reports unknown.</summary>
+    [Fact]
+    public async Task EventsOnly_EveryReconnect_ReportsUnknown()
+    {
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap();
+        using var link = Link(silence: TimeSpan.FromSeconds(60));
+        link.Configure(EventsOnly(port), 30);
+        await using (var eap = new Eap(profile, port))
+        {
+            Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected));
+            await profile.Forward(eap.Equipment, ProcessStart);
+            Assert.True(await Wait(() => _events.Count == 1));
+        }
+        Assert.True(await Wait(() => link.Status.State != EapLinkState.Connected));
+        await using (var eap2 = new Eap(profile, port))
+        {
+            Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected, 30));
+            Assert.True(await Wait(() => Unknowns == 2));
+        }
+        Assert.Equal(new[] { "report Unknown", $"event {ProcessStart}", "report Unknown" }, _order);
+    }
+
+    /// <summary>
+    /// A gap may have lost an End, an EAP restart may have lost anything: in events-only mode
+    /// each reports unknown <i>before</i> the event that revealed it is handed on, so a Start
+    /// arriving with the gap still opens its window.
+    /// </summary>
+    [Fact]
+    public async Task EventsOnly_AGapOrARestart_ReportsUnknownBeforeTheEvent()
+    {
+        using var log = new LogCapture();
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap();
+        await using (var eap = new Eap(profile, port))
+        using (var link = Link(log.Logger))
+        {
+            link.Configure(EventsOnly(port), 30);
+            Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected));
+
+            await profile.Forward(eap.Equipment, ProcessStart);   // 1
+            profile.Seq += 1;                                       // 2 lost
+            await profile.Forward(eap.Equipment, ProcessStart);   // 3
+            profile.Seq = 0;                                        // the EAP restarted
+            await profile.Forward(eap.Equipment, ProcessEnd);     // 1
+            Assert.True(await Wait(() => _events.Count == 3));
+        }
+
+        Assert.Equal(new[]
+        {
+            "report Unknown", $"event {ProcessStart}",
+            "report Unknown", $"event {ProcessStart}",
+            "report Unknown", $"event {ProcessEnd}",
+        }, _order);
+        var lines = log.Lines();
+        Assert.Contains("set to unknown", Assert.Single(lines, l => l.Contains("EapEventSequenceGap")));
+        Assert.Contains("set to unknown", Assert.Single(lines, l => l.Contains("EapSequenceReset")));
+    }
+
+    /// <summary>Tool link down reports unknown as in full mode; back up, nothing says where the
+    /// window is, so it stays unknown until the next process event — and no S1F3 is sent.</summary>
+    [Fact]
+    public async Task EventsOnly_ToolLinkUp_LeavesTheWindowUnknown()
+    {
+        int port = SecsTestPort.Free();
+        var profile = new FakeEap();
+        await using var eap = new Eap(profile, port);
+        using var link = Link();
+        link.Configure(EventsOnly(port), 30);
+        Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected));
+
+        await profile.SetToolLink(eap.Equipment, up: false);
+        Assert.True(await Wait(() => Unknowns == 2));
+        await profile.SetToolLink(eap.Equipment, up: true);
+        await Task.Delay(500);
+
+        Assert.Equal(2, _reports.Count);
+        Assert.False(eap.Saw("S1F3"));
+    }
+
+    /// <summary>The switch is hot-applied: changing it reconnects in the other mode, and turning
+    /// it off with S1–S7 kept goes straight back to reading them.</summary>
+    [Fact]
+    public async Task TogglingEventsOnly_ReconnectsInTheOtherMode()
+    {
+        int port = SecsTestPort.Free();
+        await using var eap = new Eap(new FakeEap { State = 0 }, port);
+        using var link = Link();
+        link.Configure(To(port), 30);
+        Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected && link.Status.LastReading is not null));
+
+        link.Configure(EventsOnly(port), 30);
+        Assert.True(await Wait(() => link.Status.State == EapLinkState.Connected && link.Status.EventsOnly));
+        Assert.True(await Wait(() => _reports.Any(r => r.Reason.Contains("events-only"))));
+        Assert.Equal(2, eap.Count("S2F37 enable"));
+
+        link.Configure(EventsOnly(port), 30);   // an unchanged re-save
+        await Task.Delay(300);
+        Assert.Equal(2, eap.Count("S2F37 enable"));
+
+        int reads = eap.Count("S1F3 -> S1F4");
+        link.Configure(To(port), 30);
+        Assert.True(await Wait(() => !link.Status.EventsOnly && eap.Count("S1F3 -> S1F4") > reads));
+        Assert.True(await Wait(() => _reports.Last().State == ToolContextReportState.Outside));
     }
 
     // ---------------------------------------------------------------- configuration and trace

@@ -33,16 +33,20 @@ public sealed record EapStatusReading(byte WindowState, uint WindowCeid, string 
 /// <param name="Silent">No successful exchange for longer than the silence timeout: the link
 /// has told the engine the window is no longer known.</param>
 /// <param name="Detail">Why it is not connected, in words; "" when connected.</param>
-/// <param name="ToolLinkGap">What the OES cannot see because the EAP provides no S4 or no
-/// tool-link CEID (<see cref="EapLinkSettings.ToolLinkGap"/>); "" when it provides both.</param>
+/// <param name="ToolLinkGap">What the OES cannot see: because the EAP provides no S4 or no
+/// tool-link CEID (<see cref="EapLinkSettings.ToolLinkGap"/>), or — when <paramref name="EventsOnly"/>
+/// — because S1–S7 are not read (<see cref="EapLinkSettings.EventsOnlyGap"/>); "" when nothing.</param>
 /// <param name="LinkTestOnly">No EAP ids are set (<see cref="EapLinkSettings.IsLinkTestOnly"/>):
 /// the link connects and goes online, and nothing more.</param>
 /// <param name="Peer">The EAP's MDLN and SOFTREV from its S1F2, "" until it has answered.</param>
 /// <param name="Discovery">The last time the EAP's ids were looked up by name (#66), or null.</param>
 /// <param name="Discovering">A lookup is in flight.</param>
+/// <param name="EventsOnly">Events-only mode (<see cref="EapLinkSettings.EventsOnly"/>): events are
+/// received, S1–S7 are never read.</param>
 public sealed record EapLinkStatus(EapLinkState State, string Endpoint, DateTime? ConnectedSince,
     EapStatusReading? LastReading, string LastEvent, bool Silent, string Detail, string ToolLinkGap = "",
-    bool LinkTestOnly = false, string Peer = "", EapIdDiscovery? Discovery = null, bool Discovering = false)
+    bool LinkTestOnly = false, string Peer = "", EapIdDiscovery? Discovery = null, bool Discovering = false,
+    bool EventsOnly = false)
 {
     public static readonly EapLinkStatus Disabled = new(EapLinkState.Disabled, "", null, null, "", false, "");
 }
@@ -67,6 +71,12 @@ public sealed record EapLinkStatus(EapLinkState State, string Endpoint, DateTime
 /// S6F11 tells the engine the window is unknown — once per silence, and only after having heard
 /// something. A successful S1F3 rather than an HSMS linktest is the measure on purpose: a
 /// linktest says the socket is up, not that the EAP's application is alive.</para>
+///
+/// <para><b>Events only</b> (<see cref="EapLinkSettings.EventsOnly"/>, #74) drops the S1F3: the
+/// poll becomes an S1F1, which needs no ids and is what the silence timeout then measures. With no
+/// reading to correct a lost event, the link reports the window unknown whenever one may have been
+/// lost — on every connect, on a sequence gap or reset — and a tool link coming back leaves it
+/// unknown until the next process event.</para>
 /// </summary>
 public sealed class EapSecsLink : IDisposable
 {
@@ -195,7 +205,7 @@ public sealed class EapSecsLink : IDisposable
         a.RemotePort == b.RemotePort && a.DeviceId == b.DeviceId &&
         a.SilenceTimeoutSeconds.Equals(b.SilenceTimeoutSeconds) &&
         a.StatusSvids.AsSpan().SequenceEqual(b.StatusSvids) &&
-        a.ForwardCeid == b.ForwardCeid && a.LinkCeid == b.LinkCeid;
+        a.ForwardCeid == b.ForwardCeid && a.LinkCeid == b.LinkCeid && a.EventsOnly == b.EventsOnly;
 
     /// <summary>Caller holds <c>_gate</c>.</summary>
     private void Start(EapLinkSettings s)
@@ -237,13 +247,22 @@ public sealed class EapSecsLink : IDisposable
         Update(_ => EapLinkStatus.Disabled with
         {
             State = EapLinkState.Connecting, Endpoint = endpoint, LinkTestOnly = s.IsLinkTestOnly,
-            ToolLinkGap = s.IsLinkTestOnly ? "" : s.ToolLinkGap() ?? "",
+            EventsOnly = s.EventsOnly && !s.IsLinkTestOnly,
+            ToolLinkGap = s.IsLinkTestOnly ? "" : (s.EventsOnly ? s.EventsOnlyGap() : s.ToolLinkGap()) ?? "",
         });
         Trace($"[EAP] connecting to {endpoint} as host (device {s.DeviceId}); ids: S1-S7 = " +
               $"{string.Join(",", s.StatusSvids.Select(i => i == 0 ? "-" : i.ToString(CultureInfo.InvariantCulture)))}, " +
-              $"forward CEID {s.ForwardCeid}, link CEID {(s.HasLinkCeid ? s.LinkCeid.ToString(CultureInfo.InvariantCulture) : "not provided")}");
+              $"forward CEID {s.ForwardCeid}, link CEID {(s.HasLinkCeid ? s.LinkCeid.ToString(CultureInfo.InvariantCulture) : "not provided")}" +
+              (s.EventsOnly ? "; events only" : ""));
         if (s.IsLinkTestOnly)
             Trace("[EAP] link test only: no EAP ids are set, so nothing is enabled, read or applied");
+        else if (s.EventsOnlyGap() is { } blind)
+        {
+            // Once per start, like the tool-link gap below, which it replaces: S4 is not read either.
+            Trace($"[EAP] events only: {blind}");
+            _log?.LogSystemEvent(LogSeverity.Information, "EapEventsOnly",
+                $"EAP link to {endpoint} runs events only: {blind}", related: $"Endpoint={endpoint}");
+        }
         else if (s.ToolLinkGap() is { } gap)
         {
             // Once per start, not per connect: it is a fact about the configuration, and a
@@ -304,7 +323,8 @@ public sealed class EapSecsLink : IDisposable
             else if (setUp && !s.IsLinkTestOnly && (DateTime.Now >= nextPoll || _pollNow))
             {
                 _pollNow = false;
-                await PollAsync(s, host);
+                if (s.EventsOnly) await HeartbeatAsync(host);
+                else await PollAsync(s, host);
                 nextPoll = DateTime.Now + PollInterval;
             }
             CheckSilence(timeout);
@@ -316,7 +336,7 @@ public sealed class EapSecsLink : IDisposable
     private async Task<bool> SetUpAsync(EapLinkSettings s, GemHost host, string endpoint)
     {
         await host.GoOnlineAsync();
-        await host.AreYouThereAsync();   // S1F2 MDLN/SOFTREV: to the trace, and to Peer via OnHostLog
+        var hello = await host.QueryOnlineDataAsync();   // S1F2 MDLN/SOFTREV: to the trace, and to Peer via OnHostLog
         if (s.IsLinkTestOnly)
         {
             // The link is proven; with no ids there is nothing to enable or read. Nothing past this
@@ -337,7 +357,16 @@ public sealed class EapSecsLink : IDisposable
                 "check the ids on the EAP tab against the EAP's", related: $"Endpoint={endpoint}");
             return false;
         }
-        OnConnected(endpoint, linkTestOnly: false);
+        OnConnected(endpoint, linkTestOnly: false, s.EventsOnly);
+        if (s.EventsOnly)
+        {
+            // Nothing says where the window is, and anything may have happened while the link was
+            // down (the EAP does not spool): unknown until the next process event.
+            if (hello.Succeeded) Heard();
+            _contextSink(new ToolContextReport(ToolContextReportState.Unknown, 0,
+                "EAP link (re)established in events-only mode — window not polled"));
+            return true;
+        }
         await PollAsync(s, host);
         return true;
     }
@@ -409,7 +438,7 @@ public sealed class EapSecsLink : IDisposable
     private static readonly System.Text.RegularExpressions.Regex PeerText =
         new(@"<A \[\d+\] ""([^""]*)""", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
-    private void OnConnected(string endpoint, bool linkTestOnly)
+    private void OnConnected(string endpoint, bool linkTestOnly, bool eventsOnly = false)
     {
         var now = DateTime.Now;
         string after = _outageSince is { } since
@@ -419,7 +448,8 @@ public sealed class EapSecsLink : IDisposable
             linkTestOnly
                 ? $"Connected to the EAP at {endpoint}{after}; link test only — no EAP ids are set, so no events " +
                   "are enabled or read and the process window is not touched"
-                : $"Connected to the EAP at {endpoint}{after}; events enabled", related: $"Endpoint={endpoint}");
+                : $"Connected to the EAP at {endpoint}{after}; events enabled" +
+                  (eventsOnly ? " — events only, S1–S7 are not read" : ""), related: $"Endpoint={endpoint}");
         _failedAttempts = 0;
         _outageSince = null;
         Update(st => st with { State = EapLinkState.Connected, Endpoint = endpoint, ConnectedSince = now, Detail = "" });
@@ -507,6 +537,18 @@ public sealed class EapSecsLink : IDisposable
     }
 
     // ---- reading S1–S7 -------------------------------------------------------------
+
+    /// <summary>Events only: an S1F1 in place of the S1F3. Answered, it is what keeps the silence
+    /// timeout from firing on a link with no events — PM3 can sit idle for an hour.</summary>
+    private async Task HeartbeatAsync(GemHost host)
+    {
+        var result = await host.QueryOnlineDataAsync();
+        if (result.Succeeded)
+            Heard();
+        else
+            LogThrottled("heartbeat", LogSeverity.Warning, "EapHeartbeatFailed",
+                $"The EAP did not answer S1F1: {result.Error}");
+    }
 
     private async Task PollAsync(EapLinkSettings s, GemHost host)
     {
@@ -597,8 +639,10 @@ public sealed class EapSecsLink : IDisposable
             Update(st => st with { LastEvent = $"tool link {(link == 1 ? "up" : "DOWN")} at {DateTime.Now:HH:mm:ss}" });
             if (link == 0)
                 _contextSink(new ToolContextReport(ToolContextReportState.Unknown, 0, "the EAP reports no SECS link to the tool"));
-            else
+            else if (!s.EventsOnly)
                 _pollNow = true;   // what the window is now, the next S1F3 says
+            // Events only: nothing to read, so the window stays as the link-down left it —
+            // unknown — until the next process event.
             return;
         }
 
@@ -610,12 +654,13 @@ public sealed class EapSecsLink : IDisposable
         }
         Heard();
         bool duplicate;
+        string? lost = null;
         lock (_seqGate)
         {
             duplicate = _lastEventSeq == seq;
             if (!duplicate)
             {
-                CheckSequenceLocked(seq, fromEvent: true);
+                lost = CheckSequenceLocked(seq, fromEvent: true, s.EventsOnly);
                 _lastEventSeq = seq;
             }
         }
@@ -624,6 +669,10 @@ public sealed class EapSecsLink : IDisposable
             Trace($"[EAP] SEQ {seq} already handled — a resend; not applied again");
             return;
         }
+        // Events only: an event may have been lost and no S1F3 will correct it. Unknown first, so
+        // this event still applies on top — a Start reopens its window at once.
+        if (lost is not null)
+            _contextSink(new ToolContextReport(ToolContextReportState.Unknown, 0, lost));
         var ack = _eventSink(toolCeid, time);
         if (ack == ToolEventAck.Ignored) LogIgnoredOnce(toolCeid);
         Update(st => st with { LastEvent = $"tool CEID {toolCeid} at {time:HH:mm:ss}, SEQ {seq}" });
@@ -640,7 +689,7 @@ public sealed class EapSecsLink : IDisposable
 
     private void CheckSequence(uint seq, bool fromEvent)
     {
-        lock (_seqGate) CheckSequenceLocked(seq, fromEvent);
+        lock (_seqGate) CheckSequenceLocked(seq, fromEvent, eventsOnly: false);
     }
 
     /// <summary>
@@ -648,31 +697,42 @@ public sealed class EapSecsLink : IDisposable
     /// last; S7 repeats the last event sent, so anything above what was heard is that many lost.
     /// Smaller means the EAP started counting again. Caller holds <c>_seqGate</c>.
     /// </summary>
-    private void CheckSequenceLocked(uint seq, bool fromEvent)
+    /// <returns>With <paramref name="eventsOnly"/>, why an event may have been lost — the reason to
+    /// report the window unknown — or null; always null in full mode, where the next S1F3
+    /// corrects the window.</returns>
+    private string? CheckSequenceLocked(uint seq, bool fromEvent, bool eventsOnly)
     {
         if (_lastKnownSeq is not { } last)
         {
             _lastKnownSeq = seq;   // first number since this end started: nothing to compare
-            return;
+            return null;
         }
         uint expected = fromEvent ? last + 1 : last;
+        string? lost = null;
         if (seq < last)
         {
+            lost = $"the EAP restarted (sequence {last} then {seq})";
             _log?.LogSystemEvent(LogSeverity.Information, "EapSequenceReset",
-                $"The EAP's sequence number went back from {last} to {seq} — it has restarted",
+                $"The EAP's sequence number went back from {last} to {seq} — it has restarted" +
+                (eventsOnly ? "; events only, so the process window is set to unknown" : ""),
                 related: $"From={last},To={seq}");
             _lastEventSeq = null;
         }
         else if (seq > expected)
         {
             uint missing = seq - expected;
+            lost = $"{missing} event(s) from the EAP never arrived";
             _log?.LogSystemEvent(LogSeverity.Warning, "EapEventSequenceGap",
-                $"{missing} event(s) from the EAP never arrived (sequence {last} then {seq}); the next " +
-                "S1F3 corrects the process window, the events themselves are not recovered",
+                $"{missing} event(s) from the EAP never arrived (sequence {last} then {seq}); " +
+                (eventsOnly
+                    ? "events only, so nothing corrects the window: it is set to unknown, "
+                    : "the next S1F3 corrects the process window, ") +
+                "the events themselves are not recovered",
                 value: missing.ToString(CultureInfo.InvariantCulture),
                 related: $"From={last},To={seq}");
         }
         if (seq != last) _lastKnownSeq = seq;
+        return eventsOnly ? lost : null;
     }
 
     // ---- silence ----------------------------------------------------------------------

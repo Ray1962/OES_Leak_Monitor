@@ -89,6 +89,65 @@ public sealed class EapLinkSettingsTests
         Assert.False(All().IsLinkTestOnly);
     }
 
+    // ---------------------------------------------------------------- events only (#74)
+
+    /// <summary>Events only needs the forwarding CEID and nothing else: S1–S7 are not read.</summary>
+    [Fact]
+    public void EventsOnly_RequiresOnlyTheForwardingCeid()
+    {
+        var s = new EapLinkSettings { EventsOnly = true, ForwardCeid = 6100 };
+        Assert.False(s.IsLinkTestOnly);
+        Assert.Null(s.IdProblem());
+    }
+
+    /// <summary>S1–S7 typed in earlier are kept but not judged — not even for clashing — so the
+    /// switch can be turned off again without retyping them, and a half-typed set does not block
+    /// Save while it is on.</summary>
+    [Fact]
+    public void EventsOnly_KeepsS1ToS7_WithoutJudgingThem()
+    {
+        var s = All();
+        s.EventsOnly = true;
+        s.WindowCeidSvid = s.WindowStateSvid;
+        s.SequenceSvid = 0;
+        Assert.Null(s.IdProblem());
+        Assert.Equal(6001u, s.WindowStateSvid);
+    }
+
+    /// <summary>With the forwarding CEID at 0 there is nothing to receive: a link test, whatever
+    /// S1–S7 say — the same "nothing required is set" rule as in full mode.</summary>
+    [Fact]
+    public void EventsOnly_WithoutTheForwardingCeid_IsALinkTest()
+    {
+        var s = All();
+        s.EventsOnly = true;
+        s.ForwardCeid = 0;
+        Assert.True(s.IsLinkTestOnly);
+        Assert.Null(s.IdProblem());
+    }
+
+    [Fact]
+    public void EventsOnly_StillRefusesTheSameCeidTwice()
+    {
+        var s = new EapLinkSettings { EventsOnly = true, ForwardCeid = 6100, LinkCeid = 6100 };
+        Assert.Equal("the forwarding and tool-link CEIDs are the same", s.IdProblem());
+    }
+
+    /// <summary>What events-only mode cannot see is said, and more is said without the tool-link
+    /// CEID. Full mode has nothing to say here.</summary>
+    [Fact]
+    public void EventsOnly_SaysWhatItCannotSee()
+    {
+        var s = new EapLinkSettings { EventsOnly = true, ForwardCeid = 6100, LinkCeid = 6101 };
+        Assert.Contains("S1–S7 are not read", s.EventsOnlyGap());
+        Assert.DoesNotContain("tool-link CEID", s.EventsOnlyGap());
+
+        s.LinkCeid = 0;
+        Assert.Contains("tool-link CEID", s.EventsOnlyGap());
+
+        Assert.Null(All().EventsOnlyGap());
+    }
+
     /// <summary>The EAP's model and revision, from the transport's log of its S1F2; nothing from
     /// any other line.</summary>
     [Fact]
