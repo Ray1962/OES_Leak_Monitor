@@ -114,6 +114,15 @@ public sealed class EapLinkSettings
     /// </summary>
     public double SilenceTimeoutSeconds { get; set; } = DefaultSilenceTimeoutSeconds;
 
+    /// <summary>
+    /// Events only (#74, <c>secs-integration.md</c> §15.10): receive the forwarded events and
+    /// never read S1–S7 — for an EAP that has not assigned them yet, or cannot. The forwarding
+    /// CEID is then the only required id; S1–S7 keep whatever was typed, unjudged, so turning this
+    /// off goes straight back to the full link. With nothing to correct a lost event, the link
+    /// reports the window unknown whenever one may have been lost.
+    /// </summary>
+    public bool EventsOnly { get; set; }
+
     /// <summary>S1 PM3 window state (U1: 0 outside / 1 in a window / 2 unknown).</summary>
     public uint WindowStateSvid { get; set; }
     /// <summary>S2 Start CEID of the open window (U4).</summary>
@@ -168,12 +177,15 @@ public sealed class EapLinkSettings
     /// <summary>What S2F37 enables: the forwarding CEID, and the tool-link CEID when set.</summary>
     public uint[] EnabledCeids => HasLinkCeid ? new[] { ForwardCeid, LinkCeid } : new[] { ForwardCeid };
 
-    /// <summary>The seven ids the link cannot run without, named as the EAP tab names them.</summary>
-    private (string Name, uint Id)[] Required => new (string Name, uint Id)[]
-    {
-        ("S1", WindowStateSvid), ("S2", WindowCeidSvid), ("S3", WindowStartSvid), ("S5", LastCeidSvid),
-        ("S6", LastTimeSvid), ("S7", SequenceSvid), ("forwarding CEID", ForwardCeid),
-    };
+    /// <summary>The ids the link cannot run without, named as the EAP tab names them: seven, or
+    /// the forwarding CEID alone when <see cref="EventsOnly"/>.</summary>
+    private (string Name, uint Id)[] Required => EventsOnly
+        ? new (string Name, uint Id)[] { ("forwarding CEID", ForwardCeid) }
+        : new (string Name, uint Id)[]
+        {
+            ("S1", WindowStateSvid), ("S2", WindowCeidSvid), ("S3", WindowStartSvid), ("S5", LastCeidSvid),
+            ("S6", LastTimeSvid), ("S7", SequenceSvid), ("forwarding CEID", ForwardCeid),
+        };
 
     /// <summary>
     /// None of the seven required ids is set: the link only proves it can reach the EAP (#65) —
@@ -194,7 +206,7 @@ public sealed class EapLinkSettings
         var unset = Required.Where(r => r.Id == 0).Select(r => r.Name).ToArray();
         if (unset.Length > 0) return $"the EAP ids are not all set ({string.Join(", ", unset)})";
         var svids = StatusSvids.Where(i => i != 0).ToArray();
-        if (svids.Distinct().Count() != svids.Length) return "two of S1–S7 share an SVID";
+        if (!EventsOnly && svids.Distinct().Count() != svids.Length) return "two of S1–S7 share an SVID";
         if (HasLinkCeid && ForwardCeid == LinkCeid) return "the forwarding and tool-link CEIDs are the same";
         return null;
     }
@@ -214,6 +226,18 @@ public sealed class EapLinkSettings
         (true, false) => "the EAP sends no tool-link CEID: a change of its link to the tool is seen at the " +
                          "next 30 s S1F3 instead of when it happens",
     };
+
+    /// <summary>
+    /// Null in full mode; with <see cref="EventsOnly"/>, what the OES then cannot see, for the log
+    /// and the EAP tab — the counterpart of <see cref="ToolLinkGap"/>, which is about S4 and has
+    /// nothing to say once S1–S7 are not read at all.
+    /// </summary>
+    public string? EventsOnlyGap() => !EventsOnly ? null :
+        "S1–S7 are not read, so the process window is set to unknown on every connect, sequence gap " +
+        "and EAP restart and stays unknown until the next process event; an EAP that still answers " +
+        "S1F1 but has stopped forwarding is not detected" +
+        (HasLinkCeid ? "" : "; with no tool-link CEID, a lost link between the EAP and the tool is " +
+                            "seen only when a window outlasts the tool-event max window");
 
     public EapLinkSettings Clone() => (EapLinkSettings)MemberwiseClone();
 }

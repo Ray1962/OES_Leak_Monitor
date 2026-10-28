@@ -57,6 +57,10 @@
                               AutomationProperties.Name="Connect to the EAP"
                               VerticalAlignment="Center" Margin="0,0,20,6"
                               ToolTip="The OES connects to the EAP as a SECS host. What the events do is still decided by 'Use tool events' and the CEID table below."/>
+                    <CheckBox Content="Events only — do not poll S1–S7" IsChecked="{Binding EapEventsOnly}"
+                              AutomationProperties.Name="Events only"
+                              VerticalAlignment="Center" Margin="0,0,20,6"
+                              ToolTip="For an EAP that has not assigned S1–S7 yet, or cannot: only the forward CEID is needed, and S1–S7 are kept but not used. Nothing then corrects a lost event, so the process window is set to unknown on every connect, sequence gap and EAP restart, until the next process event. An EAP that answers S1F1 but has stopped forwarding is not detected."/>
                     <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
                         <TextBlock Text="EAP address:" Style="{StaticResource FieldLabel}"/>
                         <TextBox Text="{Binding EapHost}" Width="120" VerticalAlignment="Center" AutomationProperties.Name="EAP address"/>
@@ -73,30 +77,30 @@
                         <TextBlock Text="Silence timeout (s):" Style="{StaticResource FieldLabel}"/>
                         <TextBox Text="{Binding EapSilenceTimeoutSeconds}" Width="60" VerticalAlignment="Center"
                                  AutomationProperties.Name="EAP silence timeout seconds"
-                                 ToolTip="With no successful S1F3 and no event from the EAP for this long, the process window is set to unknown. A dropped connection alone does not do this. 35–600 s; the OES reads the EAP every 30 s."/>
+                                 ToolTip="With no successful S1F3 (S1F1 in events-only mode) and no event from the EAP for this long, the process window is set to unknown. A dropped connection alone does not do this. 35–600 s; the OES reads the EAP every 30 s."/>
                     </StackPanel>
                 </WrapPanel>
 
                 <!-- The nine ids the EAP assigns. 0 = not set: the link does not start until the seven
                      required ones are. S4 and the tool-link CEID are optional (0 = the EAP does not provide them). -->
                 <WrapPanel Margin="0,2,0,0"
-                           ToolTip="The ids the EAP assigned (eap-tool-event-secs-spec §4). The link does not start until S1–S3, S5–S7 and the forward CEID are set and S1–S7 are distinct. S4 and the tool-link CEID are optional: leave 0 when the EAP does not provide them.">
+                           ToolTip="The ids the EAP assigned (eap-tool-event-secs-spec §4). The link does not start until S1–S3, S5–S7 and the forward CEID are set and S1–S7 are distinct. S4 and the tool-link CEID are optional: leave 0 when the EAP does not provide them. With 'Events only', the forward CEID alone is needed and S1–S7 are kept but not used (§4.4).">
                     <TextBlock Text="EAP ids:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,6"/>
                     <TextBlock Text="S1 window state" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Text="{Binding WindowStateSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S1 SVID"/>
+                    <TextBox Text="{Binding WindowStateSvid}" Style="{StaticResource IdBox}" IsEnabled="{Binding StatusSvidsEnabled}" AutomationProperties.Name="S1 SVID"/>
                     <TextBlock Text="S2 window CEID" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Text="{Binding WindowCeidSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S2 SVID"/>
+                    <TextBox Text="{Binding WindowCeidSvid}" Style="{StaticResource IdBox}" IsEnabled="{Binding StatusSvidsEnabled}" AutomationProperties.Name="S2 SVID"/>
                     <TextBlock Text="S3 window start" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Text="{Binding WindowStartSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S3 SVID"/>
+                    <TextBox Text="{Binding WindowStartSvid}" Style="{StaticResource IdBox}" IsEnabled="{Binding StatusSvidsEnabled}" AutomationProperties.Name="S3 SVID"/>
                     <TextBlock Text="S4 tool link (optional)" Style="{StaticResource FieldLabel}"
                                ToolTip="0 = the EAP does not provide S4. The S1F3 then leaves it out, and a lost EAP–tool link is seen only through S1 = 2 or the tool-link CEID."/>
-                    <TextBox Text="{Binding ToolLinkSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S4 SVID"/>
+                    <TextBox Text="{Binding ToolLinkSvid}" Style="{StaticResource IdBox}" IsEnabled="{Binding StatusSvidsEnabled}" AutomationProperties.Name="S4 SVID"/>
                     <TextBlock Text="S5 last CEID" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Text="{Binding LastCeidSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S5 SVID"/>
+                    <TextBox Text="{Binding LastCeidSvid}" Style="{StaticResource IdBox}" IsEnabled="{Binding StatusSvidsEnabled}" AutomationProperties.Name="S5 SVID"/>
                     <TextBlock Text="S6 last time" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Text="{Binding LastTimeSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S6 SVID"/>
+                    <TextBox Text="{Binding LastTimeSvid}" Style="{StaticResource IdBox}" IsEnabled="{Binding StatusSvidsEnabled}" AutomationProperties.Name="S6 SVID"/>
                     <TextBlock Text="S7 sequence" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Text="{Binding SequenceSvid}" Style="{StaticResource IdBox}" AutomationProperties.Name="S7 SVID"/>
+                    <TextBox Text="{Binding SequenceSvid}" Style="{StaticResource IdBox}" IsEnabled="{Binding StatusSvidsEnabled}" AutomationProperties.Name="S7 SVID"/>
                     <TextBlock Text="Forward CEID" Style="{StaticResource FieldLabel}"/>
                     <TextBox Text="{Binding ForwardCeid}" Style="{StaticResource IdBox}" AutomationProperties.Name="Forward CEID"/>
                     <TextBlock Text="Tool-link CEID (optional)" Style="{StaticResource FieldLabel}"

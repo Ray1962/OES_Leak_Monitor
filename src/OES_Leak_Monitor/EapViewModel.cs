@@ -90,7 +90,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
                 EapLinkState.Connected => $"EAP link: connected to {s.Endpoint}" +
                                           (s.Peer.Length > 0 ? $" — {s.Peer}" : "") +
                                           (s.ConnectedSince is { } c ? $" (since {c:HH:mm:ss})" : "") +
-                                          (s.LinkTestOnly ? " — link test only (EAP ids not set); no events are read" : ""),
+                                          (s.LinkTestOnly ? " — link test only (EAP ids not set); no events are read" : "") +
+                                          (s.EventsOnly ? " — events only, window not polled" : ""),
                 _ => $"EAP link: connecting to {s.Endpoint}" + (s.Detail.Length > 0 ? $" — {s.Detail}" : "…"),
             };
         }
@@ -108,6 +109,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
                        "Until then the process window is untouched.";
             if (s.Silent)
                 return $"Nothing from the EAP for {EapSilenceTimeoutSeconds:0} s — the process window has been set to unknown.";
+            if (s.EventsOnly)
+                return s.LastEvent.Length > 0 ? $"Last event: {s.LastEvent}" : "No event received yet — the process window is unknown until one arrives.";
             if (s.LastReading is not { } r) return "Nothing read yet.";
             string state = r.WindowState switch
             {
@@ -121,16 +124,16 @@ public sealed class EapViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Third status line, shown only while the EAP provides no S4 or no tool-link CEID:
-    /// what the OES then cannot see. Says so rather than let "tool link up" go unmentioned.</summary>
+    /// <summary>Third status line, shown only while the EAP provides no S4 or no tool-link CEID,
+    /// or while the link runs events only: what the OES then cannot see. Says so rather than let
+    /// "tool link up" — or a window nobody checks — go unmentioned.</summary>
     public string EapToolLinkText
     {
         get
         {
             var s = LinkStatus;
-            return s.State is EapLinkState.Disabled or EapLinkState.IdsMissing || s.ToolLinkGap.Length == 0
-                ? ""
-                : "Tool link not fully monitored — " + s.ToolLinkGap + ".";
+            if (s.State is EapLinkState.Disabled or EapLinkState.IdsMissing || s.ToolLinkGap.Length == 0) return "";
+            return (s.EventsOnly ? "Events only — " : "Tool link not fully monitored — ") + s.ToolLinkGap + ".";
         }
     }
 
@@ -214,6 +217,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
         { Silent: true } => Brushes.DarkOrange,
         // Reachable but not yet doing its job: green would read as "events are arriving".
         { State: EapLinkState.Connected, LinkTestOnly: true } => Brushes.DarkOrange,
+        // Events arrive, but nobody checks the window: green would read as "the window is right".
+        { State: EapLinkState.Connected, EventsOnly: true } => Brushes.DarkOrange,
         { State: EapLinkState.Connected } => Brushes.ForestGreen,
         _ => Brushes.Firebrick,
     };
@@ -228,6 +233,21 @@ public sealed class EapViewModel : INotifyPropertyChanged
     public string EapHost { get => Eap.RemoteHost; set => Set(v => Eap.RemoteHost = v, Eap.RemoteHost, value); }
     public int EapPort { get => Eap.RemotePort; set => Set(v => Eap.RemotePort = v, Eap.RemotePort, value); }
     public int EapDeviceId { get => Eap.DeviceId; set => Set(v => Eap.DeviceId = v, Eap.DeviceId, value); }
+
+    /// <summary>Events only (#74). S1–S7 stay in their fields, greyed out, so turning it off
+    /// needs no retyping.</summary>
+    public bool EapEventsOnly
+    {
+        get => Eap.EventsOnly;
+        set
+        {
+            Set(v => Eap.EventsOnly = v, Eap.EventsOnly, value);
+            OnPropertyChanged(nameof(StatusSvidsEnabled));
+        }
+    }
+
+    /// <summary>Whether S1–S7 are in use, and so editable: not while the link runs events only.</summary>
+    public bool StatusSvidsEnabled => !Eap.EventsOnly;
 
     public double EapSilenceTimeoutSeconds
     {
@@ -392,7 +412,9 @@ public sealed class EapViewModel : INotifyPropertyChanged
                    $"({EapLinkSettings.MinSilenceTimeoutSeconds:0}–{EapLinkSettings.MaxSilenceTimeoutSeconds:0}). " +
                    "The OES reads the EAP every 30 s; a shorter timeout fires on a healthy link.";
         if (Eap.Enabled && Eap.IdProblem() is { } ids)
-            return ids + " — enter the ids the EAP assigned (S4 and the tool-link CEID may stay 0 if it provides neither).";
+            return ids + (Eap.EventsOnly
+                ? " — events only needs just the forward CEID."
+                : " — enter the ids the EAP assigned (S4 and the tool-link CEID may stay 0 if it provides neither).");
         return "";
     }
 
@@ -441,7 +463,8 @@ public sealed class EapViewModel : INotifyPropertyChanged
                  {
                      nameof(HasUnsavedChanges), nameof(ToolEventsEnabled), nameof(ToolMaxWindowSeconds),
                      nameof(ToolApplyInTestMode), nameof(ToolEventMappings), nameof(EapEnabled), nameof(EapHost),
-                     nameof(EapPort), nameof(EapDeviceId), nameof(EapSilenceTimeoutSeconds), nameof(WindowStateSvid),
+                     nameof(EapPort), nameof(EapDeviceId), nameof(EapEventsOnly), nameof(StatusSvidsEnabled),
+                     nameof(EapSilenceTimeoutSeconds), nameof(WindowStateSvid),
                      nameof(WindowCeidSvid), nameof(WindowStartSvid), nameof(ToolLinkSvid), nameof(LastCeidSvid),
                      nameof(LastTimeSvid), nameof(SequenceSvid), nameof(ForwardCeid), nameof(LinkCeid),
                  })

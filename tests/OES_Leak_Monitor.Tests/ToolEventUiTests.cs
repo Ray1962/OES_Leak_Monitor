@@ -167,6 +167,66 @@ public sealed class ToolEventUiTests : IDisposable
         Assert.Equal("", vm.SaveMessage);
     }
 
+    /// <summary>
+    /// Events only (#74): saved with the forward CEID alone, S1–S7 greyed out but kept as typed —
+    /// even a half-typed set — so switching back needs no retyping.
+    /// </summary>
+    [Fact]
+    public void EventsOnly_SavesWithTheForwardCeidAlone_AndKeepsS1ToS7()
+    {
+        var (vm, saved) = Tab(Pm3());
+        vm.EapEnabled = true;
+        EnterIds(vm);
+        vm.SequenceSvid = 0;
+        Assert.True(vm.StatusSvidsEnabled);
+
+        vm.EapEventsOnly = true;
+        Assert.False(vm.StatusSvidsEnabled);
+        vm.SaveCommand.Execute(null);
+
+        var eap = Assert.Single(saved).Eap;
+        Assert.Equal("", vm.SaveMessage);
+        Assert.True(eap.EventsOnly);
+        Assert.Equal(new uint[] { 6001, 6002, 6003, 6004, 6005, 6006, 0 }, eap.StatusSvids);
+
+        vm.EapEventsOnly = false;
+        Assert.True(vm.StatusSvidsEnabled);
+        vm.SaveCommand.Execute(null);
+        Assert.Single(saved);
+        Assert.StartsWith("Not saved", vm.SaveMessage);
+    }
+
+    /// <summary>Events only still needs the one id it reads by, and says so in its own words.</summary>
+    [Fact]
+    public void EventsOnly_WithTwoClashingCeids_IsNotSaved()
+    {
+        var (vm, saved) = Tab(Pm3());
+        vm.EapEnabled = true;
+        vm.EapEventsOnly = true;
+        vm.ForwardCeid = 6100;
+        vm.LinkCeid = 6100;
+        vm.SaveCommand.Execute(null);
+
+        Assert.Empty(saved);
+        Assert.Contains("events only needs just the forward CEID", vm.SaveMessage);
+    }
+
+    /// <summary>The third status line names what events-only mode cannot see, from the moment the
+    /// link starts — before it has connected anywhere.</summary>
+    [Fact]
+    public void EventsOnly_TheStatusSaysWhatItCannotSee()
+    {
+        using var link = new EapSecsLink(null, _dir, (_, _) => ToolEventAck.Accepted, _ => ToolEventAck.Accepted);
+        link.Configure(new EapLinkSettings
+        {
+            Enabled = true, RemoteHost = "127.0.0.1", RemotePort = SecsTestPort.Free(), EventsOnly = true, ForwardCeid = 6100,
+        }, 30);
+        var vm = new EapViewModel(_bridge, Pm3(), _ => { }, link);
+
+        Assert.True(vm.ShowsToolLinkGap);
+        Assert.StartsWith("Events only — S1–S7 are not read", vm.EapToolLinkText);
+    }
+
     /// <summary>Switched off, the ids may stay unset: someone filling the tab in before the EAP
     /// has assigned them can still save the tool-event switches.</summary>
     [Fact]
