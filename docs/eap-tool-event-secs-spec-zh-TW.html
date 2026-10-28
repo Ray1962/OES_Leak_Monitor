@@ -113,6 +113,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#41-svid供-oes-以-s1f3-讀取">4.1 SVID（供 OES 以 S1F3 讀取）</a>
 <a class="l3" href="#42-ceid-與固定報告eap--oess6f11">4.2 CEID 與固定報告（EAP → OES，S6F11）</a>
 <a class="l3" href="#43-約定名稱建議供-oes-自動帶出識別碼">4.3 約定名稱（建議，供 OES 自動帶出識別碼）</a>
+<a class="l3" href="#44-只收事件模式oes-端的選項規劃中">4.4 只收事件模式（OES 端的選項，規劃中）</a>
 <a class="l2" href="#5-訊息流程">5. 訊息流程</a>
 <a class="l3" href="#51-連線後的初始化每次連上都完整執行包括斷線重連">5.1 連線後的初始化（每次連上都完整執行，包括斷線重連）</a>
 <a class="l3" href="#52-平常運作">5.2 平常運作</a>
@@ -122,11 +123,17 @@ td code{white-space:nowrap;}
 <a class="l2" href="#8-已確認事項與現場設定紀錄">8. 已確認事項與現場設定紀錄</a>
 <a class="l2" href="#9-自測工具">9. 自測工具</a>
 <a class="l2" href="#10-驗收方式">10. 驗收方式</a>
+<a class="l3" href="#101-只收事件模式44實作後驗收">10.1 只收事件模式（4.4，實作後驗收）</a>
 </nav>
 <main>
 <h1 id="oes-leak-monitor--eap-製程事件介面規格secs方案-2b">OES Leak Monitor × EAP 製程事件介面規格（SECS，方案 2b）</h1>
-<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 OES Leak Monitor 怎麼向 EAP 取得主機台 <strong>PM3</strong> 的製程事件：EAP 以 SECS <strong>equipment</strong> 身分提供製程視窗的狀態變數，並以 S6F11 轉發主機台事件；OES 以 <strong>host</strong> 身分連入讀取。 <strong>狀態：</strong> 2026-10-28（第二版）。OES 端已依本規格實作。<strong>本規格取代 2026-10-26 的 TCP 文字行規格（<code>eap-tool-event-tcp-spec-zh-TW</code>）</strong>，拿到舊版的請改依本規格。</p>
-<p><strong>本版與 2026-10-27 版的差異</strong>（EAP 端原本的實作不需要修改；以下都是放寬或新增的建議）：</p>
+<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 OES Leak Monitor 怎麼向 EAP 取得主機台 <strong>PM3</strong> 的製程事件：EAP 以 SECS <strong>equipment</strong> 身分提供製程視窗的狀態變數，並以 S6F11 轉發主機台事件；OES 以 <strong>host</strong> 身分連入讀取。 <strong>狀態：</strong> 2026-10-29（第三版）。OES 端已依本規格實作，§4.4 的只收事件模式除外（規劃中）。<strong>本規格取代 2026-10-26 的 TCP 文字行規格（<code>eap-tool-event-tcp-spec-zh-TW</code>）</strong>，拿到舊版的請改依本規格。</p>
+<p><strong>本版與 2026-10-28 版（第二版）的差異</strong>（EAP 端不需要修改；對 EAP 的要求不變）：</p>
+<ol>
+<li><strong>只收事件模式</strong>（新增 §4.4、Q9、§10.1）。EAP 暫時無法提供 S1～S7 時，OES 可以只靠轉發 CEID 接收事件。這是過渡與備援的做法，<strong>S1～S7 仍然要提供</strong>；只收事件時 OES 看不到的情況寫在 §4.4。
+</li>
+</ol>
+<p><strong>第二版與 2026-10-27 版的差異</strong>（EAP 端原本的實作不需要修改；以下都是放寬或新增的建議）：</p>
 <ol>
 <li><strong>S4 與連線狀態 CEID 改為選填</strong>（§4、§4.1、§4.2、Q5）。平台無法得知自己與主機台的連線狀態時，這兩項不必提供，OES 照樣連線；代價寫在 §4.2。
 </li>
@@ -196,7 +203,7 @@ td code{white-space:nowrap;}
 </tbody></table></div>
 <p>連上後 OES 讀 S1F2 的 MDLN／SOFTREV 並記入日誌，不做比對。</p>
 <h2 id="4-eap-需要提供的識別碼與資料">4. EAP 需要提供的識別碼與資料</h2>
-<p>下表的 S1～S7、兩個 CEID 共 <strong>9 個識別碼由 EAP 方指定</strong>，在 OES 的 EAP 分頁輸入（預設為 0，代表未設定）。其中 <strong>S4 與連線狀態 CEID 是選填</strong>：平台做不到時填 0，OES 照樣連線（見 Q5）。其餘 7 個都要填，而且 S1～S7 不可重複，OES 才會正式運作。<strong>7 個必填的全部是 0 時，OES 只做連線測試</strong>：連上、S1F17、S1F1，不送 S2F37、不讀 S1F3、不影響製程視窗，EAP 分頁顯示 EAP 回的型號與版本。這讓現場在 EAP 指定識別碼之前，就能先驗證位址、port、Device ID 與防火牆（見 §10 第 0 項）。只填了一部分則不會連線，並列出缺哪幾個。</p>
+<p>下表的 S1～S7、兩個 CEID 共 <strong>9 個識別碼由 EAP 方指定</strong>，在 OES 的 EAP 分頁輸入（預設為 0，代表未設定）。其中 <strong>S4 與連線狀態 CEID 是選填</strong>：平台做不到時填 0，OES 照樣連線（見 Q5）。其餘 7 個都要填，而且 S1～S7 不可重複，OES 才會正式運作。<strong>7 個必填的全部是 0 時，OES 只做連線測試</strong>：連上、S1F17、S1F1，不送 S2F37、不讀 S1F3、不影響製程視窗，EAP 分頁顯示 EAP 回的型號與版本。這讓現場在 EAP 指定識別碼之前，就能先驗證位址、port、Device ID 與防火牆（見 §10 第 0 項）。只填了一部分則不會連線，並列出缺哪幾個。OES 端另有一個<strong>只收事件</strong>的選項，只需要轉發 CEID（見 §4.4）；S1～S7 仍請提供。</p>
 <h3 id="41-svid供-oes-以-s1f3-讀取">4.1 SVID（供 OES 以 S1F3 讀取）</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>代號</th><th>名稱</th><th>格式</th><th>內容</th></tr></thead>
@@ -250,6 +257,25 @@ td code{white-space:nowrap;}
 <li>這一節是建議，不是連線的前提（見 Q7、Q8）。平台不支援或名稱不同時，照原本的方式由 EAP 方提供編號、在 OES 輸入即可。
 </li>
 </ul>
+<h3 id="44-只收事件模式oes-端的選項規劃中">4.4 只收事件模式（OES 端的選項，規劃中）</h3>
+<p>EAP 暫時無法提供 S1～S7 時，OES 的設備工程師可以在 EAP 分頁打開「Events only」，<strong>只填轉發 CEID</strong>（連線狀態 CEID 有就填）。OES 會：</p>
+<ul>
+<li>連上後送 S1F17、S1F1、S2F37，<strong>不送 S1F3</strong>；之後每 30 秒送一次 <strong>S1F1</strong> 當心跳（75 秒內沒有成功的 S1F1、也沒收到事件，就視為 EAP 沒有回應）。
+</li>
+<li>照常依 4.2 接收轉發事件，依序號判斷重送。
+</li>
+<li>在下列情況把製程視窗改為「不明」，改用光譜本身判斷，等下一筆製程事件再恢復：每次連上（包括 OES 重啟、斷線重連）、序號跳號、序號變小（EAP 重啟）、連線狀態 CEID 的值為 0。值為 1 時不會自動恢復，同樣等下一筆製程事件。
+</li>
+</ul>
+<p>這個模式<strong>不需要 EAP 做任何修改</strong>，但看不到以下情況，所以<strong>S1～S7 仍然要提供</strong>，提供後關掉選項即回到完整模式：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>情況</th><th>只收事件時</th><th>完整模式時</th></tr></thead>
+<tbody>
+<tr><td>PM3 製程進行中重啟 OES，或 OES 與 EAP 之間斷線</td><td>「不明」到下一筆製程事件</td><td>重連後讀 S1～S7 立刻恢復</td></tr>
+<tr><td>EAP 漏送事件，之後又沒有新事件</td><td>漏掉 End：視窗最多停留 600 秒；漏掉 Start：這段製程被當成閒置</td><td>30 秒內由 S1F3 修正</td></tr>
+<tr><td>EAP 不知道 PM3 的狀態</td><td>只能從連線狀態 CEID 得知（有提供時）</td><td>S1 = 2</td></tr>
+<tr><td>EAP 還會回應 S1F1，但轉發功能壞了</td><td>偵測不到</td><td>S1F3 的值會顯示異常</td></tr>
+</tbody></table></div>
 <p>本規格所說的「PM3 製程事件」至少包括：</p>
 <div class="tablewrap"><table>
 <thead><tr><th>主機台 CEID（Start／End）</th><th>事件</th></tr></thead>
@@ -357,6 +383,7 @@ S1F4
 <tr><td>Q6</td><td>逾時與間隔（S1F3 每 30 秒、OES 判定中斷 75 秒、事件 1 秒內送出）</td><td>✅ 可以配合（2026-10-26）</td></tr>
 <tr><td>Q7</td><td>平台是否支援 S1F11／S1F12（狀態變數名稱清單）與 S1F23／S1F24（事件名稱清單）？</td><td><strong>建議，待廠商確認；不是連線的前提。</strong> 不支援時，OES 分頁寫明「EAP does not support name queries」，改由人工輸入編號</td></tr>
 <tr><td>Q8</td><td>平台能否使用 4.3 的約定名稱？</td><td><strong>建議，待廠商確認；不是連線的前提。</strong> 名稱不同時，OES 仍會列出平台回報的全部名稱，供人工核對</td></tr>
+<tr><td>Q9</td><td>平台的 S1F2 是由平台程式回覆，還是由 SECS 函式庫自動回覆？</td><td><strong>待廠商確認，只影響 4.4。</strong> 只收事件模式用 S1F1 當心跳；若是函式庫自動回覆，S1F2 只證明 EAP 的 SECS 連線活著，不證明轉發功能正常</td></tr>
 </tbody></table></div>
 <p><strong>現場設定紀錄</strong>（上線時填寫，雙方各留一份）：</p>
 <div class="tablewrap"><table>
@@ -397,6 +424,17 @@ S1F4
 <tr><td>9</td><td>恢復 EAP 與主機台的連線</td><td>連線狀態 CEID（值 1，有提供時）；S1 在下一筆 PM3 製程事件後恢復正確值</td></tr>
 <tr><td>10</td><td>重啟 EAP</td><td>OES 自動重連；S7 = 0、S1 = 2，第一筆事件的序號為 1，OES 正常接受</td></tr>
 <tr><td>11</td><td>檢查 EAP 日誌</td><td>OES 沒有送過 S2F33、S2F35、S2F31、S2F41、S2F15</td></tr>
+</tbody></table></div>
+<h3 id="101-只收事件模式44實作後驗收">10.1 只收事件模式（4.4，實作後驗收）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>操作</th><th>預期結果</th></tr></thead>
+<tbody>
+<tr><td>E-1</td><td>OES 打開「Events only」，只填轉發 CEID（與連線狀態 CEID）</td><td>OES 連上、送 S1F17、S1F1、S2F37；EAP 日誌沒有 S1F3；EAP 分頁顯示橘色 <code>events only, window not polled</code>；之後每 30 秒一筆 S1F1</td></tr>
+<tr><td>E-2</td><td>主機台跑一次 PM3 Chamber Process</td><td>同第 3 項，OES 顯示製程 A 視窗</td></tr>
+<tr><td>E-3</td><td>PM3 製程進行中，重啟 OES</td><td>OES 重新連上後是「不明」；下一筆製程事件後恢復</td></tr>
+<tr><td>E-4</td><td>重啟 EAP</td><td>OES 自動重連、改為「不明」；第一筆事件（序號 1）正常接受並恢復視窗</td></tr>
+<tr><td>E-5</td><td>關掉 EAP 的 SECS 服務</td><td>OES 在 75 秒時改為「不明」</td></tr>
+<tr><td>E-6</td><td>關掉「Events only」並存檔（S1～S7 已填）</td><td>OES 重連，回到第 1 項的完整模式，讀 S1～S7 後立刻恢復視窗</td></tr>
 </tbody></table></div>
 </main>
 </div>
