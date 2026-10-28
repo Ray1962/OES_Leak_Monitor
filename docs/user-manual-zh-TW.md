@@ -1,6 +1,6 @@
 # OES Leak Monitor 操作手冊
 
-> 版本對應：`Aqst.OesSpectrometer 0.5.0` / `Aqst.OesApp.Core 0.1.7` / `Aqst.OesApp.Wpf 0.1.12`
+> 版本對應：`Aqst.OesSpectrometer 0.6.2` / `Aqst.OesApp.Core 0.1.10` / `Aqst.OesApp.Wpf 0.1.16` / `Aqusen.Secs 0.8.0`
 > 適用對象：現場操作員（Operator）、製程／設備工程師（Engineer）、系統管理者（Admin）
 
 ---
@@ -18,6 +18,7 @@
 9. [疑難排解](#9-疑難排解)
 10. [附錄：參數預設值](#10-附錄參數預設值)
 11. [附錄：SECS 識別碼（SVID／ALID／CEID）](#11-附錄secs-識別碼svidalidceid)
+12. [名詞對照](#名詞對照)
 
 ---
 
@@ -66,7 +67,7 @@ OES Leak Monitor 用**光學發射光譜（OES）**即時偵測製程腔體的**
 3. 超過警告／警報門檻並**持續一段時間**後才升級狀態（避免瞬間雜訊誤報）。
 4. 若做過**洩漏率校正（Leak Calibration）**，還會把比值上升量換算成**定量洩漏率 Q̂（mbar·L/s）**。
 
-同時它也是一台資料記錄器：當指定波長的強度超過門檻時，自動開檔記錄光譜 CSV 與比值 CSV，事後可在 Recordings / Ratio Review 分頁回放。
+同時它也是一台資料記錄器：當觸發量（例如指定波長的強度）超過門檻時，自動開檔記錄全光譜 CSV；比值 CSV 則是另一個記錄器，只要 OES 在擷取就一直寫（見 §7.3）。事後可在 Recordings / Ratio Review 分頁回放。
 
 ---
 
@@ -74,7 +75,7 @@ OES Leak Monitor 用**光學發射光譜（OES）**即時偵測製程腔體的**
 
 ### 2.1 標準安裝（免安裝 .NET）
 
-發布產物是一個資料夾，內含單一 `.exe` 與數個原生 DLL：
+發布產物是一個資料夾，內含單一 `.exe`、數個原生 DLL、操作文件與連線診斷工具，共 24 個檔：
 
 ```
 OES_Leak_Monitor.exe          ← 主程式（已內含 .NET 8 執行環境）
@@ -90,7 +91,17 @@ D3DCompiler_47_cor3.dll
 PenImc_cor3.dll
 vcruntime140_cor3.dll
 user-manual-zh-TW.html        ← 本手冊
-daily-inspection-plan-zh-TW.html
+daily-inspection-plan-zh-TW.html                ← 日常巡檢計畫
+secs-operation-sop-zh-TW.html                   ← SECS 連線操作 SOP
+secs-acceptance-sheet-zh-TW.html                ← SECS 驗收表
+CONTEXT-zh-TW.html                              ← 名詞定義
+golden-run-baseline-troubleshooting-zh-TW.html  ← Golden Run 基準線疑難排解
+baseline-builder-sop-zh-TW.html                 ← Baseline Builder 操作 SOP
+secs-ratio-svid-example-zh-TW.html              ← 比值槽位 SVID 範例
+fdc-integration-spec-zh-TW.html                 ← 給 FDC 的整合規格
+eap-tool-event-secs-spec-zh-TW.html             ← 給 EAP 的製程事件通訊規格
+check-oes-connect.ps1         ← 連線診斷工具（見 §9.1）
+check-oes-connect.cmd
 ```
 
 > ⚠️ **整個資料夾要一起複製，不能只拷貝 `.exe`。**
@@ -126,7 +137,7 @@ daily-inspection-plan-zh-TW.html
 |---|---|---|
 | **Guest** | 0 | 只能看。**不能關閉程式**（必須先登入） |
 | **Operator** | 1 | 連線／啟動擷取、Start/Stop Save、Reset Run、**Acknowledge Alarm** |
-| **Engineer** | 2 | 以上全部，加：Configuration 分頁、Capture Golden Run、Ratio Setup 存檔、Wavelength Calibration 存檔、Leak Calibration 存檔 |
+| **Engineer** | 2 | 以上全部，加：Configuration 與 Replay 分頁、Capture Golden Run、Ratio Setup 存檔與調整順序（▲／▼）、Wavelength Calibration 存檔（Save lines 與修正表的 Save）、Leak Calibration 存檔、Baseline Builder 的 Save as active baseline、SECS 與 EAP 分頁的設定、Add missing rows |
 | **Admin** | 3 | 以上全部，加：**Users** 使用者管理（新增／刪除帳號、改密碼、改角色） |
 
 ### 3.2 登入
@@ -141,17 +152,19 @@ daily-inspection-plan-zh-TW.html
 
 > 🔒 **請在第一次部署後立刻改掉這組密碼**（Sign In 成 admin → Users → 改密碼）。
 
+![圖 1　Sign In 對話框（按右上角 **Sign In** 開啟）。輸入 Username／Password 後按 **Sign In**；按 **Cancel** 維持 Guest。](images/manual-login.png)
+
 ### 3.3 自動鎖定
 
 閒置超過 **5 分鐘**（`AutoLockTimeoutMinutes`）會自動登出回 Guest。滑鼠移動或按鍵都會重置計時。
 
-若在 Configuration 分頁時角色掉到 Engineer 以下，畫面會自動跳回 Monitor 分頁。
+若在 Configuration 或 Replay 分頁時角色掉到 Engineer 以下，畫面會自動跳回 Monitor 分頁。
 
 ---
 
 ## 4. 畫面總覽
 
-視窗上方是工具列（標題、狀態訊息、使用者／角色），下方是十三個分頁（順序即畫面上的順序）：
+視窗上方是工具列（標題、狀態訊息、使用者／角色），下方是十四個分頁（順序即畫面上的順序）：
 
 | # | 分頁 | 用途 | 權限 |
 |---|---|---|---|
@@ -167,7 +180,10 @@ daily-inspection-plan-zh-TW.html
 | 10 | **Batch Trend** | 跨批次趨勢：一批一個點，判斷這一批和前面幾十批有無不同 | 全開放 |
 | 11 | **Ratio Review** | 回放已存的比值 CSV（% 基準／原始比值／洩漏率） | 全開放 |
 | 12 | **Logs** | 系統稽核日誌、一鍵診斷打包 | 全開放 |
-| 13 | **SECS** | 與 MES／Host 的連線狀態（設定需 Engineer+，看狀態不需要） | 檢視全開放 |
+| 13 | **SECS** | 與 Host（現場為 FDC）的 SECS 連線狀態（設定需 Engineer+，看狀態不需要） | 檢視全開放 |
+| 14 | **EAP** | 與 EAP 的連線，以及主機台製程事件的狀態、設定與 CEID 對照表（設定需 Engineer+，看狀態不需要） | 檢視全開放 |
+
+![圖 2　主視窗（Monitor 分頁，重播 2026-08-14 漏氣錄檔中）。最上面是工具列：標題、狀態訊息、登入者與角色；下面一排是十四個分頁。Monitor 分頁由上而下是 **Reset Run**、Recorder 狀態列（`SAVING`，正在寫 `SIMP_OES1_…`）、裝置控制列、即時全光譜、裝置資訊列（`Test Mode: True` 以紅字標示），最下面是選定波長的強度趨勢。](images/manual-monitor.png)
 
 > **Configuration** 與 **Replay** 分頁在切入時會檢查角色；權限不足會跳出登入視窗，取消就退回原本的分頁。
 
@@ -196,7 +212,7 @@ daily-inspection-plan-zh-TW.html
 1. 到 **Ratio Setup** 分頁。
 2. 出廠預設已有四組比值，全部以 **Ar 750.4 nm** 為參考線：`N₂ 337 / Ar 750`（主指標）、`NO 237 / Ar 750`（次指標）、`N₂ 358 / Ar 750`（第三條，讓「三取二」有餘裕），以及**出廠不啟用**的 `N₂ 358 absolute`。完整規格見 §10.5。
 3. 檢查你的光譜儀波段是否涵蓋這些波長 —— 涵蓋不到的請**取消勾選**或改選別的譜線。
-4. 若某條訊號線太弱（接近雜訊底），把該比值的 **Monitoring method** 改成 `AbsoluteIntensity`（見 §6.3.2）。
+4. 若某條訊號線太弱（接近雜訊底），把該比值的 **Monitoring method** 改成 `AbsoluteIntensity`（見 §6.4.2）。
 5. 按 **Save**。
 6. **⚠️ 回 Monitor 分頁按 Stop → 再按 Start**。Ratio Setup 的修改是「暫存」的，只有在擷取重啟後才生效。
 
@@ -212,24 +228,26 @@ daily-inspection-plan-zh-TW.html
 
 此時洩漏偵測就已經在運作了 —— 狀態列會顯示 `OK — within baseline`。
 
-> **製程不是一直穩定的怎麼辦？** 緩啟動（前幾秒還在爬升）或短製程（一次 run 比擷取視窗還短），現場擷取抓不到乾淨的一段。改用 **Baseline Builder** 分頁：事後從錄製檔上把穩定段挑出來，短製程還可以把好幾次 run 合起來（見 §6.7）。多步驟製程則需要每個 step 各一份基準、換 step 時人工切換。
+> **製程不是一直穩定的怎麼辦？** 緩啟動（前幾秒還在爬升）或短製程（一次 run 比擷取視窗還短），現場擷取抓不到乾淨的一段。改用 **Baseline Builder** 分頁：事後從錄製檔上把穩定段挑出來，短製程還可以把好幾次 run 合起來（見 §6.7）。**機台交替跑多種製程時**，替每條比值指定 **Process class**（§6.4.2），讓它只在自己的製程裡判定；製程類別由製程分類器或主機台製程事件（§6.14）決定。設定了分類器時，Baseline Builder 會建出一份每個製程各自一組基準的 Golden Run。
 
 ### 步驟 5（選用）— 洩漏率定量校正
 
-只有需要把「比值上升」讀成 **mbar·L/s** 時才要做。見 §6.5。
+只有需要把「比值上升」讀成 **mbar·L/s** 時才要做。見 §6.6。
 
 ### 步驟 6 — 開啟資料記錄
 
 1. **Configuration** → 下半部 **Data Logger**。
 2. 設定 **Trigger Wavelength**（判斷「電漿開了」的波長，例如 337.1）與 **Save Threshold Intensity**。
 3. 按 **Apply** → **Save**。
-4. 按 **Start Save** 武裝觸發器。當強度持續超過門檻達 **Start Confirm Time** 後，自動開檔。
+4. 確認 Monitor 分頁的 Recorder 狀態列是 `ARMED`（出廠就是已武裝，見 §6.1.2）。顯示 `OFF` 時按 **Start Save** 再按 **Save**。當觸發量持續超過門檻達 **Start Confirm Time** 後，自動開檔。
 
 ---
 
 ## 6. 分頁詳解
 
 ### 6.1 Monitor（即時監看）
+
+畫面見 §4 的圖 2。
 
 #### 6.1.1 頂部：Reset Run
 
@@ -239,7 +257,7 @@ daily-inspection-plan-zh-TW.html
 - 清空 Monitor 強度趨勢圖與 Leak Monitor 的 % 趨勢圖。
 - 重置各比值的即時平滑。
 
-**保留不動**：Golden Run 基準線、洩漏率校正、已鎖存的警報（必須由人按 Acknowledge 才清除）、擷取本身持續進行。
+**保留不動**：Golden Run 基準線、洩漏率校正、已鎖存的警報（Reset Run 不會清除它，要由人按 Acknowledge）、擷取本身持續進行。
 
 > **鎖存的警報也會跨越「停止 → 啟動擷取」。** 重啟擷取會套用 Ratio Setup 的暫存修改（重建所有比值），以前那個重建會把鎖存的警報一起清掉 —— 等於**不用 Acknowledge 就能讓一個已確認的洩漏消失**。現在只有「該比值被刪除、停用，或被改成量別的東西」時鎖存才會放掉，而且會在日誌記一筆 `LeakMonitorAlarmLatchDropped`。只調門檻或平滑參數不算改變量測對象，鎖存會保留。
 
@@ -303,6 +321,8 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 **需 Engineer 權限。** 分上下兩塊，中間可拖曳分隔。底部是共用的動作列。
 
+![圖 3　Configuration 分頁。上半是 OES 硬體參數（Acquire Mode、Average Mode、**Force Test Mode** 預設不勾），下半是 Data Logger：觸發條件（這裡是 `SpectrumPercentile` 99 百分位、門檻 2000，下方綠字是即時讀值）與輸出檔設定。最底下是四排設定與 **Apply／Save／Load Defaults**。](images/manual-config.png)
+
 底部三顆按鈕的差別**很重要**：
 
 | 按鈕 | 作用 |
@@ -313,7 +333,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 > 改完記得 **Apply → Save** 兩個都按。只按 Apply 的話，下次開機會回到舊值。
 
-動作列上方還有兩排設定：
+動作列上方還有四排設定（由上而下是 Data folder、Trend charts、Golden Run、Emission line，以下依用途說明）：
 
 - **Emission line** —— 從**譜線目錄**挑一條線，填進上面 Data Logger 區的兩個波長欄位，不必背數字：
   - 下拉依**物種分組**，內定線與你自己加的 `u…` 線一起列出（目錄在 Wavelength Calibration 分頁維護，見 §6.5.1）。存好的自訂線**立刻**出現在這裡。
@@ -338,7 +358,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | **Boxcar Width** | 1 | Boxcar 平滑視窗（1 = 關閉） |
 | **Polling Interval (ms)** | 200 | 讀取間隔，10–10000 ms |
 | **Max Consecutive Errors** | 5 | 連續錯誤幾次後自動斷線 |
-| **Force Test Mode** | 勾選 | 強制用模擬器，不碰硬體 |
+| **Force Test Mode** | 不勾 | 強制用模擬器，不碰硬體 |
 
 **Acquire Mode（擷取模式）**
 
@@ -379,6 +399,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | **Wavelength Tolerance (nm)** | 請求波長與實際 bin 的最大容許差距 |
 | **Save Threshold Intensity** | 高於這個強度才可能開始存檔 |
 | **Start Confirm Time (s)** | 需**持續**高於門檻幾秒才真的開檔 |
+| **Pre-Trigger Time (s)** | 開檔時往前補錄幾秒（預設 0）。即使是 0，Start Confirm 那段等待期間的幀也會補進檔頭，所以檔案從觸發量剛過門檻的那一幀開始。欄位下方的綠色小字會換算成幀數 |
 | **Stop Confirm Time (s)** | 需**持續**低於門檻幾秒才收檔 |
 | **Min Save Time (s)** | 單一 session 的最短長度，避免產生一堆極短的碎檔 |
 
@@ -390,11 +411,13 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | `SpectrumPercentile` | 整張光譜的第 N 分位（預設 99） | **電漿點著後才通入某氣體**、或該氣體只在部分步驟通入時 —— 它跟的是「電漿亮不亮」，與氣體種類無關 |
 | `AnyMonitoredWavelength` | Monitored Wavelengths 中**最亮的一條** | 多步驟配方，但希望保留譜線專一性（例如同時盯載氣 Ar 與製程線），避免室內光誤觸發 |
 
+> ⚠️ **Pre-Trigger Time 請維持 0。** 補錄的幀都在門檻以下，加長它只是讓 Recordings 分頁看得到放電前的背景。這些幀在建基準時會被電漿閘門擋掉；但若 Baseline Builder 的電漿閘門無法使用（門檻 ≤ 0 等），它們就會被算進基準線，拉低均值、放大 σ。
+
 > 💡 **為什麼是分位數而不是「最大值」**：單一壞點或宇宙射線尖峰就能把最大值永久釘在高位，記錄器會一直誤以為電漿開著。實測把一個像素灌到 60000 counts，p99 只從 14813 變成 14831（＋0.1%），而最大值會直接讀成 60000。
 
 > ⚠️ **換模式一定要重設 Save Threshold Intensity**。同一張光譜下，單一譜線可能讀 124、p99 讀 14813、最亮監測線讀 52639 —— 量級差很多。門檻欄位下方的綠色小字會顯示**目前的實際讀值**（`now 14813 · threshold 100`），照著它設就不會猜錯。建議值與實測的取法見 **§10.2**。
 
-> ⚠️ **這個門檻不只管全譜 CSV**。`AbsoluteIntensity` 比值的「電漿存在」判定用的是同一個量、同一個門檻（見 §6.4.2），所以調它會同時改變洩漏監控何時開始評估。設得太低，電漿關閉時的暗電流基座會被當成電漿開著。
+> ⚠️ **這個門檻不只管全譜 CSV**。所有比值（兩種監控方式）的「電漿存在」判定用的都是同一個量、同一個門檻（見 §6.4.2），所以調它會同時改變洩漏監控何時開始評估。設得太低，電漿關閉時的暗電流基座會被當成電漿開著。
 
 > 若觸發量根本無法計算（例如波長超出光譜儀量程），**Logs 分頁會出現一筆錯誤說明原因**，而不是像舊版那樣安靜地什麼都不做。
 
@@ -402,7 +425,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 | 參數 | 說明 |
 |---|---|
-| **Base Directory** | 留空 = `%APPDATA%\OES_Leak_Monitor\Data`（欄位下方的 *Effective:* 會顯示實際路徑） |
+| **Base Directory** | 留空 = `%APPDATA%\OES_Leak_Monitor\Data`（欄位下方的 *Effective:* 會顯示實際路徑）。**Browse…** 可用對話框挑資料夾 |
 | **File Prefix** | 檔名前綴，例如 `P` |
 | **Monitored Wavelengths** | 逗號分隔的波長清單，例如 `387, 482.5`。關閉全光譜時就是 CSV 的欄位；開啟時用於摘要檔 |
 | **Include Full Spectrum** | 存下每一個波長欄位（另外產生一個摘要伴隨檔） |
@@ -412,6 +435,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 - **Start Save** — *武裝*觸發器。並不是立刻開檔，而是等強度條件成立。
 - **Stop Save** — 解除武裝，並**立即**關閉所有開啟中的檔案。
+- 旁邊的 **Enabled** 勾選框只顯示目前是否武裝，不能點；要改請用這兩顆按鈕。
 
 > **出廠預設是「已武裝」。** 全新安裝（以及按下 **Load Defaults**）之後，記錄器就是 armed 的狀態，
 > 不必先按 Start Save —— 一台不在錄的洩漏監控器，事後沒有任何東西可以回頭查，而武裝開關又在
@@ -430,6 +454,8 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 這是日常監看時盯著的畫面。由上而下四層：
 
+![圖 4　Leak Monitor 分頁在洩漏確認後的樣子（重播 2026-08-14 漏氣錄檔，基準取自錄檔開頭）。紅色橫幅 `ALARM — leak signal confirmed`，三條警報用比值都是 `ALARM`；`N₂ 337 / Ar 750` 與 `NO 237 / Ar 750` 是 `RawMean` 分子，百分比欄是 σ 分數。`Observing` 是 Guard／TrendOnly 比值；三列 `No Plasma` 是以 CO 330 為參考線的比值，這份光譜裡沒有 CO 329.6，參考線一直讀不到；`Disabled` 是停用的比值。下方趨勢圖可看到比值在 13:56 起越過 Warn（120）再越過 Alarm（150）。圖中是這台電腦的設定：9 組比值（出廠只有前 4 組，見 §10.5），並勾選了 EAP 分頁的 **Apply tool events in test mode**（出廠不勾），所以橫幅會出現 tool events 那一行。](images/manual-leak-monitor.png)
+
 #### 6.3.1 狀態橫幅（最上方大色塊）
 
 | 顯示文字 | 顏色 | 意義 |
@@ -440,7 +466,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | `ALARM — leak signal confirmed` | 紅 | 達警報條件（**鎖存**，必須人工 Acknowledge） |
 
 橫幅下方可能出現幾行小字：
-- **測試模式註記** —— 提醒現在是模擬資料，並說明警報是否有效。啟用主機台製程事件（§6.13.3）時，結尾會再寫明事件有沒有套用到這些光譜：`tool events are applied to these spectra.`（已套用）或 `tool events are not applied — judged as without them.`（未套用，照沒有製程事件時的方式判定）。
+- **測試模式註記** —— 提醒現在是模擬資料，並說明警報是否有效。啟用主機台製程事件（§6.14）時，結尾會再寫明事件有沒有套用到這些光譜：`tool events are applied to these spectra.`（已套用）或 `tool events are not applied — judged as without them.`（未套用，照沒有製程事件時的方式判定）。
 - **`PROCESS CONTEXT UNKNOWN — …`** —— 已啟用主機台製程事件，但目前沒有任何製程視窗生效：還沒收到第一個視窗邊界，或上一個視窗逾時。此時比值照沒有製程事件時的方式判定，指定了製程類別的比值**不會**停判。收到下一個 Start 事件後這行就會消失。測試模式註記已經寫了「not applied」時不會重複顯示。見 §9.13。
 - **LOW SIGNAL 警示** —— 有啟用中的比值低於它的 SNR 下限（見 §6.3.4）。
 
@@ -463,7 +489,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | **Baseline** 下拉 | — | 切換使用中的 Golden Run。切換時會**自動配對**綁定該基準線的洩漏率校正 |
 | **Capture Golden Run** | Engineer+ | 錄製新基準線（見 §6.3.5） |
 | **Cancel** | — | 取消進行中的擷取（只在擷取中出現） |
-| **Acknowledge Alarm** | Operator+ | 洩漏排除後，清除鎖存的警報。**會寫進系統日誌**（`LeakMonitorAcknowledged`：是誰按的、清掉哪幾條比值的鎖存、複合狀態怎麼變）—— 鎖存只有這個動作能清除，所以日誌上不會再出現「警報自己消失」 |
+| **Acknowledge Alarm** | Operator+ | 洩漏排除後，清除鎖存的警報。**會寫進系統日誌**（`LeakMonitorAcknowledged`：是誰按的、清掉哪幾條比值的鎖存、複合狀態怎麼變）。這是人工清除鎖存的唯一方式。另外只有兩種情況會放掉鎖存，而且各自有日誌：重播結束（`LeakMonitorAlarmLatchCleared`，見 §6.8）、重啟擷取時該比值被刪除或改成量別的東西（`LeakMonitorAlarmLatchDropped`，見 §6.1.1）。所以日誌上不會出現「警報自己消失」 |
 | **Zoom All** | — | 趨勢圖縮放回全部資料 |
 
 #### 6.3.4 各比值列
@@ -473,38 +499,40 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | 欄位 | 說明 |
 |---|---|
 | 圓點 | 狀態顏色 |
-| **名稱** | 例如 `O 777 / N₂ 337` |
+| **名稱** | 例如 `N₂ 337 / Ar 750` |
 | **smoothed ratio** | EMA 平滑後的比值 |
-| **百分比** | 相對基準線的 %（100% = 基準線） |
+| **百分比** | 相對基準線的 %（100% = 基準線）。訊號線用 `RawMean` 擷取的比值，這裡是 σ 分數（基準線 = 100、高一個 warn-σ = 120，見 §6.4.2）。出廠啟用的三條裡有兩條是這種 |
 | **baseline (mean ± σ)** | 這條比值的基準線平均值與標準差 |
 | **斜率 / SNR** | 上升速率，以及目前訊噪比 |
-| **狀態** | `Normal` / `WARNING` / `ALARM` / `No Plasma` / `Low Signal` / `Observing` / `N/A` |
+| **狀態** | `Normal` / `WARNING` / `ALARM` / `No Plasma` / `Low Signal` / `No Baseline` / `Disabled` / `Observing` / `Not this process` |
 
 滑鼠停在該列上會顯示詳細數值（含目前的 warn / alarm 門檻）。
 
-**七種狀態**
+**九種狀態**
 
 | 狀態 | 顏色 | 意義 |
 |---|---|---|
 | `Normal` | 綠 | 低於警告門檻 |
 | `WARNING` | 橘 | 持續超過警告門檻 |
 | `ALARM` | 紅 | 持續超過警報門檻（鎖存） |
-| `No Plasma` | — | 參考譜線太弱，判定電漿沒開 |
-| `Low Signal` | 藍紫 | 電漿有開，但訊號或參考譜線太靠近雜訊底 —— **這條比值被排除在警報判定之外** |
-| `Observing` | 灰 | **有在記錄，但不判定** —— 這條比值的用途被設成 Trend only 或 Guard（見 §6.4） |
-| `N/A` | 灰 | **現在跑的不是這條比值負責的製程**（見 §6.4 的 Process class） |
+| `No Plasma` | 灰 | 電漿閘門關著：記錄器的觸發量低於門檻，或（`Ratio` 模式）參考譜線低於它的 floor |
+| `Low Signal` | 藍紫 | 電漿有開，但被監控的譜線（`Ratio` 模式還包括參考譜線）太靠近雜訊底。**這條比值被排除在警報判定之外** |
+| `No Baseline` | 灰 | 使用中的 Golden Run 沒有這條比值的基準線（見 §9.5），不參與警報 |
+| `Disabled` | 淺灰 | 在 Ratio Setup 取消勾選 |
+| `Observing` | 鋼藍 | **有在記錄，但不判定**。這條比值的 Role 被設成 `TrendOnly` 或 `Guard`（見 §6.4.2） |
+| `Not this process` | 深灰 | **現在跑的不是這條比值負責的製程**（見 §6.4.2 的 Process class） |
 
 > 💡 `Low Signal` 是刻意設計的保護。兩條都接近雜訊的譜線相除，結果再怎麼平滑都沒有意義，硬要判讀只會製造假警報。
 
-> 💡 後三種灰色狀態要分開看，它們對應三種完全不同的處置：
-> `Observing` 是**有人決定不讓它判**（值照樣記錄、照樣進批次趨勢）；
-> `N/A` 是**現在這一段製程不歸它管**（換到它的製程就會自己恢復）；
-> `No Plasma` 才是**閒置或異常**。看到 `N/A` 不必處理；看到 `No Plasma` 而製程正在跑，要查。
+> 💡 `Disabled`、`Observing`、`Not this process`、`No Plasma` 這幾種安靜的狀態要分開看，它們對應完全不同的處置：
+> `Disabled` 與 `Observing` 是**有人決定不讓它判**（`Observing` 的值照樣記錄、照樣進批次趨勢）；
+> `Not this process` 是**現在這一段製程不歸它管**（換到它的製程就會自己恢復）；
+> `No Plasma` 才是**閒置或異常**。看到 `Not this process` 不必處理；看到 `No Plasma` 而製程正在跑，要查。
 
-> 📝 `N/A` 期間該比值的平滑會被清掉（免得把別種電漿的讀值帶進下一段），
+> 📝 `Not this process` 期間該比值的平滑會被清掉（免得把別種電漿的讀值帶進下一段），
 > 但**已經鎖存的警報會保留** —— 已確認的洩漏不會因為機台換去跑別的製程就消失。
 
-**門檻怎麼算**：警告門檻取 `max(WarnFactor × 基準均值, 基準均值 + SigmaWarn × σ)` —— 兩者取大。而且這裡的 σ 會取「Golden Run 的 σ」與「即時 EWMA 的 σ」**較大者**，所以當現場比基準時期更吵時，門檻會自動放寬，不會被自己的抖動觸發。
+**門檻怎麼算**：警告門檻取 `max(WarnFactor × 基準均值, 基準均值 + SigmaWarn × σ)` —— 兩者取大。而且這裡的 σ 會取「Golden Run 的 σ」與「即時 EWMA 的 σ」**較大者**，所以當現場比基準時期更吵時，門檻會自動放寬，不會被自己的抖動觸發。訊號線用 `RawMean` 的比值不用倍數那一支，只用 σ 那一支（見 §6.4.2）。
 
 #### 6.3.5 Golden Run 擷取流程
 
@@ -551,6 +579,8 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 **Engineer+ 才能存檔。**
 
+![圖 5　Ratio Setup 分頁。左邊是比值清單（勾選＝啟用，下方 **Add／Remove／▲／▼**），右邊編輯選中的比值：Display name、Process class、**Role**、Monitoring method、分子與分母譜線及萃取方式、門檻。分子選 `RawMean` 時，橘色說明會提醒 Warn/Alarm factor 不再作用、改以 σ 判斷。](images/manual-ratio-setup.png)
+
 > ⚠️ **這裡的修改是「暫存」的。** 按 Save 只是寫進 `settings.json`；要真正生效，必須回 Monitor 分頁 **Stop → Start** 重啟擷取。畫面上方的黃色提示條就是在講這件事。
 
 #### 6.4.1 左側：比值清單
@@ -563,7 +593,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 **基本**
 - **Display name** — 顯示名稱。
-- **Enabled** — 是否納入監控。
+- **Enabled — included in leak monitoring** — 是否納入監控。
 
 **Monitoring method（監控方式）** — 這是關鍵選擇：
 
@@ -578,7 +608,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 >
 > 這樣改的原因：絕對強度模式本來就不對參考線做除法，所以那條線根本不必存在；而一條不存在的譜線扣完背景後只剩在 0 附近正負跳動的雜訊，於是「參考線 > 0」變成一枚硬幣，決定這一幀要不要計算。更糟的是，若參考線落在彎曲的連續光上（兩側基準視窗拉出的直線會高於凸型連續光），扣出來會**系統性為負**，該比值就一幀也不會被評估 —— CSV 欄位整片空白，畫面永遠停在 No Plasma。同理，參考線的 SNR 也不再影響 `Low Signal` 判定，只看被監控的那條線。
 
-> **% 趨勢的單位由「擷取方式」決定，不是由監控方式決定**：只有 `AbsoluteIntensity` + `RawMean`（讀值帶連續光基座）才改用 σ 正規化分數（基準線 = 100、高一個 warn-σ = 120，斜率以 σ/min 計）。`AbsoluteIntensity` 搭配 `PeakHeight` / `Integral` 時，讀值已經扣掉背景，基準均值本身就是訊號，所以照常用 `值 ÷ 基準均值 × 100`（斜率 %/min）。
+> **% 趨勢的單位由訊號線的「擷取方式」決定，不是由監控方式決定**：訊號線用 `RawMean`（讀值帶連續光基座）時，不論 `Ratio` 或 `AbsoluteIntensity`，都改用 σ 正規化分數（基準線 = 100、高一個 warn-σ = 120，斜率以 σ/min 計）。除以參考線並不會去掉基座，只是把它一起縮放。訊號線用 `PeakHeight` / `Integral` 時，讀值已經扣掉背景，基準均值本身就是訊號，所以照常用 `值 ÷ 基準均值 × 100`（斜率 %/min）。
 
 **Signal line（訊號譜線）／ Reference line（參考譜線）**（Reference line 只在 `Ratio` 模式出現）
 
@@ -595,10 +625,11 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
   `RawMean` 的代價是讀值帶著連續光基座，所以它也會跟著窗口髒污、雜散光、曝光時間變化 —— 這時**改由 Golden Run 均值扮演背景**：一個在可信時刻量到的基準，而不是每幀猜出來的。`HalfWidthNm` 在這個模式下是平均寬度，設 0 表示「在中心波長做線性內插取值」。
 
-  > ⚠️ `RawMean` 搭配 **`AbsoluteIntensity`** 使用時（建議的組合），三件事會自動改變：
-  > 1. **Warn / Alarm factor 被忽略**，只用 σ 門檻 —— 基座的 1.2 倍是好幾十個 σ，那種警報永遠不會響，而且看起來像是有在戒備。
+  > ⚠️ **訊號線**用 `RawMean` 時，不論監控方式是 `Ratio` 還是 `AbsoluteIntensity`，四件事會自動改變（除以參考線不會去掉基座）：
+  > 1. **Warn / Alarm factor 被忽略**，只用 σ 門檻。基座的 1.2 倍是好幾十個 σ，那種警報永遠不會響，而且看起來像是有在戒備。
   > 2. **% 趨勢改為 σ 分數**（基準線 = 100，高一個 warn-σ = 120），CSV 欄位也會改叫 `_sigmaScore`。
-  > 3. **Min SNR 不適用** —— 原始強度除以連續光雜訊會得到幾百的「SNR」，那是基座不是譜線，所以乾脆不給 SNR（顯示 `—`）。
+  > 3. **洩漏率校正改用絕對上升量**（見 §6.6.1）。
+  > 4. **訊號線不給 SNR**（顯示 `—`）。原始強度除以連續光雜訊會得到幾百的「SNR」，那是基座不是譜線。`Ratio` 模式下，參考譜線仍然要通過 Min SNR。
 
 > ⚠️ **換了參考譜線，原本的 Golden Run 基準線就失效**（`Ratio` 模式的基準線綁定當初的參考譜線）。換完必須重錄。絕對強度模式的基準線不綁參考線，但**改變監控方式**（`Ratio` ↔ `AbsoluteIntensity`）一定會讓舊基準線失效 —— 兩種模式量的根本不是同一個東西。
 
@@ -612,19 +643,19 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 | **Alarm σ (×sigma)** | 6.0 | 基準均值 + 幾個 σ 觸發警報 |
 | **EMA τ (s)** | 5.0 | 指數移動平均時間常數 |
 | **Confirm (s)** | 15.0 | 必須持續超過門檻幾秒才升級狀態 |
-| **Min SNR** | 5.0 | 兩條譜線都要超過這個訊噪比，比值才被採信。低於此值 → `Low Signal` 並排除在警報外。**填 0 = 關閉這道保護** |
+| **Min SNR** | 5.0 | 譜線要超過這個訊噪比，比值才被採信：`Ratio` 模式看訊號線與參考線，`AbsoluteIntensity` 模式只看訊號線；`RawMean` 訊號線沒有 SNR，不受這一項限制。低於此值 → `Low Signal` 並排除在警報外。**填 0 = 關閉這道保護** |
 
-**Purpose（用途）／ Process class（適用製程）**
+**Role（用途）／ Process class（適用製程）**
 
 這兩欄決定的是「**判不判**」與「**什麼時候判**」,和上面的 Monitoring method(決定「**量什麼**」)是兩件事。
 
-| Purpose | 意義 |
+| Role | 意義 |
 |---|---|
 | `Alarm` | **預設。** 正常參與警報判定 |
-| `Trend only` | 值照樣算、照樣寫進 CSV 與批次記錄,但**不判定、不鎖存、不列入複合警報**。畫面顯示 `Observing` |
+| `TrendOnly` | 值照樣算、照樣寫進 CSV 與批次記錄,但**不判定、不鎖存、不列入複合警報**。畫面顯示 `Observing` |
 | `Guard` | 同上,但用途是**擺在警報旁邊一起看** —— 用來分辨「製程氣體變了」和「真的漏氣」 |
 
-> **為什麼要有 `Trend only`。** 有些指標跨批次的重現性撐不起一條門檻(例如某台機上兩種製程的
+> **為什麼要有 `TrendOnly`。** 有些指標跨批次的重現性撐不起一條門檻(例如某台機上兩種製程的
 > mean/σ 只有 7.3 與 6.5,而程式接受基準線的下限就是 10)。在那種指標上設警報,操作員很快會學會
 > 忽略它 —— 那比沒有警報更糟。值仍然有用,只是要到 **Batch Trend**(§6.11)那一頁去讀。
 
@@ -633,9 +664,16 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 > 事後查不回來。但守衛量**不會**壓下任何警報 —— 它自己的散度有幾個百分點,給它否決權,
 > 遲早會壓掉一次真的漏氣。
 
-**Process class** 留空 = 這條比值適用於每一段電漿(不設分類器的機台維持原樣)。
-填了製程名稱,就只在該製程的電漿步驟裡判定,其他時候顯示 `N/A`。
+**Process class (blank = every process step)** 留空 = 這條比值適用於每一段電漿(不設分類器的機台維持原樣)。
+填了製程名稱,就只在該製程的電漿步驟裡判定,其他時候顯示 `Not this process`。
 一台會交替跑多種配方的機台需要它:拿同一份基準線去判三種不同的電漿,等於在比三件不同的事。
+
+每一段電漿屬於哪個製程,有兩個來源:
+
+- **主機台製程事件**(§6.14):主機台告訴 OES 現在在跑哪個製程。有啟用而且有視窗生效時,以它為準。
+- **製程分類器**:OES 從光譜自己判斷。設定在 `settings.json` 的 `leakMonitor.processClassifier`(畫面上沒有設定欄位),出廠為關閉。每段電漿在閘門開啟後的第 `decideAfterFrames`(預設 3)幀做一次判定,之後整段鎖定不再改。沒有任何規則符合的電漿段是 `Unknown`,指定了製程類別的比值在那一段不判定。規則與數字見原始碼庫的 `docs/leak-monitor-plan-zh-TW.md`。
+
+Process class 填的名稱要和分類器或 CEID 對照表裡的類別名稱相同(不分大小寫)。兩個來源都沒有啟用時,填了也不會篩選,這條比值照樣每一段都判定。
 
 底部 **Save**（Engineer+）／ **Revert**（丟棄未存檔的修改）。
 
@@ -649,6 +687,8 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 |---|---|---|
 | 上：**Emission lines** | 譜線目錄本身（內定表＋你自己加的線） | **存檔後立即生效**，Ratio Setup 馬上選得到 |
 | 下：**Wavelength corrections** | 每條譜線的漂移位移量 | **暫存** → Stop/Start 重啟擷取才生效 |
+
+![圖 6　Wavelength Calibration 分頁。上表是譜線目錄（內定線唯讀，自己加的線物種前面自動帶 `u`），存檔立即生效；下表是波長修正，存檔後要重新開始擷取才生效。](images/manual-wavecal.png)
 
 #### 6.5.1 Emission lines（譜線目錄）
 
@@ -703,7 +743,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 x ≈ s · Q
 ```
 
-- `x` = 相對基準線的上升量。單位由讀值有沒有帶連續光基座決定：`AbsoluteIntensity` + `RawMean` 用**絕對**上升 `Δ = 值 − 基準均值`（相對上升會被基座壓縮到零點幾個百分點）；其餘一律用**相對**上升 `值/基準均值 − 1`（它對純比例縮放免疫，條件較好）
+- `x` = 相對基準線的上升量。單位由讀值有沒有帶連續光基座決定：訊號線用 `RawMean` 的比值（`Ratio` 與 `AbsoluteIntensity` 都一樣）用**絕對**上升 `Δ = 值 − 基準均值`（相對上升會被基座壓縮到零點幾個百分點）；其餘一律用**相對**上升 `值/基準均值 − 1`（它對純比例縮放免疫，條件較好）
 - `Q` = 已知漏率（mbar·L/s）
 - `s` = 該比值的靈敏度
 
@@ -740,7 +780,7 @@ x ≈ s · Q
 
 切換或重新擷取 Golden Run 時，系統會**自動配對**綁定該基準線的最新校正，所以換配方不會留下過期的 `BaselineMismatch`。狀態轉換都會寫進系統日誌。
 
-若某個比值的 `x` 單位在校正之後被改過（改了監控方式或擷取方式，使讀值從「帶基座」變成「不帶基座」或反之），該比值的擬合會被拒用 —— 兩種單位的斜率不能互相套用。這也代表**升級到本版之後，絕對強度比值的舊校正一律要重做**。
+若某個比值的 `x` 單位在校正之後被改過（改了監控方式或擷取方式，使讀值從「帶基座」變成「不帶基座」或反之），該比值的擬合會被拒用 —— 兩種單位的斜率不能互相套用。這也代表**升級到本版之後，訊號線用 `RawMean` 的比值（含 `Ratio` 模式）的舊校正一律要重做**。
 
 > 完整的數學模型與設計文件見 `docs/leak-rate-calibration.md`。
 
@@ -752,6 +792,8 @@ x ≈ s · Q
 
 用**已經存在硬碟上的錄製檔**產生 Golden Run。
 
+![圖 7　Baseline Builder 分頁。左邊勾選要用的錄製檔並按 **Scan ticked**；右上圖是各比值相對自身中位數的走勢，在上面拖曳或在 **Baseline window** 輸入秒數（這裡是 30–330 s，避開 400 s 後的漏氣段）；下方按 **Build** 後列出每條基準的 mean ± σ 與 mean/σ，以及沒有建出基準的比值與原因。確認無誤才按 **Save as active baseline**。](images/manual-baseline-builder.png)
+
 > **照著做的程序在另一份文件**：[`baseline-builder-sop-zh-TW.md`](baseline-builder-sop-zh-TW.md)（交付資料夾裡是 `baseline-builder-sop-zh-TW.html`）。本節說明這個分頁**每個區塊是什麼**，操作順序、判斷準則、紀錄與驗證步驟都在那份 SOP 裡——兩邊各寫一份程序必然會不同步。
 
 對下面這兩種製程，它**不是備案，而是建基準的正常作法**——站在機台前按 Capture 在這兩種情況下做不出可用的基準：
@@ -759,7 +801,9 @@ x ≈ s · Q
 - **緩啟動**：前幾秒功率還在爬升，穩定段從哪裡開始只有曲線看得出來，站在機台前按下 Capture 是猜的。
 - **短製程**：一次 run 比擷取視窗還短，單獨一次湊不出足夠的幀，得把好幾次合起來。
 
-**不適用：多步驟製程。** 一個 Golden Run 只描述**一個**穩定操作點。要監測多個 step，就每個 step 各錄一份基準、換 step 時人工切換作用中的基準。原因與代價寫在 `docs/adr/0001`。
+**一個檔只描述一個穩定操作點。** 同一份錄製裡的兩段不同 step 不能平均成一個基準（原因寫在 `docs/adr/0001`）。
+
+**交替跑多種製程的機台**：設定了製程分類器（§6.4.2）時，掃描會替每份錄製標出它是哪個製程（`State` 欄），建出來的是**一份** Golden Run，裡面每個製程各有自己的基準。每條比值只從**自己 Process class 的錄製**取樣；勾選的錄製裡沒有它的製程時，會被拒絕並寫明它需要哪個製程、勾到的是哪些。程序見 Baseline Builder SOP 附錄 A。
 
 #### 畫面上有什麼
 
@@ -778,7 +822,7 @@ x ≈ s · Q
 
 每條比值都除以它自己在整段錄製的中位數，所以量級差很多的線可以共用一個縱軸；軸上直接寫 `× own median`。這**不是** Leak Monitor 的「% of baseline」——這個分頁的前提就是基準還不存在。
 
-#### 結果面板的四件事
+#### 結果面板的六個區塊
 
 | 區塊 | 意思 |
 |---|---|
@@ -839,6 +883,8 @@ x ≈ s · Q
 
 把一份**已錄製的全光譜 CSV** 當成即時光譜餵進整條流程 —— Leak Monitor、兩張趨勢圖、以及兩個記錄器都會收到 —— 用來在**沒有硬體**的情況下驗證偵測演算法。與 §6.9 Recordings 的差別：Recordings 是把資料畫出來給人看，Replay 是把資料**重新跑一遍給程式判斷**。
 
+![圖 8　Replay 分頁播放中。上方是錄檔名稱、幀數、波長範圍；`PLAYING` 與進度（`1:02 / 9:37`、第 35／322 幀）；**Raise leak alarms during replay** 打勾時重播也會觸發並鎖存警報。下方是目前送出的那一幀光譜。重播期間記錄器寫出的檔名帶 `SIM` 前綴。](images/manual-replay.png)
+
 **控制項**
 
 | 控制 | 說明 |
@@ -855,14 +901,16 @@ x ≈ s · Q
 | 進度列與 `mm:ss / mm:ss`、`frame N / M` | 播放進度 |
 | 下方圖 | 目前正在送出的那一幀，畫在**錄檔自己的波長軸**上 |
 
-**必須知道的六件事**
+**必須知道的八件事**
 
-1. **要先讓 OES 在「測試模式」下跑。** 重播是靠裝置的取樣節拍推動的，所以順序是 Monitor 分頁 **Connect → Start**（無硬體會自動進測試模式），再回來按 Play。**接著實機時 Play 會被停用**，分頁上會出現黃色說明條 —— 因為重播只會取代測試模式的幀（見第 6 點），接著實機按下去等於什麼都不會發生。要在有硬體的機台上重播，先拔掉／中斷連線，或在 Configuration 勾 **Force test mode** 後重新 Connect。
+1. **要先讓 OES 在「測試模式」下跑。** 重播是靠裝置的取樣節拍推動的，所以順序是 Monitor 分頁 **Connect → Start**（無硬體會自動進測試模式），再回來按 Play。**接著實機時 Play 會被停用**，分頁上會出現黃色說明條 —— 因為重播只會取代測試模式的幀（見第 8 點），接著實機按下去等於什麼都不會發生。要在有硬體的機台上重播，先拔掉／中斷連線，或在 Configuration 勾 **Force Test Mode** 後重新 Connect。
 2. **用錄檔自己的波長軸。** 例如 1896 點、179.8–850.3 nm，而不是測試模式那條 1000 點、200–800 nm 的合成軸。Ar 811.5 nm 這種超出合成軸的譜線才不會被丟掉，比值、σ、SNR、洩漏率才會和真機一致。
 3. **幀間隔照錄檔。** 播放用虛擬時鐘：起點是按下 Play 的時刻，之後每一幀推進錄檔原本的間隔。倍速只縮短**實際等待時間**，演算法看到的時間軸等比例縮放，判斷結果不變 —— 20× 只是同一份證據送得快 20 倍。
 4. **只播一次。** 播到最後一幀就停在那裡（`FINISHED`），不會循環。循環會把檔尾接回檔頭，下游的基線與警報會把那個接縫當成真實的階躍變化。
 5. **產出檔名帶 `SIM`。** 重播期間兩個記錄器都改寫 `SIMP_OES1_*` / `SIMP_Ratio_*`，落在**今天**的資料夾。Recordings 與 Ratio Review 照樣列得出來，但一眼就分得出不是量測資料。
-6. **真實硬體的幀永遠不會被取代。** 只有測試模式的幀會被換掉。所以重播若在播放途中「接上」了實機（或裝置改以實機模式重新連線），程式會**立刻停止重播並把記錄器切回正常檔名前綴**，日誌記一筆 `ReplayAbortedByHardware`。
+6. **重播結束時，各比值的監控狀態會被重置，已鎖存的警報也會清除。** 對著錄檔確認的警報不是這台機台的事實，不該留給操作員去 Acknowledge。日誌會記一筆 `LeakMonitorAlarmLatchCleared`，寫明原因與哪幾條比值。
+7. **重播期間不套用主機台製程事件**（§6.14）。事件照樣記錄，但判定時當作沒有製程視窗。
+8. **真實硬體的幀永遠不會被取代。** 只有測試模式的幀會被換掉。所以重播若在播放途中「接上」了實機（或裝置改以實機模式重新連線），程式會**立刻停止重播並把記錄器切回正常檔名前綴**，日誌記一筆 `ReplayAbortedByHardware`。
    > 這道保護是實測補上的：曾經在連著實機的情況下按 Play，畫面顯示 `PLAYING`、進度卻停在 0，而記錄器已經切成 `SIM` 前綴 —— 於是**實機量到的真資料被寫成標記為重播的檔案**，剛好把「重播不會被誤認為量測」反過來用。現在 Play 會被擋下，途中變成實機也會被中止。
 
 > ⚠️ **重播的第一秒會跳一次 `LeakMonitorAcquisitionMismatch`。** 按下 Start 時裝置回報的還是合成軸（1000 點），基線若是從重播抓的（1896 點）就對不上。等重播的幀開始流動，比對對象換成錄檔的軸，警告就不再出現。只要基線與待驗證的錄檔來自同一台機、同一組曝光參數，這一次警告可以忽略。
@@ -922,6 +970,8 @@ x ≈ s · Q
 
 回放記錄器寫出的比值 CSV（`{prefix}_Ratio_*.csv`）。**已被壓縮的日期一併列出**（標示 `zip`），直接從壓縮檔讀取。
 
+![圖 9　Ratio Review 分頁，開啟圖 4 那次重播寫出的 `SIMP_Ratio_*.csv`（% of baseline 模式）。橘色與紅色底色是當時整體狀態為 Warning、Alarm 的時段；圖例中標 `(σ-score)` 的是 `RawMean` 分子的比值。](images/manual-ratio-review.png)
+
 **三種檢視模式**（同樣以綠框標示目前模式）：
 
 | 模式 | 內容 |
@@ -955,6 +1005,8 @@ x ≈ s · Q
 | 控制項 | 說明 |
 |---|---|
 | **Refresh** | 重讀批次索引。工具在跑的時候會持續累加,按這個看最新的一批 |
+| **Zoom All** | 縮放回全部資料 |
+| **Save PNG** / **Copy** | 把目前的圖存成 PNG,或複製到剪貼簿 |
 | **Normalize（÷ own median）** | 預設開啟。每一條除以自己的中位數,不同製程量級差一個數量級才畫得進同一張圖;Y 軸會寫 `× own median` |
 | **Show ±3 σ band** | 預設開啟。畫出判定用的 ±3 σ 範圍 |
 | **Open Record / Open Folder** | 打開批次索引檔 `_batches.csv` 或它所在的資料夾 |
@@ -989,6 +1041,8 @@ x ≈ s · Q
 
 某條比值所屬的製程在那一批沒有跑到,該格留白 —— 不會拿別的製程的數字填。
 
+**一批從哪裡開始**:兩段電漿之間的空檔超過 `batchGapSeconds`(預設 240 秒),就算新的一批。若設定了 `batchStartClass`,該製程的一段電漿持續至少 `batchStartMinDurationSeconds`(預設 120 秒)時也算新的一批(同一個製程也可能在批次中間短暫出現,所以要看長度)。這些設定在 `settings.json` 的 `leakMonitor.batch`,畫面上沒有設定欄位;批次記錄出廠為開啟。
+
 ---
 
 ### 6.12 Logs（系統日誌）
@@ -1003,6 +1057,8 @@ x ≈ s · Q
 - **Golden Run 擷取**（含被拒絕的比值與原因）
 - **洩漏率校正的啟用／暫停／清除**
 - Ratio CSV 被略過的原因
+
+![圖 10　Logs 分頁。左上 **Create diagnostic bundle** 打包診斷資料；表格每列是一筆系統日誌，Warning 與 Error 列以底色標示。這裡可看到一次重播的完整經過：測試模式連線、擷取開始、重播開始、Golden Run 擷取、Normal → Warning → Alarm，以及重播結束時清除鎖存警報的紀錄。](images/manual-logs.png)
 
 日誌檔位置：`%APPDATA%\OES_Leak_Monitor\Logs\yyMMddHH.csv`（每小時一個檔）。欄位：
 
@@ -1038,7 +1094,7 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 檔名用**電腦名稱**而不是光譜儀序號，因為掉進測試模式時序號會顯示 `TEST_MODE_SIMULATOR` ——
 最需要辨識的那一包，名字剛好會說謊。序號在 zip 裡的 manifest 中，那裡它是證據。
-沒有 `_cc` 表示這台沒有設定 SECS 機台號。
+沒有 `_cc` 表示這台沒有設定 SECS 機台號。資料夾裡只保留最新的 5 包，更舊的會自動刪除。
 
 包裡有什麼：
 
@@ -1046,7 +1102,7 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 |---|---|
 | `README.txt` / `manifest.json` | 同一份資料的兩種寫法：給人看的與給程式讀的 |
 | `oes-diagnostic.txt` | **原生 DLL 到底載不載得起來**，含 Windows 的錯誤碼（程式平常會吞掉這件事） |
-| `logs/` | 最近 7 天的系統日誌與 SECS 通訊日誌 |
+| `logs/` | 最近 7 天的系統日誌，以及 SECS（`secs_`）與 EAP（`eap_`）通訊日誌 |
 | `config/` | 遮蔽過的 `settings.json`，以及它的 `.bak-*` 備份（設定何時被改過） |
 | `data/` | 當日的 Ratio CSV、`_config_*.json`，以及**當日最新一個**全光譜錄製檔 |
 | `secs/` | SECS profile 的樣板與實際生效版本 |
@@ -1066,13 +1122,19 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 > 追查「為什麼那時候跳警報」或「為什麼這條比值沒有基準線」，這裡是第一個要看的地方 —— 現在 `Description` 欄會直接寫出原因。
 
-### 6.13 SECS（與 MES／EAP 連線）
+### 6.13 SECS（與 FDC 的連線）
 
-這個分頁**不需要登入就看得到**：被問到「OES 有沒有接上 MES」時，Operator 不必等工程師。設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 `secs-operation-sop-zh-TW.html`（與本手冊同一個資料夾）；這裡只說明畫面。
+這個分頁**不需要登入就看得到**：被問到「OES 有沒有接上 FDC」時，Operator 不必等工程師。
+
+![圖 11　SECS 分頁，FDC 尚未連上時（`LISTENING`，在 port 5000 等 FDC 連入）。上方是連線狀態與 Control state，中間是設定（要 Engineer 以上），下方是收發紀錄。沒有 host 連線時，送不出去的警報會以 `Device is not selected` 列在紀錄裡，這是正常的。](images/manual-secs.png)
+
+**FDC** 是 OES 唯一的 SECS host，從這條連線讀洩漏狀態、收警報；OES 在這條連線上是 equipment，等 FDC 連進來。一條 SECS 連線只能有一個 host，所以 EAP 不會連進來。和 EAP 的連線、主機台製程事件的狀態與設定都在 **EAP 分頁**（§6.14）。
+
+設定區要 Engineer 以上才能修改。連線設定與日常檢查的完整步驟見 `secs-operation-sop-zh-TW.html`（與本手冊同一個資料夾）；這裡只說明畫面。
 
 #### 6.13.1 上方：連線狀態
 
-色塊顯示連線狀態（`DISABLED`／`LISTENING`／`COMMUNICATING`／`FAILED` 等），下面依序是控制狀態與機台號、目前的報告開關摘要，以及主機台製程事件的狀態列（§6.13.3）。
+色塊顯示連線狀態（`DISABLED`／`LISTENING`／`COMMUNICATING`／`FAILED` 等），下面依序是控制狀態與機台號，以及目前的報告開關摘要。
 
 #### 6.13.2 設定區與 Traffic
 
@@ -1089,19 +1151,65 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 按下後先把 profile 備份成 `….bak-年月日時分秒`，再**只附加**缺的列——既有的列（含改過的編號、名稱、註解）一律不動；**現場刻意刪掉的列也會被補回**，不要的話補完再刪。結果顯示在按鈕下方，**要按 Restart interface（或重開 App）才生效**，並記入系統日誌 `SecsProfileRowsAdded`。步驟見 SECS SOP §7.3。
 
-#### 6.13.3 主機台製程事件（Tool events）
+### 6.14 EAP（主機台製程事件）
 
-PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。廠內 EAP 把主機台的製程事件（例如 PM3 ProcessStart／ProcessEnd 的 CEID）以 SECS 命令 `TOOL_EVENT` 轉送過來，OES 依對照表開關「**製程視窗**」，指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定；不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
+這個分頁**不需要登入就看得到**：被問到「OES 有沒有收到主機台的製程」時，Operator 不必等工程師。設定要 Engineer 以上才能修改。
 
-**狀態列**（不需登入）：
+![圖 12　EAP 分頁，已連上 EAP 並在製程 A 的視窗中。綠字第一行是連線狀態，第二行是最近一次 S1F3 的結果（PM3 在視窗內、主機台連線正常、序號）；下一行 `Tool events: in window A` 是 OES 目前判定的製程。中間是 EAP 位址與九個 ID 的設定，最下面是 CEID 對照表。這張圖是在測試模式下拍的，所以勾選了 **Apply tool events in test mode**（出廠不勾）；接真實光譜時不需要這個選項。](images/manual-eap.png)
+
+PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。主機台的製程事件（PM3 ProcessStart／ProcessEnd 的 CEID）送到廠內 EAP，EAP 再轉給 OES。OES 依對照表開關「**製程視窗**」：指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定，不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
+
+事件有兩種送達方式，OES 都會接收，進來之後的處理完全相同：
+
+- **EAP 連線**：**現場用這一種**。OES 以 SECS host 身分主動連到 EAP，見 §6.14.1。
+- **SECS 命令 `TOOL_EVENT`**：由 OES 的 SECS host 送來（§11.5）。現場的 host 是 FDC，FDC 不送這個命令，所以現場不會用到。
+
+#### 6.14.1 EAP 連線
+
+OES 在這條連線上是 **host**，主動連到 EAP（預設 `10.2.3.120:20347`），EAP 是 equipment。連上後 OES 會要求上線、啟用 EAP 的兩個事件（轉發事件、主機台連線狀態），並讀 EAP 的 S1～S7（PM3 目前在哪個視窗、EAP 和主機台有沒有連線、序號等），之後**每 30 秒再讀一次**。主機台每有一筆事件，EAP 就用 S6F11 轉發過來。通訊規格見 `eap-tool-event-secs-spec-zh-TW`。
+
+狀態（分頁最上方兩行）：
+
+| 顯示 | 意思 |
+|---|---|
+| `EAP link: not in use` | 沒有啟用 |
+| `EAP link: not started — the EAP ids are not all set (…)`（橘） | 已勾選連線，但必填的 EAP 識別碼還沒填齊（括號內列出缺哪幾個），或有重複，所以不會連線 |
+| `Tool link not fully monitored — …`（橘，第三行） | EAP 不提供 S4 或連線狀態 CEID（`S4 tool link`／`Tool-link CEID` 填 0）。連線照常運作，這行說明 OES 因此看不到什麼 |
+| `EAP link: connected to … — <型號 版本> (since hh:mm:ss)`（綠） | 已連上，事件也已啟用。型號與版本是 EAP 回的 S1F2，用來確認連到的是對的 EAP |
+| `EAP link: connected to … — link test only (EAP ids not set); no events are read`（橘） | 識別碼全部是 0：只驗證連線，不讀 S1～S7、不收事件、不影響製程視窗。填入 EAP 方給的識別碼並 Save & apply，就轉為正式運作 |
+| `EAP link: connecting to … — …`（紅） | 連不上或斷線，會自動重試；破折號後面是原因 |
+| `Last S1F3 hh:mm:ss · PM3 … · tool link up · SEQ n · last event: …` | 最後一次讀 S1～S7 的時間與內容，以及最後一筆轉發事件 |
+| 橘色 `Nothing from the EAP for 75 s — the process window has been set to unknown.` | 太久沒有成功讀到 S1～S7，也沒收到事件。製程視窗改為不明，照沒有製程事件時的方式判定，**不會漏判** |
+
+**斷線本身不會讓視窗變成不明**：OES 會自己重連，連上後立刻讀一次 S1～S7，視窗就恢復正確。只有超過 `Silence timeout (s)` 完全沒有成功的通訊，才會改為不明。讀到的視窗和 OES 自己記的不同時，以讀到的為準並記一筆 `ToolEventResync`（Warning），這筆就是 EAP 漏送事件的紀錄。EAP 回報它和主機台斷線，或回報「不明」時，也會立刻改為不明。
+
+設定（Engineer 以上，`EAP link (SECS host) — applies on save`，**存檔即生效**）：
+
+| 項目 | 說明 |
+|---|---|
+| `Connect to the EAP` | 預設不勾 |
+| `EAP address`／`Port`／`Device ID` | 預設 `10.2.3.120`／`20347`／`0`；EAP 若另開 HSMS port 或主備切換到別的 IP，在這裡改 |
+| `Silence timeout (s)` | 預設 75，可設 35～600 |
+| `EAP ids`：S1～S7、`Forward CEID`、`Tool-link CEID` | EAP 方指定的 9 個編號，預設是 0（未設定）。`S4 tool link (optional)` 和 `Tool-link CEID (optional)` 是選填：EAP 不提供就留 0。其餘 7 個填齊而且不重複，連線才會啟動 |
+| `Read ids from EAP` | 向已連上的 EAP 查詢狀態變數與事件的名稱（S1F11、S1F23），依規格約定的名稱找出 9 個編號，結果列在下方表格。**不會改動任何欄位**。識別碼全部是 0 的連線測試，連上時會自動查一次 |
+| 名稱查詢表格 | 每個識別碼一列：約定名稱、找到的編號、狀態（✓／`wrong type`／`not found`／`not provided`／`ambiguous`）、欄位目前的值、說明。找到的編號和欄位不同時，整列以黃底標出，用來核對已輸入的編號；狀態不是 ✓ 的以橘字標出。`Every name the EAP reported` 展開後是平台回報的全部名稱，名稱和約定不同時照它人工核對 |
+| `Use these ids` | 把找到的編號填進上面的欄位（找不到或重複的維持原值，選填的找不到時填 0）。**這不是存檔**：欄位會顯示 `Unsaved changes`，確認後按 Save & apply 才生效 |
+
+收到的事件會不會被採用，仍由下方 `Use tool events` 決定。收送的每一則訊息都記在 `Logs\eap_YYYYMMDD.log`（不是 `secs_` 那個檔），分頁最下方有路徑。
+
+系統日誌的相關訊息：`EapLinkConnected`／`EapLinkLost`／`EapLinkConnectFailed`（連不上時只記第一次，之後每小時一筆累計）、`EapLinkSetupFailed`（EAP 拒絕啟用事件，多半是 CEID 填錯）、`EapStatusQueryFailed`（讀 S1～S7 失敗）、`EapLogWriteFailed`（`eap_` 通訊日誌寫不進去）、`EapReportRejected`（EAP 送來的資料格式不符，不採用）、`EapEventSequenceGap`（有事件沒送到）、`EapSequenceReset`（EAP 重啟）、`ToolEventContextUnknown`（視窗改為不明，附原因）。
+
+#### 6.14.2 工具事件的狀態、設定與 CEID 對照表
+
+**狀態**（不需登入）：
 
 | 顯示 | 意思 |
 |---|---|
 | `Tool events: not in use` | 沒有啟用 |
 | `Tool events: in window A` | 在製程 A 的視窗內 |
 | `Tool events: outside any window` | 視窗已關閉、目前沒有任何視窗（與有沒有電漿無關） |
-| `Tool events: window unknown — …` | 已啟用，但目前沒有視窗生效：還沒收到事件、視窗逾時，或事件不套用到目前的光譜（回放、測試模式）。照沒有製程事件時的方式判定 |
-| `Last tool event: CEID … at hh:mm:ss` | 最後一筆收到的事件（不論是否在對照表內）；`none received yet` 表示還沒收到 |
+| `Tool events: window unknown — …` | 已啟用，但目前沒有視窗生效：還沒收到事件、視窗逾時、EAP 自己也不知道，或事件不套用到目前的光譜（回放、測試模式）。照沒有製程事件時的方式判定 |
+| `Last tool event: CEID … at hh:mm:ss` | 最後一筆收到的事件（不論是否在對照表內）；`none received yet` 表示還沒收到。時間是 **EAP 收到這筆事件的時間**：主機台的事件報告不帶時間戳，由 EAP 填入，和主機台實際發生的時刻只差 SECS 傳遞的時間 |
 | `Tool events received this run: n` | 這次啟動後收到的事件數。一直是 0，就是 EAP 沒有在轉送 |
 
 **設定**（Engineer 以上，Save & apply）：
@@ -1112,11 +1220,15 @@ PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B
 | `Max window (s) — applies on save` | 存檔即生效 | 視窗最長存活時間（預設 600 秒，可設 10～86400）。超過仍未收到 End，視窗作廢、回到「window unknown」 |
 | `Apply tool events in test mode — applies on save` | 存檔即生效 | 測試模式的合成光譜是否套用視窗（預設不套用）。只在沒有光譜儀的電腦上驗證用。**回放錄檔時一律不套用** |
 
-**CEID 對照表**（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 `(record only)`，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（`inherit` 表示沿用製程分類器設定或記錄器的門檻）。對照表要在 `settings.json` 的 `secs.toolEvents.mappings` 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。
+**CEID 對照表**（唯讀，不需登入）：顯示已存檔的對照表——CEID、Class（空白顯示 `(record only)`，表示只記錄、不開關視窗）、Edge（Start／End）、Name、Plasma threshold（`inherit` 表示沿用製程分類器設定或記錄器的門檻）。
+
+現場的對照表有三組：`A`（Chamber Process／precoat）、`B`（Chamber Clean），以及 **`LEAK_CHECK`**（主機台的 Auto Leak check，升壓測漏）。**沒有任何比值指定 `LEAK_CHECK`**，所以它不影響判定；它的用途是讓主機台測漏期間，狀態顯示 `in window LEAK_CHECK`、VID 031 為 `LEAK_CHECK`，FDC 才能把 OES 的讀值和主機台的測漏結果對齊。測漏期間比值顯示 `Not this process` 是正常的。
+
+對照表要在 `settings.json` 的 `secs.toolEvents.mappings` 修改（步驟見 SECS SOP），一樣要重新開始採集才生效。
 
 已存檔的開關或對照表和目前生效的不同時，表格上方會出現橘色字：`Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.` 到 Monitor 分頁按 Stop 再按 Start 就會套用、橘色字消失。
 
-**日誌**：視窗的開與關記成 `ToolEventWindowOpened`／`ToolEventWindowClosed`。事件不套用時（回放、測試模式），這兩行的結尾會加上 `(not applied: …)`，表示當時的判定沒有依這個視窗。其他相關訊息：`ToolEventIgnored`（對照表沒有的 CEID，每個只記一次）、`ToolEventWindowUnclosed`／`ToolEventOrphanEnd`／`ToolEventWindowTimedOut`（事件不成對或逾時，Warning）、`ToolEventUnmappedPlasma`（不在任何視窗內的一段電漿——通常是對照表還沒有的製程）。
+**日誌**：視窗的開與關記成 `ToolEventWindowOpened`／`ToolEventWindowClosed`。事件不套用時（回放、測試模式），這兩行的結尾會加上 `(not applied: …)`，表示當時的判定沒有依這個視窗。其他相關訊息：`ToolEventIgnored`（對照表沒有的 CEID，每個只記一次）、`ToolEventWindowUnclosed`／`ToolEventOrphanEnd`／`ToolEventWindowTimedOut`（事件不成對或逾時，Warning）、`ToolEventUnmappedPlasma`（不在任何視窗內的一段電漿——通常是對照表還沒有的製程）、`ToolEventResync`／`ToolEventContextRestored`（讀到的視窗修正或恢復了 OES 的視窗）。
 
 ---
 
@@ -1127,16 +1239,32 @@ PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B
 ```
 %APPDATA%\OES_Leak_Monitor\
 ├── settings.json          ← 所有設定（裝置參數、記錄器、比值、Golden Run、校正、波長修正）
+├── settings.json.bak-*    ← settings.json 的舊版備份
+├── profiles\
+│   ├── oes-leak-monitor.json             ← SECS profile（現場可改，見 §6.13）
+│   ├── oes-leak-monitor.json.bak-*       ← Add missing rows 之前的備份
+│   └── .effective\oes-leak-monitor.json  ← 蓋上機台號後實際載入的版本（程式產生，不要改）
+├── Diagnostics\
+│   └── diag_*.zip         ← 一鍵打包診斷（見 §6.12.1）
 ├── Data\                  ← 記錄的 CSV（可在 Configuration 改成別的路徑）
+│   ├── _batches.csv       ← 跨批次索引（長格式，見 §6.11）
 │   └── 202608\
 │       └── 04\
 │           ├── P_OES1_0804153012.csv        ← 強度／全光譜
+│           ├── P_OES1_0804153012.acq.json   ← 該錄製檔的取像條件（見 §6.7）
 │           ├── P_OES1_0804153012_1.csv      ← 超過記憶體上限時的續檔
-│           ├── P_Ratio_0804153012.csv       ← 對應的比值檔
-│           └── P_0804153012.notes.txt       ← Recordings 分頁存的筆記（檔名不含 tag）
+│           ├── P_Ratio_0804153012.csv       ← 比值檔（獨立開檔，時間戳不一定與強度檔相同）
+│           ├── P_Batch_0804153012.csv       ← 當日的批次摘要（寬格式，見 §6.11）
+│           ├── P_0804153012.notes.txt       ← Recordings 分頁存的筆記（檔名不含 tag）
+│           ├── _config_153012.json          ← 開檔當下的設定快照（不含帳號與密碼）
+│           └── _log_26080415.csv            ← 當日系統日誌的副本
 └── Logs\
-    └── 26080415.csv       ← 系統稽核日誌（每小時一檔）
+    ├── 26080415.csv       ← 系統稽核日誌（每小時一檔）
+    ├── secs_20260804.log  ← 與 FDC 的 SECS 通訊紀錄（每天一檔）
+    └── eap_20260804.log   ← 與 EAP 的通訊紀錄（每天一檔）
 ```
+
+以底線開頭的檔案（`_config_*`、`_log_*`、`_batches.csv`）不會出現在 Recordings／Ratio Review 的清單裡。`_config_*.json` 與 `_log_*.csv` 讓一個日期資料夾單獨拷貝出去時也看得懂：當天用的觸發門檻、比值定義、基準線，以及程式做了什麼。
 
 `%APPDATA%` 通常是 `C:\Users\<你的帳號>\AppData\Roaming`。
 
@@ -1146,8 +1274,8 @@ PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B
 {prefix}_{tag}_{MMddHHmmss}[_N].csv
 ```
 
-- `prefix` — Configuration 裡設的 File Prefix
-- `tag` — `OES1`（強度檔）或 `Ratio`（比值檔）
+- `prefix` — Configuration 裡設的 File Prefix。重播期間前面會再加上 `SIM`，例如 `SIMP`（見 §6.8）
+- `tag` — `OES1`（強度檔）、`Ratio`（比值檔）或 `Batch`（批次摘要）
 - `MMddHHmmss` — session 起始時間（**年份由上層資料夾還原**）
 - `_N` — 續檔序號。兩種情況會產生：**(a)** 單檔超過記憶體預算；**(b)** 存檔途中**光譜波長軸改變**（重新套用擷取參數、裝置重連），此時舊檔關閉、以新的波長軸開新檔，Logs 分頁會留下一筆 `SpectrumAxisChanged` 警告
 
@@ -1159,7 +1287,12 @@ PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B
 Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBaseline,…,OverallState,LeakRate,LeakRateSigma
 ```
 
-每個比值兩欄（原始值 + % 基準），最後三欄是整體狀態與洩漏率估計。欄位是**依標題名稱**尋址的，所以舊版沒有 `LeakRate` 欄位的檔案仍可正常解析。
+每個比值兩欄（原始值 + % 基準），接著三欄是整體狀態與洩漏率估計。欄位是**依標題名稱**尋址的，所以舊版沒有 `LeakRate` 欄位的檔案仍可正常解析。
+
+視設定而定，最後還可能再多幾欄（開檔當下決定，同一個檔案裡不會變）：
+
+- 設定了製程分類器：`ProcessClass,ProcessStep`，以及每條判別規則的量測值 `disc:*`。
+- 啟用了主機台製程事件（§6.14）：`ToolContext,ToolWindowClass`。
 
 **欄名同時帶著名字與代號**：`{顯示名稱} [{key}]`。
 
@@ -1168,7 +1301,7 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
 
 > 📝 **舊檔（欄名只有 `R_xxxxxxxx`）照樣讀得開**，只是 Ratio Review 的圖例會顯示代號而不是名字 —— 那些檔案裡沒有名字可用。
 
-> 第二欄的名稱會說明它裝的是什麼：一般是 `…_pctBaseline`（% 基準）；若該比值採 `AbsoluteIntensity` + `RawMean`，就會是 **`…_sigmaScore`**（σ 分數）。兩者都畫在同一組 100/120/150 標尺上，但**不是同一個量**，所以 Ratio Review 會在圖例標上 `(σ-score)`。
+> 第二欄的名稱會說明它裝的是什麼：一般是 `…_pctBaseline`（% 基準）；若該比值的訊號線用 `RawMean`（`Ratio` 與 `AbsoluteIntensity` 都一樣），就會是 **`…_sigmaScore`**（σ 分數）。出廠的 `R_N2Ar` 與 `R_NOAr` 就是這種。兩者都畫在同一組 100/120/150 標尺上，但**不是同一個量**，所以 Ratio Review 會在圖例標上 `(σ-score)`。
 
 > ⚠️ 顯示名稱裡的逗號會被寫成分號、中括號會被寫成小括號 —— 否則會把 CSV 的欄位切壞。取名字時盡量只用物種、波長與斜線，例如 `N2 337.1 / Ar 750.4`、`N2 337.1 (abs)`。
 
@@ -1212,7 +1345,9 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
 
 ### 7.5 備份建議
 
-要保存一台機台的完整組態，備份 **`settings.json`** 一個檔就夠了 —— 裡面包含所有裝置參數、記錄器設定、比值定義、**自訂譜線**、Golden Run 基準線、洩漏率校正、波長修正與資料保存設定。
+要保存一台機台的完整組態，備份 **`settings.json`** —— 裡面包含所有裝置參數、記錄器設定、比值定義、**自訂譜線**、Golden Run 基準線、洩漏率校正、波長修正、資料保存設定，以及 SECS／EAP 連線設定與 CEID 對照表。
+
+有接 SECS 的機台還要一併備份 **`profiles\`** 資料夾：SECS profile 不在 `settings.json` 裡，而現場改過的編號與文字只存在那個檔案。
 
 ---
 
@@ -1243,7 +1378,7 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
 
 1. 記下狀態橫幅的時間與 **Leak rate** 讀值。
 2. 看**哪幾條比值**進了 ALARM：
-   - O / OH / NO 一起上升 → 典型的**空氣洩漏**。
+   - 出廠比值 `N₂ 337 / Ar 750`、`NO 237 / Ar 750`、`N₂ 358 / Ar 750` 一起上升 → 典型的**空氣洩漏**（若你的機台依 §1.1 挑了別的線，以那幾條為準）。
    - 只有單一條上升 → 可能是該譜線受干擾，或有其他製程變化。
 3. 到 **Ratio Review** 回放這段時間，確認是**持續上升**還是短暫尖峰。
 4. 實體檢查（O-ring、法蘭、視窗、閥件）。
@@ -1286,7 +1421,7 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
 2. **Monitor** 分頁 → **Connect** → **Start**（無硬體會進測試模式）。
 3. 回 **Replay** → **Play**（這一步用 `1×`，讓平滑與 SNR 有正常的時間行為）。
 4. 等 Leak Monitor 的各比值 SNR 與讀值平穩後，按 **Capture Golden Run**，取一個看得出來源的名字，例如 `Replay 0807-2109`。
-5. 捕捉完成後檢查日誌：出現 `GoldenRunCaptured` 才算成功。若出現 `GoldenRunRatioUnstableBaseline`、`GoldenRunRatioLowSnr` 或 `GoldenRunRatioDropped`（畫面也會跳警告視窗），代表那條比值的基線被拒絕，先處理再往下（見 §9.5）。若跳的是錯誤視窗／日誌記 `GoldenRunEmpty`，這次擷取沒有存下任何東西 —— 重播的基線要重抓，**而且不要拿實機的舊基準線頂替**（§8.5 開頭的提醒）。
+5. 捕捉完成後檢查日誌：出現 `GoldenRunCaptured` 才算成功。若出現 `GoldenRunRatioUnstableBaseline`、`GoldenRunRatioLowSnr` 或 `GoldenRunRatioDropped`（畫面也會跳警告視窗），代表那條比值的基線被拒絕，先處理再往下（見 §9.5）。若跳的是錯誤視窗／日誌記 `GoldenRunEmpty`，這次擷取沒有存下任何東西 —— 重播的基線要重抓，**而且不要拿實機的舊基準線頂替**（見 §6.8 最後的提醒）。
 6. 按 **Save**。
 
 > ⚠️ **絕對不要拿事件段抓基線。** 基線若落在洩漏已經發生的區間，同一份資料之後就會顯得正常，警報延後甚至完全不跳。實測過一次：把基線抓在告警期間，同一份事件檔的 **Warning 延後 181 秒、Alarm 延後 212 秒**，而原始比值一模一樣 —— 純粹是基線的位置造成的。
@@ -1327,7 +1462,7 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
 | **轉態整體延後** | 基線偏高（多半是抓在洩漏已經開始的區間），或 warn / alarm 門檻被調高 |
 | **完全不跳警報** | 先確認有勾 Raise leak alarms during replay；再看主力比值是不是被 SNR gate 擋成 `LowSignal` |
 | 日誌沒有任何 `LeakMonitorState` | 沒勾 Raise leak alarms during replay（狀態其實有變，只是沒寫進日誌） |
-| 欄名從 `_pctBaseline` 變成 `_sigmaScore` | 該比值改成了絕對強度 + `RawMean`，監控的量已經換成 σ 分數，不能和舊檔的百分比直接比 |
+| 欄名從 `_pctBaseline` 變成 `_sigmaScore` | 該比值的訊號線改成了 `RawMean`（不論監控方式），那一欄已經換成 σ 分數，不能和舊檔的百分比直接比 |
 
 > 💡 比對兩份比值 CSV 時，**認欄名中括號裡的 `key`**（例如 `[R_7c40d2f9]`），不要認名字 —— 名字可以被改，key 不會（見 §7.3）。
 
@@ -1411,11 +1546,9 @@ Configuration → **Average Mode** 改成 `Software` → **Apply**。某些機�
 2. 跑一段一樣長的時間，比較日誌裡 `SpectrumFrameDropout` 的 `FramesThisSession` 數字有沒有下降。
 3. 若沒有改善，檢查 USB／網路線材與接頭，並考慮降低積分時間。
 
-處理方式同 §9.4 —— 先把訊號救起來，再重錄。
-
 ### 9.7 進不了 Configuration 分頁
 
-正常行為 —— 該分頁需要 **Engineer** 以上。點進去會跳出登入視窗，取消就退回原本的分頁。請用 Engineer 或 Admin 帳號登入。
+正常行為 —— 該分頁需要 **Engineer** 以上（Replay 分頁也一樣）。點進去會跳出登入視窗，取消就退回原本的分頁。請用 Engineer 或 Admin 帳號登入。
 
 若登入後角色又掉回 Engineer 以下（例如閒置自動鎖定），畫面會自動跳回 Monitor 分頁。
 
@@ -1428,8 +1561,6 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 （Leak Calibration 例外 —— 它存檔後立即生效。）
 
 ### 9.9 沒有產生 Ratio CSV
-
-依序確認：
 
 比值 CSV **不需要**記錄器武裝，也不看觸發門檻 —— 只要 OES 在擷取就該有檔案。所以依序確認：
 
@@ -1461,19 +1592,30 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 
 ### 9.13 Leak Monitor 一直顯示 `PROCESS CONTEXT UNKNOWN`
 
-已啟用主機台製程事件，但 OES 不知道目前是哪個製程視窗。照沒有製程事件時的方式判定，所以**不會漏判**，但指定類別的比值沒有依製程篩選。依序檢查 SECS 分頁的狀態列（§6.13.3）：
+已啟用主機台製程事件，但 OES 不知道目前是哪個製程視窗。照沒有製程事件時的方式判定，所以**不會漏判**，但指定類別的比值沒有依製程篩選。依序檢查 EAP 分頁的狀態（§6.14）：
 
-1. **`Tool events received this run: 0`** —— EAP 沒有在轉送事件。確認 SECS 已連線（`COMMUNICATING`），請 EAP 平台確認轉送已開啟。
+1. **`Tool events received this run: 0`** —— EAP 沒有在轉送事件。先看 `EAP link` 那一行是否為綠色（不是的話見 §9.15），再請 EAP 平台確認轉送已開啟。
 2. **有收到事件，但 `Last tool event` 的 CEID 不在對照表裡** —— 對照表沒有這個主機台的 Start／End CEID。比對主機台的 CEID 表，修改 `settings.json` 後重新開始採集。
 3. **剛重新開始採集或剛啟動** —— 要等主機台的下一個 Start 事件。這是正常的。
 4. **日誌有 `ToolEventWindowTimedOut`** —— 視窗開太久沒收到 End，代表 EAP 漏轉了 ProcessEnd，或 `Max window (s)` 設得比製程還短。
 5. **正在回放或測試模式** —— 事件不套用到這些光譜（測試模式註記會寫 `not applied`），這是設計如此。
 
-### 9.14 EAP 送 `TOOL_EVENT` 收到 HCACK 1
+### 9.14 Host 送 `TOOL_EVENT` 收到 HCACK 1
 
 OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆寫**既有的 profile（裡面可能有現場的修改），所以舊 profile 沒有 `TOOL_EVENT` 這個命令、也沒有 VID 030～032；啟動時系統日誌會有一筆 `SecsProfileMissingBinds`。處理方式：在 SECS 分頁按 **Add missing rows**（§6.13.2），再按 **Restart interface**。比值槽位 VID 101～400 也是同樣的情形、同樣的處理。
 
----
+### 9.15 `EAP link` 不是綠色
+
+EAP 分頁最上方那一行會寫原因。依序檢查：
+
+1. **`not started — the EAP ids are not all set`（或 `… share an SVID`）** —— 必填的 EAP 識別碼只填了一部分（訊息括號內列出缺哪幾個）或有重複。照 EAP 方給的編號在 EAP 分頁填好，Save & apply。S4 和 `Tool-link CEID` 可以留 0；EAP 還沒給編號時，全部留 0 就是只連線測試。
+2. **`connecting to … — cannot reach the EAP (…目標電腦拒絕連線)`** —— EAP 那邊沒有在該 port 監聽。請 EAP 平台確認服務已啟動、位址與 port 和 EAP 分頁填的一致。
+3. **`connecting to … — cannot reach the EAP (…)` 其他原因，或一直停在 `connecting…`** —— 網路不通，或 EAP 主機的防火牆擋了 OES PC 的 IP。請 IT 確認 OES PC 能連到 EAP 的位址與 port。
+4. **系統日誌有 `EapLinkSetupFailed`** —— 連上了，但 EAP 拒絕啟用事件：`Forward CEID`／`Tool-link CEID` 和 EAP 的編號不一致。
+5. **橘色的 `connected to … — link test only`** —— 連線本身沒問題，只是識別碼全是 0，所以不讀資料。這是只連線測試，不是故障；填入識別碼即可。
+6. **綠色，但第二行是橘色的 `Nothing from the EAP for …`，或日誌有 `EapReportRejected`** —— 連得上，但讀不到 S1～S7 或資料格式不符：多半是 S1～S7 的編號填錯，或 EAP 的報告格式和規格不一致。把 `Logs\eap_YYYYMMDD.log` 交給 EAP 平台比對。
+
+不想等現場 EAP，也可以用 `Test_SECS` 的「EAP（PM3 event forwarder）」設定檔在同一台電腦上假扮 EAP（步驟見 SECS SOP §12.7）。
 
 ## 10. 附錄：參數預設值
 
@@ -1488,7 +1630,7 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 | Boxcar Width | 1（關閉） |
 | Polling Interval | 200 ms |
 | Max Consecutive Errors | 5 |
-| Force Test Mode | 開 |
+| Force Test Mode | 關 |
 | Background Remove | 開 |
 | Straylight Correction | 關 |
 | Linearity Correction | 開 |
@@ -1502,11 +1644,12 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 | Trigger Mode | `Wavelength` | `AnyMonitoredWavelength` | 保留譜線專一性，又能涵蓋不同步驟亮起的物種 |
 | Save Threshold Intensity | 1000 | **10000** | 見下方 |
 | Start Confirm Time | 2.0 s | 2.0 s | |
+| Pre-Trigger Time | 0 s | 0 s | 見 §6.2.3 |
 | Stop Confirm Time | 3.0 s | 3.0 s | |
 | Min Save Time | 5.0 s | 5.0 s | |
 | Wavelength Tolerance | 2.0 nm | 2.0 nm | |
 
-**門檻要設在「電漿關」與「電漿開」之間，而且兩邊都要留餘裕。** 這個門檻不只決定全譜 CSV 何時開錄 —— `AbsoluteIntensity` 比值的**電漿存在判定也用它**（見 §6.4.2），所以設得太低會讓電漿關閉時的暗電流基座被當成「電漿開著」，那些幀就會被拿去算比值、甚至被錄進 Golden Run 基準線。
+**門檻要設在「電漿關」與「電漿開」之間，而且兩邊都要留餘裕。** 這個門檻不只決定全譜 CSV 何時開錄 —— 所有比值（兩種監控方式）的**電漿存在判定也用它**（見 §6.4.2），所以設得太低會讓電漿關閉時的暗電流基座被當成「電漿開著」，那些幀就會被拿去算比值、甚至被錄進 Golden Run 基準線。
 
 實測（Ar 80 sccm / 0.95 torr / RF 50 W，`SpectrumPercentile` p99）：
 
@@ -1551,10 +1694,22 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 | 波長修正上限 | ±5 nm |
 | 自訂譜線上限 | 100 條 |
 | 自訂譜線波長範圍 | 100–1200 nm |
+| 製程分類器（`leakMonitor.processClassifier.enabled`） | 關 |
+| 分類器判定幀數（`decideAfterFrames`） | 3 幀（之後整段鎖定） |
+| 批次記錄（`leakMonitor.batch.enabled`） | 開 |
+| 批次分隔空檔（`batchGapSeconds`） | 240 s |
+| 主機台製程事件（`Use tool events`） | 關 |
+| 製程視窗最長存活（`Max window (s)`） | 600 s，可設 10–86400 |
+| 測試模式套用製程事件 | 否 |
+| EAP 連線（`Connect to the EAP`） | 關 |
+| EAP 靜默逾時（`Silence timeout (s)`） | 75 s，可設 35–600 |
+| 舊資料自動壓縮（`Compress old data`） | 關；30 天、20 GB，最新 2 天不壓 |
 
 ### 10.5 出廠預設比值
 
 全部以 **Ar 750.4 nm（PeakHeight）** 為參考線；門檻倍數 Warn **1.05** / Alarm **1.12**，σ 3 / 6。
+
+> 📝 訊號線用 `RawMean` 的比值會忽略門檻倍數，只用 σ 門檻（見 §6.4.2）。所以出廠組裡，1.05 / 1.12 實際只對 `R_N2357Ar` 有作用；`R_N2Ar`、`R_NOAr`（以及啟用時的 `R_N2357Abs`）只看 σ 3 / 6，% 趨勢與 CSV 也是 σ 分數。
 
 | Key | 名稱 | 角色 | 訊號線 | 擷取方式 | 出廠 |
 |---|---|---|---|---|---|
@@ -1569,7 +1724,7 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 
 **第四條的用途**：它和第三條讀**同一條譜線**，差別只在有沒有除以 Ar 750.4。兩條並排看，就能直接判斷「訊號上升」是化學變化還是整個光譜一起變亮（巡檢計畫診斷矩陣裡最難判的那一列）。出廠不啟用，是因為絕對強度在洩漏排除後**回不到基準線**（實測仍高 +7.6%，同一時刻 Ar 正規化的比值已回到 +1%），也會跟著觀察窗髒污漂移 —— 開著會讓機台在每次事件後長期掛著 Warning。要用時到 Ratio Setup 勾選、Save、重啟擷取。
 
-> ⚠️ **這仍然是「一台機器」的答案，不是通用建議值。** 壓力、功率、氣體組成一變，會動的物種就可能換人。**上線前請依 §1.1 用一次已知洩漏重做一次挑線**。門檻倍數 1.05 / 1.12 也是配著那台機器 2% 的基準散度調的：散度 8% 的機台用 1.05 會天天假警報。（出廠的 1.2 / 1.5 則是相反的問題 —— 配上 2% 散度會讓乘法那一支永遠勝出而把 σ 門檻整個蓋掉，詳見 §6.4.2。手動**新增**比值時的起始值仍是 1.2 / 1.5，見 §10.3。）
+> ⚠️ **這仍然是「一台機器」的答案，不是通用建議值。** 壓力、功率、氣體組成一變，會動的物種就可能換人。**上線前請依 §1.1 用一次已知洩漏重做一次挑線**。門檻倍數 1.05 / 1.12 也是配著那台機器 2% 的基準散度調的：散度 8% 的機台用 1.05 會天天假警報。（1.2 / 1.5 則是相反的問題：配上 2% 散度，乘法那一支會永遠勝出，把 σ 門檻整個蓋掉。警告門檻取兩者較大者，見 §6.3.4。手動**新增**比值時的起始值仍是 1.2 / 1.5，見 §10.3。）
 
 ### 10.6 可選參考譜線
 
@@ -1594,7 +1749,7 @@ OES 的 SECS profile 是在支援製程事件之前產生的。程式**不會覆
 
 ## 11. 附錄：SECS 識別碼（SVID／ALID／CEID）
 
-本機台以 SECS/GEM（HSMS）與廠內 Host／MES 連線時，Host 看到的每一筆資料都有一個識別碼。這三種識別碼各自回答 Host 的一個問題：
+本機台以 SECS/GEM（HSMS）與廠內 Host 連線時（現場的 Host 是 **FDC**），Host 看到的每一筆資料都有一個識別碼。這三種識別碼各自回答 Host 的一個問題：
 
 | | 全名 | 回答的問題 | 誰先開口 | 訊息 |
 |---|---|---|---|---|
@@ -1681,7 +1836,9 @@ ALID 與 CEID 格式相同，但屬於不同的命名空間（ALID 用 001～130
 
 ### 11.5 遠端命令：`TOOL_EVENT`
 
-除了上面三種，OES 只接受**一個**遠端命令（S2F41）：`TOOL_EVENT`。它由廠內 EAP 送來，內容是主機台自己的製程事件 CEID（必填 `CEID`，選填 `TIME`），用途見 §6.13.3。
+除了上面三種，OES 只接受**一個**遠端命令（S2F41）：`TOOL_EVENT`。它由 OES 的 SECS host 送來，內容是主機台自己的製程事件 CEID（必填 `CEID`，選填 `TIME`），用途見 §6.14。
+
+> **現場不會用到這個命令。** 現場的 SECS host 是 FDC，FDC 不送 S2F41；主機台的製程事件改由 OES 以 SECS host 身分連到 EAP 取得（§6.14.1），進來之後的處理和 `TOOL_EVENT` 完全相同。這個命令保留給「EAP 本身就是 SECS host」的場合。
 
 - **它是資訊轉送，不是控制命令**：不會啟停採集、不會解除警報、不改任何設定。
 - **回覆碼 HCACK**：0 = 收下（對照表沒有的 CEID 也回 0，只記錄）；1 = 命令不存在（舊版 profile，見 §9.14）；2 = 未啟用製程事件，或不在 ONLINE／REMOTE；3 = 參數錯誤（缺 `CEID`、`CEID` 讀不出來、`TIME` 格式錯）。
@@ -1706,5 +1863,5 @@ ALID 與 CEID 格式相同，但屬於不同的命名空間（ALID 用 001～130
 | 狀態變數識別碼 | SVID (Status Variable ID) | Host 可隨時查詢的數值，見 §11.1 |
 | 警報識別碼 | ALID (Alarm ID) | 設備主動送出的警報，成對 set／clear，見 §11.2 |
 | 事件識別碼 | CEID (Collection Event ID) | 設備主動送出的事件通知，見 §11.3 |
-| 主機台製程事件 | Tool event（S2F41 `TOOL_EVENT`） | EAP 轉送過來的主機台製程事件 CEID，見 §6.13.3 |
+| 主機台製程事件 | Tool event | EAP 轉送過來的主機台製程事件 CEID；現場由 OES 以 SECS host 身分連到 EAP 取得（另一種方式是 S2F41 `TOOL_EVENT`），見 §6.14 |
 | 製程視窗 | Process window | 主機台某個製程的 Start 到 End；指定類別的比值只在該類別的視窗內判定 |

@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OES Leak Monitor × EAP 製程事件介面規格（SECS，方案 2b）</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#目錄">目錄</a>
+<a class="l2" href="#1-背景">1. 背景</a>
+<a class="l2" href="#2-系統配置與角色">2. 系統配置與角色</a>
+<a class="l2" href="#3-連線參數">3. 連線參數</a>
+<a class="l2" href="#4-eap-需要提供的識別碼與資料">4. EAP 需要提供的識別碼與資料</a>
+<a class="l3" href="#41-svid供-oes-以-s1f3-讀取">4.1 SVID（供 OES 以 S1F3 讀取）</a>
+<a class="l3" href="#42-ceid-與固定報告eap--oess6f11">4.2 CEID 與固定報告（EAP → OES，S6F11）</a>
+<a class="l3" href="#43-約定名稱建議供-oes-自動帶出識別碼">4.3 約定名稱（建議，供 OES 自動帶出識別碼）</a>
+<a class="l3" href="#44-只收事件模式oes-端的選項">4.4 只收事件模式（OES 端的選項）</a>
+<a class="l2" href="#5-訊息流程">5. 訊息流程</a>
+<a class="l3" href="#51-連線後的初始化每次連上都完整執行包括斷線重連">5.1 連線後的初始化（每次連上都完整執行，包括斷線重連）</a>
+<a class="l3" href="#52-平常運作">5.2 平常運作</a>
+<a class="l3" href="#53-訊息範例">5.3 訊息範例</a>
+<a class="l2" href="#6-eap-端的行為要求">6. EAP 端的行為要求</a>
+<a class="l2" href="#7-oes-端的行為供參考">7. OES 端的行為（供參考）</a>
+<a class="l2" href="#8-已確認事項與現場設定紀錄">8. 已確認事項與現場設定紀錄</a>
+<a class="l2" href="#9-自測工具">9. 自測工具</a>
+<a class="l2" href="#10-驗收方式">10. 驗收方式</a>
+<a class="l3" href="#101-只收事件模式44">10.1 只收事件模式（4.4）</a>
+</nav>
+<main>
+<h1 id="oes-leak-monitor--eap-製程事件介面規格secs方案-2b">OES Leak Monitor × EAP 製程事件介面規格（SECS，方案 2b）</h1>
+<blockquote><p><strong>對象：</strong> 廠內 EAP 平台廠商（開發與維運）。 <strong>目的：</strong> 定義 OES Leak Monitor 怎麼向 EAP 取得主機台 <strong>PM3</strong> 的製程事件：EAP 以 SECS <strong>equipment</strong> 身分提供製程視窗的狀態變數，並以 S6F11 轉發主機台事件；OES 以 <strong>host</strong> 身分連入讀取。 <strong>狀態：</strong> 2026-10-29（第三版）。OES 端已依本規格實作，包括 §4.4 的只收事件模式。<strong>本規格取代 2026-10-26 的 TCP 文字行規格（<code>eap-tool-event-tcp-spec-zh-TW</code>）</strong>，拿到舊版的請改依本規格。</p>
+<p><strong>本版與 2026-10-28 版（第二版）的差異</strong>（EAP 端不需要修改；對 EAP 的要求不變）：</p>
+<ol>
+<li><strong>只收事件模式</strong>（新增 §4.4、Q9、§10.1）。EAP 暫時無法提供 S1～S7 時，OES 可以只靠轉發 CEID 接收事件。這是過渡與備援的做法，<strong>S1～S7 仍然要提供</strong>；只收事件時 OES 看不到的情況寫在 §4.4。
+</li>
+</ol>
+<p><strong>第二版與 2026-10-27 版的差異</strong>（EAP 端原本的實作不需要修改；以下都是放寬或新增的建議）：</p>
+<ol>
+<li><strong>S4 與連線狀態 CEID 改為選填</strong>（§4、§4.1、§4.2、Q5）。平台無法得知自己與主機台的連線狀態時，這兩項不必提供，OES 照樣連線；代價寫在 §4.2。
+</li>
+<li><strong>只連線測試</strong>（§4、§10 第 0 項）。識別碼還沒指定時，OES 只填 EAP 的位址、port、Device ID 就能先連線，只送 S1F13、S1F17、S1F1，用來先驗證網路與防火牆。
+</li>
+<li><strong>約定名稱</strong>（新增 §4.3、Q7、Q8、§9、§10 第 0a 項）。建議平台支援 S1F11／S1F23，並把 SVNAME／CENAME 設成 §4.3 的名稱，OES 就能自動帶出 9 個識別碼、核對有沒有填錯。不支援時照原本方式提供編號即可。
+</li>
+</ol>
+<p><strong>一句話：</strong> OES 主動連到 EAP（預設 <code>10.2.3.120:20347</code>），上線後啟用兩個 CEID、讀 S1～S7，之後每 30 秒再讀一次；主機台每有一筆事件，EAP 就以<strong>一個固定的轉發 CEID</strong> 送 S6F11，報告內容固定為「主機台 CEID、EAP 收到的時間、序號」。</p></blockquote>
+<h2 id="目錄">目錄</h2>
+<ul>
+<li><a href="#1-背景">1. 背景</a>
+</li>
+<li><a href="#2-系統配置與角色">2. 系統配置與角色</a>
+</li>
+<li><a href="#3-連線參數">3. 連線參數</a>
+</li>
+<li><a href="#4-eap-需要提供的識別碼與資料">4. EAP 需要提供的識別碼與資料</a>
+</li>
+<li><a href="#5-訊息流程">5. 訊息流程</a>
+</li>
+<li><a href="#6-eap-端的行為要求">6. EAP 端的行為要求</a>
+</li>
+<li><a href="#7-oes-端的行為供參考">7. OES 端的行為（供參考）</a>
+</li>
+<li><a href="#8-已確認事項與現場設定紀錄">8. 已確認事項與現場設定紀錄</a>
+</li>
+<li><a href="#9-自測工具">9. 自測工具</a>
+</li>
+<li><a href="#10-驗收方式">10. 驗收方式</a>
+</li>
+</ul>
+<h2 id="1-背景">1. 背景</h2>
+<p>OES Leak Monitor 裝在主機台 PM3 上，用電漿光譜偵測腔體漏氣。PM3 會交替執行不同製程（Chamber Process／precoat、Chamber Clean 等），每種製程的光譜完全不同。OES 必須知道<strong>當下這一幀光譜屬於哪個製程</strong>，才能用正確的基準判定。</p>
+<p>主機台的製程事件已經送到 EAP。OES 原有的 SECS 連線是給 FDC 用的，一條 HSMS-SS 連線只能有一個 host，所以 EAP 不能從那條連線送事件進來。因此 OES 另開一條 SECS 連線，<strong>以 host 身分連到 EAP</strong>。</p>
+<p>這條連線<strong>只傳遞資訊</strong>：OES 只會讀狀態、啟用事件，不會對 EAP 或主機台下任何命令。</p>
+<h2 id="2-系統配置與角色">2. 系統配置與角色</h2>
+<pre><code>┌──────────────┐  SECS（既有）  ┌──────────────────────────┐
+│   Tool PC    │──────────────▶│            EAP           │
+│  (PM2／PM3)  │   EAP = host  │ equipment，監聽 20347     │
+└──────────────┘               └────────────▲─────────────┘
+                                            │ SECS（本規格）
+                                            │ OES = host，主動連入
+┌──────────────┐  SECS（既有）  ┌────────────┴─────────────┐
+│     FDC      │──────────────▶│          OES PC          │
+│              │   FDC = host  │       （只看 PM3）        │
+└──────────────┘               └──────────────────────────┘</code></pre>
+<div class="tablewrap"><table>
+<thead><tr><th>連線</th><th>host</th><th>equipment</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td>Tool PC ↔ EAP</td><td>EAP</td><td>Tool PC</td><td>既有，不變</td></tr>
+<tr><td>FDC → OES</td><td>FDC</td><td>OES</td><td>既有，不變。FDC 讀 OES 的洩漏狀態；OES 目前依據的製程視窗也由 OES 的 VID 030～032 提供給 FDC</td></tr>
+<tr><td><strong>OES → EAP</strong></td><td><strong>OES</strong></td><td><strong>EAP</strong></td><td><strong>本規格</strong></td></tr>
+</tbody></table></div>
+<p><strong>這條連線上 OES 會送的訊息：</strong> S1F13、S1F17、S1F1、S2F37、S1F3，以及 S6F12（回覆事件）。<strong>不會送</strong> S2F33／S2F35（報告由平台固定）、S2F31（不改 EAP 的時鐘）、S2F41、S2F15 或任何控制訊息。</p>
+<h2 id="3-連線參數">3. 連線參數</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>值</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>協定</td><td>HSMS-SS</td><td></td></tr>
+<tr><td>連線模式</td><td><strong>EAP = Passive（監聽）、OES = Active（主動連入）</strong></td><td></td></tr>
+<tr><td>EAP 的位址</td><td>預設 <code>10.2.3.120:20347</code>（EAP 方提供）</td><td>在 OES 的 <strong>EAP 分頁</strong>輸入，存檔即生效。EAP 切換到不同 IP 的備援機時，由設備工程師改填</td></tr>
+<tr><td>Device ID</td><td>預設 0</td><td>同上</td></tr>
+<tr><td>T3／T5／T6／T7／T8</td><td>45／10／10／10／10 秒</td><td>OES 端固定</td></tr>
+<tr><td>時鐘</td><td><strong>雙方各自接 NTP</strong></td><td>OES 不送 S2F31</td></tr>
+<tr><td>時間格式</td><td><code>YYYYMMDDhhmmsscc</code>（16 位，本地時間）</td><td>也接受 14 位</td></tr>
+</tbody></table></div>
+<p>連上後 OES 讀 S1F2 的 MDLN／SOFTREV 並記入日誌，不做比對。</p>
+<h2 id="4-eap-需要提供的識別碼與資料">4. EAP 需要提供的識別碼與資料</h2>
+<p>下表的 S1～S7、兩個 CEID 共 <strong>9 個識別碼由 EAP 方指定</strong>，在 OES 的 EAP 分頁輸入（預設為 0，代表未設定）。其中 <strong>S4 與連線狀態 CEID 是選填</strong>：平台做不到時填 0，OES 照樣連線（見 Q5）。其餘 7 個都要填，而且 S1～S7 不可重複，OES 才會正式運作。<strong>7 個必填的全部是 0 時，OES 只做連線測試</strong>：連上、S1F17、S1F1，不送 S2F37、不讀 S1F3、不影響製程視窗，EAP 分頁顯示 EAP 回的型號與版本。這讓現場在 EAP 指定識別碼之前，就能先驗證位址、port、Device ID 與防火牆（見 §10 第 0 項）。只填了一部分則不會連線，並列出缺哪幾個。OES 端另有一個<strong>只收事件</strong>的選項，只需要轉發 CEID（見 §4.4）；S1～S7 仍請提供。</p>
+<h3 id="41-svid供-oes-以-s1f3-讀取">4.1 SVID（供 OES 以 S1F3 讀取）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>代號</th><th>名稱</th><th>格式</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td>S1</td><td>PM3 視窗狀態</td><td>U1</td><td><strong>0</strong> = 不在任何視窗內、<strong>1</strong> = 在視窗內、<strong>2</strong> = 不明（EAP 不知道 PM3 目前狀態）</td></tr>
+<tr><td>S2</td><td>目前視窗的 Start CEID</td><td>U4</td><td>S1 = 1 時為開啟這個視窗的<strong>主機台原始 CEID</strong>；其他情況為 0</td></tr>
+<tr><td>S3</td><td>目前視窗的開始時間</td><td>A[16]</td><td>S1 = 1 時為 EAP 收到該 Start 的時間；其他情況為空字串</td></tr>
+<tr><td>S4</td><td>EAP 與主機台的通訊狀態（<strong>選填</strong>）</td><td>U1</td><td><strong>0</strong> = 未通訊、<strong>1</strong> = 通訊中。平台不提供時，OES 的 S1F3 只讀 S1～S3、S5～S7</td></tr>
+<tr><td>S5</td><td>最後一筆轉發事件的主機台 CEID</td><td>U4</td><td>尚無事件時為 0</td></tr>
+<tr><td>S6</td><td>最後一筆事件的時間</td><td>A[16]</td><td>EAP 收到該事件的時間；尚無事件時為空字串</td></tr>
+<tr><td>S7</td><td>序號</td><td>U4</td><td>每轉發一筆事件加 1，EAP 重啟後從 0 開始</td></tr>
+</tbody></table></div>
+<p><strong>S1 一定要有「2 = 不明」。</strong> EAP 不知道時回報 0，OES 會以為 PM3 閒置，這是錯的；回報 2，OES 就改用不依賴製程事件的判定方式。</p>
+<h3 id="42-ceid-與固定報告eap--oess6f11">4.2 CEID 與固定報告（EAP → OES，S6F11）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>代號</th><th>名稱</th><th>觸發時機</th><th>報告（<strong>由平台固定，只有一份</strong>）</th></tr></thead>
+<tbody>
+<tr><td>轉發 CEID</td><td>PM3 事件轉發</td><td>EAP 收到主機台的任何事件時</td><td><code>L{ U4 主機台原始CEID, A[16] EAP收到的時間, U4 序號 }</code>，也就是 S5、S6、S7</td></tr>
+<tr><td>連線狀態 CEID（<strong>選填</strong>）</td><td>主機台通訊狀態改變</td><td>S4 改變時</td><td><code>L{ U1 S4 }</code>。平台不提供時，OES 的 S2F37 只啟用轉發 CEID</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>只用一個轉發 CEID 送所有主機台事件</strong>，原始 CEID 放在報告第一個值。主機台新增事件時，只要改 OES 的 CEID 對照表，EAP 不用改。
+</li>
+<li>報告內容<strong>依位置讀取</strong>，順序與格式必須和上表完全一致。OES 收到不符的報告（數量、順序或型別不對）會記錄並捨棄該筆事件，靠下一次 S1F3 補回視窗。報告格式之後若要變更，請事先通知。
+</li>
+<li>時間值是 <strong>EAP 收到事件的時間</strong>：主機台的事件報告不帶時間戳（2026-10-26 確認）。請一律填上，不要留空。
+</li>
+<li><strong>S4 與連線狀態 CEID 不提供時</strong>，OES 就看不到 EAP 與主機台之間的連線本身，只能從 <strong>S1 = 2</strong> 得知 EAP 不知道 PM3 的狀態（所以 E4、E5 的「S1 改為 2」更重要），或等 OES 端的視窗上限（600 秒）到期。只缺 S4 時，連線狀態改變只靠事件得知，漏掉的事件不會被 30 秒一次的 S1F3 補回；只缺連線狀態 CEID 時，改變要到下一次 S1F3 才會被發現。OES 會在系統日誌記一筆 <code>EapToolLinkNotMonitored</code>，EAP 分頁也會以橘字標示。
+</li>
+</ul>
+<h3 id="43-約定名稱建議供-oes-自動帶出識別碼">4.3 約定名稱（建議，供 OES 自動帶出識別碼）</h3>
+<p>平台若支援 S1F11（Status Variable Namelist）與 S1F23（Collection Event Namelist），請把 SVNAME／CENAME 設成下表。OES 連上後會查詢這兩份清單，依名稱帶出 9 個識別碼供工程師確認，不必手抄編號，也能核對已輸入的編號有沒有填反（S1 與 S4 都是 U1、值都是 0／1，只看格式分不出來）。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>識別碼</th><th>SVNAME／CENAME</th></tr></thead>
+<tbody>
+<tr><td>S1</td><td><code>PM3_WINDOW_STATE</code></td></tr>
+<tr><td>S2</td><td><code>PM3_WINDOW_CEID</code></td></tr>
+<tr><td>S3</td><td><code>PM3_WINDOW_START</code></td></tr>
+<tr><td>S4</td><td><code>PM3_TOOL_LINK</code></td></tr>
+<tr><td>S5</td><td><code>PM3_LAST_CEID</code></td></tr>
+<tr><td>S6</td><td><code>PM3_LAST_TIME</code></td></tr>
+<tr><td>S7</td><td><code>PM3_EVENT_SEQ</code></td></tr>
+<tr><td>轉發 CEID</td><td><code>PM3_EVENT_FORWARD</code></td></tr>
+<tr><td>連線狀態 CEID</td><td><code>PM3_TOOL_LINK_CHANGED</code></td></tr>
+</tbody></table></div>
+<ul>
+<li>OES 依名稱<strong>完全比對</strong>（去掉前後空白、不分大小寫），不做模糊比對。找不到或有兩個以上同名的，該項不帶出並說明原因；S4、連線狀態 CEID 找不到時視為「不提供」。
+</li>
+<li>帶出的編號只填進 OES EAP 分頁的欄位，<strong>仍要工程師按 Save 才生效</strong>，OES 不會自動存檔。
+</li>
+<li>這一節是建議，不是連線的前提（見 Q7、Q8）。平台不支援或名稱不同時，照原本的方式由 EAP 方提供編號、在 OES 輸入即可。
+</li>
+</ul>
+<h3 id="44-只收事件模式oes-端的選項">4.4 只收事件模式（OES 端的選項）</h3>
+<p>EAP 暫時無法提供 S1～S7 時，OES 的設備工程師可以在 EAP 分頁打開「Events only」，<strong>只填轉發 CEID</strong>（連線狀態 CEID 有就填）。OES 會：</p>
+<ul>
+<li>連上後送 S1F17、S1F1、S2F37，<strong>不送 S1F3</strong>；之後每 30 秒送一次 <strong>S1F1</strong> 當心跳（75 秒內沒有成功的 S1F1、也沒收到事件，就視為 EAP 沒有回應）。
+</li>
+<li>照常依 4.2 接收轉發事件，依序號判斷重送。
+</li>
+<li>在下列情況把製程視窗改為「不明」，改用光譜本身判斷，等下一筆製程事件再恢復：每次連上（包括 OES 重啟、斷線重連）、序號跳號、序號變小（EAP 重啟）、連線狀態 CEID 的值為 0。值為 1 時不會自動恢復，同樣等下一筆製程事件。
+</li>
+</ul>
+<p>這個模式<strong>不需要 EAP 做任何修改</strong>，但看不到以下情況，所以<strong>S1～S7 仍然要提供</strong>，提供後關掉選項即回到完整模式：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>情況</th><th>只收事件時</th><th>完整模式時</th></tr></thead>
+<tbody>
+<tr><td>PM3 製程進行中重啟 OES，或 OES 與 EAP 之間斷線</td><td>「不明」到下一筆製程事件</td><td>重連後讀 S1～S7 立刻恢復</td></tr>
+<tr><td>EAP 漏送事件，之後又沒有新事件</td><td>漏掉 End：視窗最多停留 600 秒；漏掉 Start：這段製程被當成閒置</td><td>30 秒內由 S1F3 修正</td></tr>
+<tr><td>EAP 不知道 PM3 的狀態</td><td>只能從連線狀態 CEID 得知（有提供時）</td><td>S1 = 2</td></tr>
+<tr><td>EAP 還會回應 S1F1，但轉發功能壞了</td><td>偵測不到</td><td>S1F3 的值會顯示異常</td></tr>
+</tbody></table></div>
+<p>本規格所說的「PM3 製程事件」至少包括：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>主機台 CEID（Start／End）</th><th>事件</th></tr></thead>
+<tbody>
+<tr><td>3100439529／3100439530</td><td>PM3 ProcessStart／End（Chamber Process／precoat）</td></tr>
+<tr><td>3099591660／3099591661</td><td>PM3 ProcessStart／End（Chamber Clean）</td></tr>
+<tr><td>3100167145／3100167146</td><td>PM3 ProcessStart／End（Auto Leak check）</td></tr>
+</tbody></table></div>
+<h2 id="5-訊息流程">5. 訊息流程</h2>
+<h3 id="51-連線後的初始化每次連上都完整執行包括斷線重連">5.1 連線後的初始化（每次連上都完整執行，包括斷線重連）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>步驟</th><th>方向</th><th>訊息</th><th>目的</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>OES ↔ EAP</td><td>S1F13 → S1F14</td><td>建立通訊。雙方都可以先送</td></tr>
+<tr><td>2</td><td>OES → EAP</td><td>S1F17 → S1F18</td><td>要求 ON-LINE。ONLACK 0 或 2 都可以</td></tr>
+<tr><td>3</td><td>OES → EAP</td><td>S1F1 → S1F2</td><td>確認對方身分（只記日誌）</td></tr>
+<tr><td>4</td><td>OES → EAP</td><td>S2F37 → S2F38</td><td>啟用轉發 CEID 與連線狀態 CEID。<strong>ERACK 必須為 0</strong></td></tr>
+<tr><td>5</td><td>OES → EAP</td><td>S1F3 → S1F4</td><td>讀 S1～S7，取得目前視窗，<strong>補上斷線期間錯過的狀態</strong></td></tr>
+</tbody></table></div>
+<p>步驟 4 先於步驟 5：先啟用事件再讀狀態，兩者之間發生的事件才不會漏掉。</p>
+<h3 id="52-平常運作">5.2 平常運作</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>方向</th><th>訊息</th><th>時機</th></tr></thead>
+<tbody>
+<tr><td>EAP → OES</td><td>S6F11 → S6F12</td><td>主機台的每一筆事件；主機台通訊狀態改變時</td></tr>
+<tr><td>OES → EAP</td><td>S1F3 → S1F4</td><td><strong>每 30 秒</strong>讀一次 S1～S7。連線狀態事件的值是 1（恢復）時，OES 會立刻再讀一次</td></tr>
+</tbody></table></div>
+<h3 id="53-訊息範例">5.3 訊息範例</h3>
+<p>OES 讀取目前視窗（以 S1～S7 = 6001～6007 為例）：</p>
+<pre><code>S1F3 W
+&lt;L[7] &lt;U4 6001&gt; &lt;U4 6002&gt; &lt;U4 6003&gt; &lt;U4 6004&gt; &lt;U4 6005&gt; &lt;U4 6006&gt; &lt;U4 6007&gt;&gt;
+
+S1F4
+&lt;L[7]
+  &lt;U1 1&gt;                        S1 在視窗內
+  &lt;U4 3100439529&gt;               S2 Chamber Process Start
+  &lt;A[16] "2026102714014000"&gt;    S3
+  &lt;U1 1&gt;                        S4 主機台通訊中
+  &lt;U4 3100439529&gt;               S5
+  &lt;A[16] "2026102714014000"&gt;    S6
+  &lt;U4 128&gt;                      S7
+&gt;</code></pre>
+<p>EAP 轉發 PM3 ProcessEnd（轉發 CEID 以 6100、RPTID 以 6200 為例）：</p>
+<pre><code>S6F11 W
+&lt;L[3]
+  &lt;U4 DATAID&gt;
+  &lt;U4 6100&gt;
+  &lt;L[1]
+    &lt;L[2]
+      &lt;U4 6200&gt;
+      &lt;L[3] &lt;U4 3100439530&gt; &lt;A[16] "2026102714024300"&gt; &lt;U4 129&gt;&gt;
+    &gt;
+  &gt;
+&gt;</code></pre>
+<h2 id="6-eap-端的行為要求">6. EAP 端的行為要求</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>要求</th><th>原因</th></tr></thead>
+<tbody>
+<tr><td>E1</td><td><strong>主機台事件發生後 1 秒內送出 S6F11</strong></td><td>OES 每一幀光譜（約每 0.6～2 秒一幀）都要依視窗判定製程，短的製程步驟只有約 60 秒</td></tr>
+<tr><td>E2</td><td><strong>事件依發生順序送出</strong></td><td>Start 和 End 的順序錯了，視窗就是錯的</td></tr>
+<tr><td>E3</td><td><strong>先更新 S1～S7，再送 S6F11</strong></td><td>報告的值在送出當下讀取；OES 也用之後的 S1F3 修正視窗，兩者必須一致</td></tr>
+<tr><td>E4</td><td><strong>EAP 不知道 PM3 狀態時，S1 填 2</strong>：EAP 剛啟動、尚未收到任何 PM3 製程事件，或與主機台斷線、恢復後尚未收到新的製程事件時</td><td>不知道時填 0，OES 會以為 PM3 閒置</td></tr>
+<tr><td>E5</td><td>與主機台斷線時，S4 改為 0、S1 改為 2，並立即送連線狀態 CEID</td><td>讓 OES 立刻改用不依賴製程事件的判定方式</td></tr>
+<tr><td>E6</td><td>重送同一筆事件時使用相同的序號</td><td>OES 用序號判斷重送，避免同一筆處理兩次</td></tr>
+<tr><td>E7</td><td>時間值填 <strong>EAP 收到主機台事件的時間</strong></td><td>主機台的報告不帶時間戳</td></tr>
+<tr><td>E8</td><td>不需要支援 S2F33／S2F35（報告由平台固定）</td><td>OES 不會送</td></tr>
+<tr><td>E9</td><td><strong>不需要 spooling</strong>：OES 斷線期間的事件可以丟棄</td><td>OES 重連後會用 S1F3 重新同步</td></tr>
+<tr><td>E10</td><td>同時只接受<strong>一個</strong> OES host 連線；同一台 OES 重連時，以新連線取代舊連線</td><td>HSMS-SS 本來就只有一個 host；舊連線可能還沒釋放</td></tr>
+</tbody></table></div>
+<p><strong>可以這樣做：</strong> 主機台的事件<strong>可以不篩選、全部轉發</strong>（PM2 的也可以），OES 不認得的 CEID 只記錄、不處理。Start 之後又收到 Start，或收到沒有對應 Start 的 End，照實轉發即可，由 OES 處理並記錄警告。</p>
+<h2 id="7-oes-端的行為供參考">7. OES 端的行為（供參考）</h2>
+<p>EAP 方不需要實作本節，但了解它有助於判讀雙方的日誌。</p>
+<ul>
+<li><strong>CEID 怎麼變成製程：</strong> OES 用自己的對照表把主機台 CEID 換算成製程類別（例如 3100439529 → 製程 A），Start 到 End 之間的光譜都依該製程的基準判定。
+</li>
+<li><strong>S1F3 讀到的視窗和 OES 自己記的不同時，以讀到的為準</strong>，並記一筆警告（這就是「EAP 漏送事件」的紀錄）。S1 = 1 時，S2 依 OES 對照表解讀：
+</li>
+</ul>
+<div class="tablewrap"><table>
+<thead><tr><th>S2 在 OES 對照表裡是</th><th>OES 的視窗</th></tr></thead>
+<tbody>
+<tr><td>有製程類別的 Start</td><td>該製程的視窗</td></tr>
+<tr><td>只記錄、不分類的 Start，或對照表沒有的 CEID</td><td>不在任何視窗內</td></tr>
+<tr><td>End 事件</td><td>內容矛盾：記警告，視窗不變</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>資料不可信時，OES 不會停止偵測：</strong> S1 = 2、S4 = 0、收到值為 0 的連線狀態事件，或 <strong>75 秒內沒有任何一次成功的 S1F3、也沒收到事件</strong> 時，OES 把製程視窗改為「不明」，改用光譜本身判斷，等狀態恢復再切回來。
+</li>
+<li><strong>連線斷掉本身不改變視窗</strong>。OES 會自動重連，連上後依 5.1 重新讀取；只要 75 秒內恢復，視窗一直維持正確。
+</li>
+<li><strong>序號：</strong> 同一序號只處理一次；跳號會記錄「有事件沒送到」；序號變小代表 EAP 重啟。OES 重啟後第一次讀到的 S7 不會讓接著重送的那筆被當成重複。
+</li>
+<li><strong>OES 不會因為這條連線斷掉而發出漏氣警報。</strong> 連線狀態顯示在 OES 的 EAP 分頁上，收發的每一則訊息記在 OES 的 <code>eap_YYYYMMDD.log</code>。
+</li>
+</ul>
+<h2 id="8-已確認事項與現場設定紀錄">8. 已確認事項與現場設定紀錄</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>項目</th><th>結果</th></tr></thead>
+<tbody>
+<tr><td>Q1</td><td>平台能否以 equipment（Passive）身分，讓外部 host 連入？</td><td>✅ 可以（2026-10-26）</td></tr>
+<tr><td>Q2</td><td>能否提供自訂 SVID，由平台程式維護？</td><td>✅ 可以（2026-10-26）</td></tr>
+<tr><td>Q3</td><td>報告是 host 動態定義，還是平台固定？</td><td>✅ <strong>平台固定</strong>（2026-10-26）。所以本規格不用 S2F33／S2F35，報告格式見 4.2</td></tr>
+<tr><td>Q4</td><td>主機台的事件報告有沒有時間戳？</td><td>✅ <strong>沒有</strong>（2026-10-26）。時間值填 EAP 收到的時間</td></tr>
+<tr><td>Q5</td><td>平台能否即時得知自己與主機台的通訊狀態（S4、連線狀態 CEID）？</td><td><strong>建議提供，待廠商確認；不是連線的前提。</strong> 做不到時兩者在 OES 填 0，OES 照樣連線；與主機台斷線只能靠 S1 = 2 或 OES 端的視窗上限（600 秒）發現（見 4.2）</td></tr>
+<tr><td>Q6</td><td>逾時與間隔（S1F3 每 30 秒、OES 判定中斷 75 秒、事件 1 秒內送出）</td><td>✅ 可以配合（2026-10-26）</td></tr>
+<tr><td>Q7</td><td>平台是否支援 S1F11／S1F12（狀態變數名稱清單）與 S1F23／S1F24（事件名稱清單）？</td><td><strong>建議，待廠商確認；不是連線的前提。</strong> 不支援時，OES 分頁寫明「EAP does not support name queries」，改由人工輸入編號</td></tr>
+<tr><td>Q8</td><td>平台能否使用 4.3 的約定名稱？</td><td><strong>建議，待廠商確認；不是連線的前提。</strong> 名稱不同時，OES 仍會列出平台回報的全部名稱，供人工核對</td></tr>
+<tr><td>Q9</td><td>平台的 S1F2 是由平台程式回覆，還是由 SECS 函式庫自動回覆？</td><td><strong>待廠商確認，只影響 4.4。</strong> 只收事件模式用 S1F1 當心跳；若是函式庫自動回覆，S1F2 只證明 EAP 的 SECS 連線活著，不證明轉發功能正常</td></tr>
+</tbody></table></div>
+<p><strong>現場設定紀錄</strong>（上線時填寫，雙方各留一份）：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>填寫</th><th>輸入到哪裡</th></tr></thead>
+<tbody>
+<tr><td>EAP 監聽 IP／Port</td><td>______________</td><td>OES EAP 分頁 <code>EAP address</code>／<code>Port</code></td></tr>
+<tr><td>Device ID</td><td>______________</td><td>OES EAP 分頁 <code>Device ID</code></td></tr>
+<tr><td>S1～S7 的 SVID</td><td>______________</td><td>OES EAP 分頁 <code>EAP ids</code></td></tr>
+<tr><td>轉發 CEID／連線狀態 CEID</td><td>______________</td><td>OES EAP 分頁 <code>Forward CEID</code>／<code>Tool-link CEID</code></td></tr>
+<tr><td>兩份報告的 RPTID（參考）</td><td>______________</td><td>OES 不需要，記錄用</td></tr>
+<tr><td>EAP 備援機 IP（若有、且不是虛擬 IP）</td><td>______________</td><td>切換時改填 OES EAP 分頁 <code>EAP address</code></td></tr>
+<tr><td>OES PC 的 IP</td><td>______________</td><td>EAP 端防火牆的允許清單</td></tr>
+<tr><td>填寫人／日期</td><td>______________</td><td></td></tr>
+</tbody></table></div>
+<h2 id="9-自測工具">9. 自測工具</h2>
+<p><strong><code>Test_SECS</code></strong>（OES 方提供的 SECS 測試程式，Windows，不需安裝 OES）內建兩個設定檔：</p>
+<ul>
+<li><strong>OES (2b host)</strong>：角色選 <strong>Host (active)</strong>，連到 EAP 平台後依序按「1. Establish and go online」「2. Enable the EAP events」「3. Read S1–S7」，就是 OES 上線時的同一套步驟；「4. Read SV names」「5. Read event names」送 S1F11／S1F23，逐一寫出 4.3 的約定名稱落在哪個編號（找不到、重複或與目前編號不同時會標出）。日誌的 <code>[OES]</code> 行寫出 S1～S7 的值與意思；收到的每筆 S6F11 依 4.2 的格式解讀，寫在 <code>[EAP]</code> 行，格式不符會寫 <code>REJECTED</code> 並說明原因。
+</li>
+<li><strong>EAP (PM3 event forwarder)</strong>：角色選 <strong>Equipment simulator (passive)</strong>，假扮 EAP，提供本規格的 S1～S7 與兩個 CEID，可以按鈕送各種事件。供 OES 方測試，也可以給 EAP 廠商當參考實作。
+</li>
+</ul>
+<p>兩個設定檔的預設編號是 S1～S7 = 6001～6007、轉發 CEID = 6100、連線狀態 CEID = 6101、RPTID = 6200／6201。平台的編號不同時，在 <code>Test_SECS.exe</code> 旁放一份 <code>eap-ids.json</code>（欄位見 <code>Test_SECS</code> 的整合指南），沒寫的欄位維持預設。</p>
+<h2 id="10-驗收方式">10. 驗收方式</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>操作</th><th>預期結果</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>只連線（識別碼尚未指定）：OES 只填 EAP 的位址、port、Device ID，識別碼全部留 0</td><td>OES 連上、送 S1F17 與 S1F1；EAP 分頁顯示橘色 <code>connected to … — &lt;EAP 的型號 版本&gt; … link test only</code>；EAP 日誌沒有 S2F37、S1F3</td></tr>
+<tr><td>0a</td><td>依名稱帶出識別碼（平台支援 Q7、Q8 時）：接續第 0 項</td><td>OES 自動送 S1F11、S1F23，EAP 分頁表格 9 項都是 ✓；按「Use these ids」填入、Save &amp; apply 後進入第 1 項。EAP 日誌沒有 S2F37</td></tr>
+<tr><td>1</td><td>OES 啟用連線</td><td>5.1 的步驟全部成功；OES EAP 分頁顯示綠色 <code>connected</code></td></tr>
+<tr><td>2</td><td>PM3 閒置時觀察</td><td>OES 每 30 秒讀一次 S1～S7：S1 = 0、S4 = 1（不提供 S4 時，OES 讀 S1～S3、S5～S7，EAP 分頁顯示 <code>tool link not monitored</code>）</td></tr>
+<tr><td>3</td><td>主機台跑一次 PM3 Chamber Process</td><td>Start／End 各一筆 S6F11，1 秒內送出，報告為主機台 CEID、時間、序號；期間 S1 = 1、S2 = 3100439529；OES 顯示製程 A 視窗</td></tr>
+<tr><td>4</td><td>主機台跑一次 PM3 Chamber Clean</td><td>同上，S2 = 3099591660，OES 顯示製程 B 視窗</td></tr>
+<tr><td>5</td><td>轉發一筆不在 OES 對照表內的 CEID（例如 slit door）</td><td>OES 記錄、不處理；視窗不變</td></tr>
+<tr><td>6</td><td>PM3 製程進行中，重啟 OES</td><td>OES 重新連上，讀 S1～S7 後立刻恢復到正確的製程視窗，不必等下一筆事件</td></tr>
+<tr><td>7</td><td>PM3 製程進行中，拔掉 OES 的網路線 90 秒後接回</td><td>OES 在 75 秒時改為「不明」；接回後自動重連並恢復正確視窗</td></tr>
+<tr><td>8</td><td>中斷 EAP 與主機台的連線</td><td>EAP 送連線狀態 CEID（值 0），S1 = 2、S4 = 0；OES 改為「不明」。不提供 S4／連線狀態 CEID 時，只驗 S1 = 2，OES 在下一次 S1F3 改為「不明」</td></tr>
+<tr><td>9</td><td>恢復 EAP 與主機台的連線</td><td>連線狀態 CEID（值 1，有提供時）；S1 在下一筆 PM3 製程事件後恢復正確值</td></tr>
+<tr><td>10</td><td>重啟 EAP</td><td>OES 自動重連；S7 = 0、S1 = 2，第一筆事件的序號為 1，OES 正常接受</td></tr>
+<tr><td>11</td><td>檢查 EAP 日誌</td><td>OES 沒有送過 S2F33、S2F35、S2F31、S2F41、S2F15</td></tr>
+</tbody></table></div>
+<h3 id="101-只收事件模式44">10.1 只收事件模式（4.4）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>操作</th><th>預期結果</th></tr></thead>
+<tbody>
+<tr><td>E-1</td><td>OES 打開「Events only」，只填轉發 CEID（與連線狀態 CEID）</td><td>OES 連上、送 S1F17、S1F1、S2F37；EAP 日誌沒有 S1F3；EAP 分頁顯示橘色 <code>events only, window not polled</code>；之後每 30 秒一筆 S1F1</td></tr>
+<tr><td>E-2</td><td>主機台跑一次 PM3 Chamber Process</td><td>同第 3 項，OES 顯示製程 A 視窗</td></tr>
+<tr><td>E-3</td><td>PM3 製程進行中，重啟 OES</td><td>OES 重新連上後是「不明」；下一筆製程事件後恢復</td></tr>
+<tr><td>E-4</td><td>重啟 EAP</td><td>OES 自動重連、改為「不明」；第一筆事件（序號 1）正常接受並恢復視窗</td></tr>
+<tr><td>E-5</td><td>關掉 EAP 的 SECS 服務</td><td>OES 在 75 秒時改為「不明」</td></tr>
+<tr><td>E-6</td><td>關掉「Events only」並存檔（S1～S7 已填）</td><td>OES 重連，回到第 1 項的完整模式，讀 S1～S7 後立刻恢復視窗</td></tr>
+</tbody></table></div>
+</main>
+</div>
+</body>
+</html>

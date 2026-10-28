@@ -52,6 +52,15 @@ public sealed class ToolEventSettings
     public bool ApplyInTestMode { get; set; }
 
     /// <summary>
+    /// The SECS link to the EAP (scheme 2b, <c>docs/eap-tool-event-secs-spec-zh-TW.md</c>): the
+    /// OES as host, the EAP as equipment — a second way for the same events to arrive, because
+    /// the site's SECS host is the FDC and HSMS-SS leaves the EAP no session to send
+    /// <c>TOOL_EVENT</c> on. <b>Hot-applied</b>: it is a transport and names no class. Whether
+    /// what it delivers is used is still <see cref="Enabled"/>'s call.
+    /// </summary>
+    public EapLinkSettings Eap { get; set; } = new();
+
+    /// <summary>
     /// Whether two settings agree on the <b>staged</b> half — the switch and the table — which is
     /// what the engine adopts at an acquisition start. The hot-applied fields are left out: they
     /// take effect on save, so they never leave a saved table waiting. Switched off is one state
@@ -78,7 +87,159 @@ public sealed class ToolEventSettings
         Mappings = (Mappings ?? new()).Select(m => m.Clone()).ToList(),
         MaxWindowSeconds = MaxWindowSeconds,
         ApplyInTestMode = ApplyInTestMode,
+        Eap = (Eap ?? new()).Clone(),
     };
+}
+
+/// <summary>
+/// Where and how the OES connects to the EAP as a SECS host, and the nine ids the EAP assigns.
+/// The OES is active; the EAP listens on the address it gave (<c>10.2.3.120:20347</c>).
+/// <para>Off by default, like the SECS interface, so an upgrade opens no connection until asked.
+/// The ids default to 0, which means "not set": the link does not start until all nine are.</para>
+/// </summary>
+public sealed class EapLinkSettings
+{
+    public bool Enabled { get; set; } = false;
+
+    public string RemoteHost { get; set; } = DefaultRemoteHost;
+
+    public int RemotePort { get; set; } = DefaultRemotePort;
+
+    public int DeviceId { get; set; }
+
+    /// <summary>
+    /// How long without a successful S1F3 reply and without an S6F11 before the window stops
+    /// being trusted. A dropped connection by itself changes nothing — the reconnect and the
+    /// S1F3 that follows restore the window sooner than this.
+    /// </summary>
+    public double SilenceTimeoutSeconds { get; set; } = DefaultSilenceTimeoutSeconds;
+
+    /// <summary>
+    /// Events only (#74, <c>secs-integration.md</c> §15.10): receive the forwarded events and
+    /// never read S1–S7 — for an EAP that has not assigned them yet, or cannot. The forwarding
+    /// CEID is then the only required id; S1–S7 keep whatever was typed, unjudged, so turning this
+    /// off goes straight back to the full link. With nothing to correct a lost event, the link
+    /// reports the window unknown whenever one may have been lost.
+    /// </summary>
+    public bool EventsOnly { get; set; }
+
+    /// <summary>S1 PM3 window state (U1: 0 outside / 1 in a window / 2 unknown).</summary>
+    public uint WindowStateSvid { get; set; }
+    /// <summary>S2 Start CEID of the open window (U4).</summary>
+    public uint WindowCeidSvid { get; set; }
+    /// <summary>S3 when the open window started (A).</summary>
+    public uint WindowStartSvid { get; set; }
+    /// <summary>S4 the EAP's SECS link to the tool (U1: 0 down / 1 up). <b>Optional</b>: 0 means
+    /// the EAP does not provide it (spec Q5), and the S1F3 reads S1–S3, S5–S7 only.</summary>
+    public uint ToolLinkSvid { get; set; }
+    /// <summary>S5 last forwarded tool CEID (U4).</summary>
+    public uint LastCeidSvid { get; set; }
+    /// <summary>S6 when the EAP received it (A).</summary>
+    public uint LastTimeSvid { get; set; }
+    /// <summary>S7 sequence number of the last forwarded event (U4).</summary>
+    public uint SequenceSvid { get; set; }
+    /// <summary>The one CEID every tool event is forwarded under, with the fixed report
+    /// <c>L{ U4 tool CEID, A[16] receive time, U4 sequence }</c>.</summary>
+    public uint ForwardCeid { get; set; }
+    /// <summary>The CEID sent when the EAP's link to the tool changes, with <c>L{ U1 }</c>.
+    /// <b>Optional</b>, like <see cref="ToolLinkSvid"/>: 0 means the EAP does not send it, and
+    /// S2F37 enables the forwarding CEID alone.</summary>
+    public uint LinkCeid { get; set; }
+
+    /// <summary>The address the EAP gave, 2026-10-26.</summary>
+    public const string DefaultRemoteHost = "10.2.3.120";
+    public const int DefaultRemotePort = 20347;
+
+    /// <summary>Two missed 30 s polls plus a margin.</summary>
+    public const double DefaultSilenceTimeoutSeconds = 75;
+
+    /// <summary>Range Save accepts. Under 35 s a healthy 30 s poll would time out.</summary>
+    public const double MinSilenceTimeoutSeconds = 35, MaxSilenceTimeoutSeconds = 600;
+
+    /// <summary>S1–S7 in order, 0 where unset.</summary>
+    public uint[] StatusSvids => new[]
+    {
+        WindowStateSvid, WindowCeidSvid, WindowStartSvid, ToolLinkSvid, LastCeidSvid, LastTimeSvid, SequenceSvid,
+    };
+
+    /// <summary>Whether the EAP provides S4, the state of its own link to the tool.</summary>
+    public bool HasToolLinkSvid => ToolLinkSvid != 0;
+
+    /// <summary>Whether the EAP sends the tool-link CEID when that link changes.</summary>
+    public bool HasLinkCeid => LinkCeid != 0;
+
+    /// <summary>What the S1F3 asks for: S1–S7 in order, without S4 when the EAP does not
+    /// provide it. The S1F4 comes back in this order.</summary>
+    public uint[] QueriedSvids => HasToolLinkSvid
+        ? StatusSvids
+        : new[] { WindowStateSvid, WindowCeidSvid, WindowStartSvid, LastCeidSvid, LastTimeSvid, SequenceSvid };
+
+    /// <summary>What S2F37 enables: the forwarding CEID, and the tool-link CEID when set.</summary>
+    public uint[] EnabledCeids => HasLinkCeid ? new[] { ForwardCeid, LinkCeid } : new[] { ForwardCeid };
+
+    /// <summary>The ids the link cannot run without, named as the EAP tab names them: seven, or
+    /// the forwarding CEID alone when <see cref="EventsOnly"/>.</summary>
+    private (string Name, uint Id)[] Required => EventsOnly
+        ? new (string Name, uint Id)[] { ("forwarding CEID", ForwardCeid) }
+        : new (string Name, uint Id)[]
+        {
+            ("S1", WindowStateSvid), ("S2", WindowCeidSvid), ("S3", WindowStartSvid), ("S5", LastCeidSvid),
+            ("S6", LastTimeSvid), ("S7", SequenceSvid), ("forwarding CEID", ForwardCeid),
+        };
+
+    /// <summary>
+    /// None of the seven required ids is set: the link only proves it can reach the EAP (#65) —
+    /// online, S1F1 — and reads nothing, enables nothing, reports nothing to the engine. It is
+    /// how a site checks the address, port, device id and firewall before the EAP has assigned
+    /// its ids. Judged on the required set alone, so an optional S4 or tool-link CEID typed in
+    /// early does not turn it into a half-filled configuration.
+    /// </summary>
+    public bool IsLinkTestOnly => Required.All(r => r.Id == 0);
+
+    /// <summary>Null when the ids are usable — including none set at all, which is
+    /// <see cref="IsLinkTestOnly"/>; otherwise what is wrong with them. Shared by the tab's Save
+    /// and the link, so the two cannot disagree about what "set" means. S4 and the tool-link
+    /// CEID may be 0 (not provided); once any of the other seven is set, all of them must be.</summary>
+    public string? IdProblem()
+    {
+        if (IsLinkTestOnly) return null;
+        var unset = Required.Where(r => r.Id == 0).Select(r => r.Name).ToArray();
+        if (unset.Length > 0) return $"the EAP ids are not all set ({string.Join(", ", unset)})";
+        var svids = StatusSvids.Where(i => i != 0).ToArray();
+        if (!EventsOnly && svids.Distinct().Count() != svids.Length) return "two of S1–S7 share an SVID";
+        if (HasLinkCeid && ForwardCeid == LinkCeid) return "the forwarding and tool-link CEIDs are the same";
+        return null;
+    }
+
+    /// <summary>
+    /// Null when the EAP provides both S4 and the tool-link CEID; otherwise what the OES then
+    /// cannot see, for the log and the EAP tab. A lost EAP–tool link is still reported through
+    /// S1 = 2 — the EAP is asked to set it (spec E4/E5) — but no longer by a value of its own.
+    /// </summary>
+    public string? ToolLinkGap() => (HasToolLinkSvid, HasLinkCeid) switch
+    {
+        (true, true) => null,
+        (false, false) => "the EAP provides neither S4 nor the tool-link CEID: a lost link between the EAP " +
+                          "and the tool is seen only as S1 = 2, or when a window outlasts the tool-event max window",
+        (false, true) => "the EAP provides no S4: a change of its link to the tool is seen only through the " +
+                         "tool-link CEID, and one that event missed is not corrected by the 30 s S1F3",
+        (true, false) => "the EAP sends no tool-link CEID: a change of its link to the tool is seen at the " +
+                         "next 30 s S1F3 instead of when it happens",
+    };
+
+    /// <summary>
+    /// Null in full mode; with <see cref="EventsOnly"/>, what the OES then cannot see, for the log
+    /// and the EAP tab — the counterpart of <see cref="ToolLinkGap"/>, which is about S4 and has
+    /// nothing to say once S1–S7 are not read at all.
+    /// </summary>
+    public string? EventsOnlyGap() => !EventsOnly ? null :
+        "S1–S7 are not read, so the process window is set to unknown on every connect, sequence gap " +
+        "and EAP restart and stays unknown until the next process event; an EAP that still answers " +
+        "S1F1 but has stopped forwarding is not detected" +
+        (HasLinkCeid ? "" : "; with no tool-link CEID, a lost link between the EAP and the tool is " +
+                            "seen only when a window outlasts the tool-event max window");
+
+    public EapLinkSettings Clone() => (EapLinkSettings)MemberwiseClone();
 }
 
 /// <summary>Which end of a process window a tool event marks.</summary>
@@ -160,7 +321,28 @@ public enum ToolEventAck
     Ignored,
     /// <summary>Tool events are not in use as currently applied.</summary>
     Disabled,
+    /// <summary>The report contradicts the table — a heartbeat naming an End CEID as the event
+    /// that opened the current window. Nothing changes.</summary>
+    Invalid,
 }
+
+/// <summary>What the EAP's heartbeat says about the tool's window: <c>STATE</c> on the wire.</summary>
+public enum ToolContextReportState
+{
+    Outside = 0,
+    InWindow = 1,
+    Unknown = 2,
+}
+
+/// <summary>
+/// A statement of where the tool's window <i>is</i>, as opposed to an edge that moves it: the
+/// EAP's heartbeat, or the link deciding it can no longer vouch for one. The engine compares it
+/// with the window it holds and corrects only a difference.
+/// </summary>
+/// <param name="StartCeid">For <see cref="ToolContextReportState.InWindow"/>: the tool CEID that
+/// opened the window, read through the CEID table like an event.</param>
+/// <param name="Reason">Why, in words, for the log line a correction writes.</param>
+public readonly record struct ToolContextReport(ToolContextReportState State, uint StartCeid, string Reason);
 
 /// <summary>
 /// An applied <see cref="ToolEventSettings"/>, indexed for the two questions asked of it on

@@ -105,17 +105,17 @@ internal sealed class SecsHarness : IAsyncDisposable
         {
             lock (_ceids)
             {
-                _ceids.Add(m.SecsItem![1].FirstValue<uint>());
-                _eventBodies.Add(m.SecsItem!);
+                _ceids.Add(m.Raw.SecsItem![1].FirstValue<uint>());
+                _eventBodies.Add(m.Raw.SecsItem!);
             }
         };
-        _host.AlarmReceived += m =>
+        _host.AlarmReportReceived += m =>
         {
-            lock (_alids) { _alids.Add(m.SecsItem![1].GetString()); }
+            lock (_alids) { _alids.Add(m.Raw.SecsItem![1].GetString()); }
         };
-        _host.TraceDataReceived += m =>
+        _host.TraceReportReceived += m =>
         {
-            var body = m.SecsItem!;
+            var body = m.Raw.SecsItem!;
             var values = new List<Item>();
             for (var i = 0; i < body[3].Count; i++)
             {

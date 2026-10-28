@@ -7,10 +7,10 @@ rem  The target PC needs NO .NET install.
 rem
 rem  Just double-click this file (or run it from a command prompt).
 rem  Prerequisite: the versions pinned in OES_Leak_Monitor.csproj must already
-rem  be in ..\LocalPackages - at the time of writing Aqst.OesApp.Core 0.1.9 and
-rem  Aqst.OesApp.Wpf 0.1.15 (pack them from the DualOes_PlasmaMonitor repo),
-rem  Aqst.OesSpectrometer 0.4.6 (the Aqst.OesSpectrometer repo) and
-rem  Aqusen.Secs 0.6.0 (the Test_SECS repo). The csproj is the source of truth
+rem  be in ..\LocalPackages - at the time of writing Aqst.OesApp.Core 0.1.10 and
+rem  Aqst.OesApp.Wpf 0.1.16 (pack them from the DualOes_PlasmaMonitor repo),
+rem  Aqst.OesSpectrometer 0.6.2 (the Aqst.OesSpectrometer repo) and
+rem  Aqusen.Secs 0.7.0 (the Test_SECS repo). The csproj is the source of truth
 rem  for these numbers; they move.
 rem ===========================================================================
 
@@ -80,6 +80,8 @@ for %%F in (
     golden-run-baseline-troubleshooting-zh-TW.html
     baseline-builder-sop-zh-TW.html
     secs-ratio-svid-example-zh-TW.html
+    fdc-integration-spec-zh-TW.html
+    eap-tool-event-secs-spec-zh-TW.html
     check-oes-connect.ps1
     check-oes-connect.cmd
 ) do (
@@ -101,14 +103,10 @@ if defined MISSING (
     echo  Without them the app falls back to test mode - silently, with nothing
     echo  in its log - on every PC that has not had that redistributable installed.
     echo.
-    echo  If only the .html docs are missing, regenerate them first:
-    echo    python3 tools\md2html.py docs\user-manual-zh-TW.md docs\user-manual-zh-TW.html "OES Leak Monitor manual"
-    echo    python3 tools\md2html.py docs\daily-inspection-plan-zh-TW.md docs\daily-inspection-plan-zh-TW.html "OES Plasma Monitor inspection plan"
-    echo    python3 tools\md2html.py docs\secs-operation-sop-zh-TW.md docs\secs-operation-sop-zh-TW.html "OES Leak Monitor SECS SOP"
-    echo    python3 tools\md2html.py docs\CONTEXT-zh-TW.md docs\CONTEXT-zh-TW.html "OES Leak Monitor terms"
-    echo    python3 tools\md2html.py docs\golden-run-baseline-troubleshooting-zh-TW.md docs\golden-run-baseline-troubleshooting-zh-TW.html "OES Leak Monitor Golden Run baseline troubleshooting"
-    echo    python3 tools\md2html.py docs\baseline-builder-sop-zh-TW.md docs\baseline-builder-sop-zh-TW.html "OES Leak Monitor Baseline Builder SOP"
-    echo    python3 tools\md2html.py docs\secs-ratio-svid-example-zh-TW.md docs\secs-ratio-svid-example-zh-TW.html "OES Leak Monitor Species Ratio SVID examples"
+    echo  If only the .html docs are missing, restore them and bring them up to date:
+    echo    git checkout -- docs
+    echo    python3 tools\check-docs.py --fix
+    echo  ^(--fix keeps each document's own title; a hand-typed md2html command does not.^)
     echo.
     echo  secs-acceptance-sheet-zh-TW.html has NO Markdown source - it is a form,
     echo  hand-authored as HTML. Do not regenerate it; restore it from git.
@@ -118,7 +116,7 @@ if defined MISSING (
 )
 
 echo.
-echo  *** PUBLISH SUCCEEDED - all 22 files present ***
+echo  *** PUBLISH SUCCEEDED - all 24 files present ***
 echo  Output folder: %PUBFOLDER%
 echo.
 echo  Ship the WHOLE win-x64 folder. The .exe bundles the managed code and
@@ -141,6 +139,9 @@ echo    baseline-builder-sop-zh-TW.html
 echo                               building a Golden Run from recordings on disk
 echo    secs-ratio-svid-example-zh-TW.html
 echo                               per-ratio SVID worked examples for the host
+echo    fdc-integration-spec-zh-TW.html    interface spec for the FDC (the SECS host)
+echo    eap-tool-event-secs-spec-zh-TW.html
+echo                               interface spec for the EAP (process events)
 echo    check-oes-connect.cmd      connect diagnostic (manual section 9.1)
 echo.
 

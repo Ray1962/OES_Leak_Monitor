@@ -124,7 +124,7 @@ public class SecsWireTests : IAsyncLifetime
         _bridge.OnSample(SnapshotBuilder.Leaking());
 
         SecsMessage? received = null;
-        _host.AlarmReceived += m => received = m;
+        _host.AlarmReportReceived += m => received = m.Raw;
 
         _bridge.OnLeakLevelChanged(LeakAlarmLevel.Alarm);
 
@@ -148,11 +148,11 @@ public class SecsWireTests : IAsyncLifetime
         _bridge.OnSample(SnapshotBuilder.Leaking());
 
         var seen = new List<(string Alid, bool Set)>();
-        _host.AlarmReceived += m =>
+        _host.AlarmReportReceived += m =>
         {
             lock (seen)
             {
-                seen.Add((m.SecsItem![1].GetString(), (m.SecsItem[0].FirstValue<byte>() & 0x80) != 0));
+                seen.Add((m.Raw.SecsItem![1].GetString(), (m.Raw.SecsItem[0].FirstValue<byte>() & 0x80) != 0));
             }
         };
 
@@ -182,11 +182,11 @@ public class SecsWireTests : IAsyncLifetime
     public async Task An_equipment_fault_is_reported_and_de_bounced()
     {
         var seen = new List<(string Alid, bool Set)>();
-        _host.AlarmReceived += m =>
+        _host.AlarmReportReceived += m =>
         {
             lock (seen)
             {
-                seen.Add((m.SecsItem![1].GetString(), (m.SecsItem[0].FirstValue<byte>() & 0x80) != 0));
+                seen.Add((m.Raw.SecsItem![1].GetString(), (m.Raw.SecsItem[0].FirstValue<byte>() & 0x80) != 0));
             }
         };
 

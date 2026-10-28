@@ -221,7 +221,10 @@ original so that the file a person edits is never the file the host is answered 
 
 **Tool event**:
 One of the main tool's own process events (its CEID, e.g. PM3 ProcessStart), forwarded by
-the fab's EAP as S2F41 `TOOL_EVENT`. Information, not a command: it tells the monitor which
+the fab's EAP — on site over the EAP link (the OES connecting out to the EAP as a SECS host and
+reading its forwarded event reports), since the
+OES's SECS host is the FDC; S2F41 `TOOL_EVENT` from a SECS host is the other way in, and
+both are handled identically. Information, not a command: it tells the monitor which
 process is running and changes nothing else. A CEID the table does not map is acknowledged
 and ignored.
 _Avoid_: remote command (for the idea) — it is the only one, and it controls nothing.

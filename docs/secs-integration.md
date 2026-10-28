@@ -7,7 +7,7 @@
 > [`Satellite_SECS_Specification_v2.md`](Satellite_SECS_Specification_v2.md)（`ss=27` 章節、
 > §5 ALID、§6 CEID）；兩者衝突時以該份為準，且必須回頭修正本文件。
 >
-> 相關程式：`LeakMonitorEngine`、`MainViewModel`、`AppSettings`（見 `CLAUDE.md`）。
+> 相關程式：`LeakMonitorEngine`、`MainViewModel`、`AppSettings`（見 `docs/dev/`）。
 > 通訊函式庫：`Aqusen.Secs`（維護於 `Ray1962/Test_SECS`，整合方式見該 repo 的 `整合指南.md`）。
 
 **狀態：** 已實作，並有自動化測試（§13.2–13.3，38 個）。連線、S1F3、S5F5 已在真機驗證；
@@ -522,6 +522,8 @@ App 在沒有硬體時會落到 test mode（合成頻譜），Replay 分頁還�
 | `SecsRatioSlots.cs` | §5.3：25 個位移的唯一定義，範本列與綁定共用 |
 | `SecsProfileRows.cs` | §5.2：補上缺少的列——比對、以文字插入、衝突拒絕 |
 | `ToolEventSettings.cs` | §15：`ToolEventSettings`／`ToolEventMapping`／`ToolEventEdge`、`ToolEventContext`（VID 030 的編碼）、`ToolEventStatus`、`ToolEventAck`、引擎用的不可變對照表 `ToolEventTable` |
+| `EapSecsLink.cs` | §15.9：OES 以 SECS host（`GemHost`）身分連 EAP——上線、S2F37、每 30 秒 S1F3（只收事件模式改 S1F1，§15.10）、依固定位置讀 S6F11、序號、靜默逾時；日誌 `eap_YYYYMMDD.log` |
+| `EapViewModel.cs`／`EapPanel.xaml(.cs)` | §15.9：EAP 分頁——EAP 連線的狀態與設定（含 9 個識別碼與 §15.10 的只收事件開關），以及從 SECS 分頁搬來的工具事件狀態、設定、CEID 表 |
 
 ### 11.2 修改
 
@@ -694,8 +696,9 @@ Normal → Warning → Alarm），從錄檔自身前一分鐘擷取基準，跑*
 
 ## 15. 主機台製程事件（S2F41 `TOOL_EVENT`，2026-10-23）
 
-設計與取捨見 GitHub issue #25（spec）與子 ticket #26–#35；給 EAP 平台方看的介面在
-[`eap-integration-spec-zh-TW.md`](eap-integration-spec-zh-TW.md)，Host 端欄位語意在規格 §7。
+設計與取捨見 GitHub issue #25（spec）與子 ticket #26–#35；Host 端欄位語意在規格 §7。
+現場 OES 的 SECS host 是 FDC，所以 `TOOL_EVENT` 實際上不會有人送：事件改由 OES 以 SECS host 身分向 EAP 取得（§15.9），
+FDC 讀 VID 030／031 的方式在 [`fdc-integration-spec-zh-TW.md`](fdc-integration-spec-zh-TW.md)（原 `eap-integration-spec-zh-TW.md`）。
 
 ### 15.1 為什麼要有
 
@@ -747,8 +750,8 @@ MainViewModel 在啟動時與每次 Stop→Start（和 `ReloadRatios` 同時）�
 
 ### 15.7 畫面
 
-- **SECS 分頁狀態列**（不需登入）：`Tool events: …`（not in use／in window X／outside any window／window unknown — …）、`Last tool event: CEID n at hh:mm:ss`、`Tool events received this run: n`。
-- **SECS 分頁設定**（Engineer+、Save & apply）：`Use tool events — takes effect at next acquisition start`、`Max window (s) — applies on save`、`Apply tool events in test mode — applies on save`。
+- **EAP 分頁狀態列**（不需登入；#58 之前在 SECS 分頁）：`Tool events: …`（not in use／in window X／outside any window／window unknown — …）、`Last tool event: CEID n at hh:mm:ss`、`Tool events received this run: n`。
+- **EAP 分頁設定**（Engineer+、Save & apply；#58 之前在 SECS 分頁）：`Use tool events — takes effect at next acquisition start`、`Max window (s) — applies on save`、`Apply tool events in test mode — applies on save`。
 - **唯讀 CEID 表**（不需登入）與橘色的「Saved tool-event switch / CEID table not yet in force — restart acquisition (Stop, then Start) to apply it.」
 - **Leak Monitor 提示條**：使用中且狀態 Unknown 時顯示 `PROCESS CONTEXT UNKNOWN — …`；測試模式提示已寫「tool events are not applied」時不重複顯示。
 
@@ -767,3 +770,120 @@ MainViewModel 在啟動時與每次 Stop→Start（和 `ReloadRatios` 同時）�
 | `ToolEventClassMismatch` | Warning | 分類器判定與視窗類別不同 |
 | `ToolEventsSuppressed`／`ToolEventsResumed` | Information | 開始／結束暫不套用 |
 | `BatchStepClassAmbiguous` | Information | 批次步驟的取樣區間出現兩種以上類別 |
+
+### 15.9 EAP 連線：OES 以 SECS host 身分連 EAP（方案 2b，2026-10-27）
+
+**為什麼有第二條路：** 現場 OES 的 SECS host 是 **FDC**。HSMS-SS 一條連線只能有一個 host，EAP 因此沒有 session 可以送 `TOOL_EVENT`。所以 OES 另開一條 SECS 連線，**自己當 host 連到 EAP**，EAP 當 equipment。介面規格在 [`eap-tool-event-secs-spec-zh-TW.md`](eap-tool-event-secs-spec-zh-TW.md)。
+
+沿革：#53、#54 先做過一條純 TCP 的文字行連線（`EVT`／`HB`）。#58 依 EAP 廠商的回覆改成這條 SECS 連線，TCP 的程式、規格書、模擬腳本都已移除。廠商回覆的內容：平台可以當 equipment、可以提供自訂 SVID、報告由平台固定、主機台報告不帶時間戳。
+
+**兩個來源都收，沒有切換開關**：`TOOL_EVENT` 與 EAP 連線都進同一個 `ReceiveToolEvent`。現場實際只會有一個來源；萬一兩邊同時轉送，重複的 Start 會留下 `ToolEventWindowUnclosed` 這筆假警告，日誌本身就指出問題。
+
+**連線（`EapSecsLink`，包一個 `GemHost`）：**
+
+- OES = Active；預設 `10.2.3.120:20347`、Device ID 0；T3／T5～T8 固定為 45／10 秒；`TimeSyncIntervalMs = 0`，不會把 OES 的時鐘推給 EAP。
+- 每次通訊建立後：S1F17 → S1F1（MDLN 只記日誌）→ **S2F37 啟用兩個 CEID** → `QueryStatusAsync` 讀 S1～S7。之後**每 30 秒**再讀一次；收到值為 1 的連線狀態事件時立刻再讀。S2F37 被拒時記 `EapLinkSetupFailed`，下一輪再試。
+- **不送 S2F33／S2F35**：報告由平台固定。S6F11 依位置讀取：轉發 CEID 帶一份報告 `L{ 主機台CEID, 時間, 序號 }`，連線狀態 CEID 帶 `L{ U1 }`。CEID、序號照 `SecsBridge.ParseCeid` 寬鬆接受 U1～U8 或 ASCII 數字，時間照 `ParseToolEventTime`。不符就記 `EapReportRejected`，不採用。
+- S1F3 的結果交給 `ReportToolContext`，規則和 TCP 版本的心跳相同：S4 = 0 或 S1 = 2 → 不明；S1 = 1 → `InWindow(S2)`，由引擎依對照表解讀（只記錄或對照表沒有的 CEID → 視窗外；End → `Invalid`，記 `EapReportRejected`）；S1 = 0 → 視窗外。連線狀態事件的值為 0 → 不明。
+- **序號**：`_lastEventSeq`（最後處理過的事件）判斷重送，`_lastKnownSeq`（看過的最大值，含 S7）判斷跳號。兩者分開，是因為 OES 重啟後第一次 S1F3 讀到的 S7，正是 EAP 接著要重送的那筆事件；拿它判斷重送，那筆就會被丟掉。
+- **斷線本身不改視窗**，`GemHost` 會自己重連。只有連續 `silenceTimeoutSeconds`（預設 75 秒）**沒有成功的 S1F3、也沒收到 S6F11**，才報不明。每段只報一次，而且要先前曾經成功通訊過。刻意不用 HSMS linktest 判斷：linktest 只代表連線還在，不代表 EAP 的應用程式還活著。
+- **連線失敗的偵測**：Secs4Net 連線失敗時不會發出狀態變化，只會寫一行 `[ERR] …` 再啟動 T5 計時，所以 OES 從「`Start T5 Timer` 而且尚未連上」來計數。第一次記 `EapLinkConnectFailed`，之後每小時一筆累計；重新連上的 `EapLinkConnected` 會附上斷線多久、失敗幾次。
+- **7 個必填的識別碼全部是 0 時是「只連線」**（#65，`EapLinkSettings.IsLinkTestOnly`）：照樣連線、S1F17、S1F1，`EapLinkConnected` 註明 link test only，之後不送 S2F37、不送 S1F3、不呼叫 `ReportToolContext`，也從不呼叫 `Heard()`，所以靜默逾時不會啟動、製程視窗不受影響。EAP 回的 MDLN／SOFTREV 從傳輸層記錄的 S1F2 解析（`PeerOf`，0.8.0 的 `AreYouThereAsync` 不回傳值），顯示在 EAP 分頁；連上時狀態列是橘色，避免綠色被讀成「事件已在進來」。填入識別碼存檔後依既有的 hot-apply 轉為正式運作。
+- **依名稱帶出識別碼**（#66，`EapIdDiscovery`）：只連線模式連上後自動、或 EAP 分頁按 `Read ids from EAP` 時，送空清單的 S1F11 與 S1F23，依規格 §4.3 的約定名稱完全比對（去空白、不分大小寫）。找到的 S1～S7 再送一次 S1F3 檢查格式（數字或文字），不符標為 `WrongType` 但仍可採用；這次 S1F3 **不交給** `ReportToolContext`、也不算聽到 EAP（不呼叫 `Heard()`）。結果放在 `EapLinkStatus.Discovery`，記一筆 `EapIdsLookedUp`；`Use these ids` 只填欄位，要按 Save 才生效。需要 `Aqusen.Secs` 0.10 以上。
+- 必填的 7 個識別碼（S1～S3、S5～S7、轉發 CEID）只填了一部分、非 0 的 S1～S7 有重複，或兩個 CEID 相同時（`EapLinkSettings.IdProblem()`，EAP 分頁存檔和連線類別共用這個判斷）不啟動連線，狀態為 `IdsMissing`。**S4 與連線狀態 CEID 是選填**（#64，規格 Q5）：S4 為 0 時 S1F3 只讀 6 個值（`QueriedSvids`）、判定跳過「S4 = 0 → 不明」；連線狀態 CEID 為 0 時 S2F37 只啟用轉發 CEID（`EnabledCeids`）。缺任一個，連線啟動時記一筆 `EapToolLinkNotMonitored`（`ToolLinkGap()` 說明看不到什麼），EAP 分頁以橘字第三行標示。設定沒變時重新存檔不會重建連線。
+
+**設定（`secs.toolEvents.eap`，存檔即生效、和 `secs.enabled` 無關）：** `enabled`（預設 false）、`remoteHost`、`remotePort`、`deviceId`、`silenceTimeoutSeconds`（35～600）、`windowStateSvid`…`sequenceSvid`、`forwardCeid`、`linkCeid`（預設都是 0）。現場從來沒部署過 TCP 版的 `tcp` 區段，所以不需要遷移。
+
+**畫面：EAP 分頁**（`EapViewModel`／`EapPanel`，`x:Name="EapTab"`；看狀態不需登入，修改設定要 Engineer 以上）。由上到下：EAP 連線狀態兩行 → 連線設定與 9 個識別碼 → 工具事件設定 → CEID 對照表與尚未生效的提示。**工具事件的狀態、設定和 CEID 表都從 SECS 分頁搬到這裡**（§15.7），SECS 分頁只剩和 FDC 的連線。兩個分頁各自存檔自己的部分：`MainViewModel.PersistToolEvents` 只寫 `secs.toolEvents`；`PersistSecsSettings` 保留磁碟上的 `toolEvents`，以免 SECS 分頁存檔時蓋掉 EAP 分頁的設定。收發的每一則訊息記在 `Logs\eap_YYYYMMDD.log`；不做即時清單。
+
+**日誌事件：**
+
+| 名稱 | 等級 | 何時 |
+|---|---|---|
+| `EapLinkConnected` | Information | 連上並完成設定；斷線後重連時附上斷線多久、失敗幾次 |
+| `EapLinkLost` | Warning | 已建立的通訊中斷 |
+| `EapLinkConnectFailed` | Warning | 連不上：只記第一次，之後每小時一筆累計 |
+| `EapLinkSetupFailed` | Warning | EAP 拒絕 S2F37（每小時最多一筆） |
+| `EapEventsOnly` | Information | 以只收事件模式啟動連線，附看不到的情況（每次啟動一筆，§15.10） |
+| `EapHeartbeatFailed` | Warning | 只收事件模式的 S1F1 沒有回應（每小時最多一筆，§15.10） |
+| `EapStatusQueryFailed` | Warning | S1F3 失敗（每小時最多一筆） |
+| `EapReportRejected` | Warning | S6F11 或 S1F4 不符固定格式，或 S2 是 End CEID（每小時最多一筆，原文在 `eap_` 日誌） |
+| `EapEventSequenceGap` | Warning | 序號跳號，附缺幾筆 |
+| `EapSequenceReset` | Information | 序號變小（EAP 重啟） |
+| `ToolEventContextRestored`／`ToolEventResync`／`ToolEventContextUnknown` | Information／Warning／Warning | `ReportToolContext` 修正視窗（§15.3） |
+| `ToolEventIgnored` | Information | 對照表外的 CEID，每個每次執行一次 |
+| `ToolEventSettingsSaved` | Information | EAP 分頁存檔 |
+
+**驗證：**
+
+- 自動測試：`EapSecsLinkTests` 用 `EquipmentSimulator` 假扮 EAP，透過 loopback 測試，固定報告用 `Aqusen.Secs` 0.8.0 的 `PredefinedReports`。涵蓋：連線步驟（不送 S2F33／35／31）、事件交給引擎、重送只處理一次、S7 點名的事件仍會套用、跳號與重啟、格式錯誤、連線狀態 0、輪詢的視窗判斷、End 矛盾、斷線重連不撤回、靜默只撤回一次、從沒通訊過不撤回、連不上只記一次、識別碼未設定不啟動、同設定不重連、`eap_` 日誌。另有 `ToolEventUiTests`（EAP 分頁 VM）、`ToolContextReportTests`（引擎，不變）。
+- 手動：`Test_SECS` 的「EAP (PM3 event forwarder)」設定檔當假 EAP。2026-10-27 對真的 App 跑過：EAP 分頁轉綠、Start 事件讓視窗進入 A；按 Tool link down 後視窗改為不明；關掉 `Test_SECS` 後 35 秒轉橘。日誌依序為 `EapLinkConnected` → `ToolEventWindowOpened` → `ToolEventContextUnknown` → `EapLinkLost`。SECS 分頁只剩 FDC 連線。
+
+### 15.10 只收事件模式（2026-10-29，#74）
+
+**狀態：已實作**（#74；提案在 #73）。心跳需要 `Aqusen.Secs` 0.11.0 的 `QueryOnlineDataAsync`。
+
+**為什麼要有：** §15.9 的連線要等 EAP 指定 S1～S7 的 SVID 才能正式運作；在那之前，只能做連線測試（#65），收不到任何製程事件。單純接收 S6F11 其實只需要**轉發 CEID** 一個編號：報告格式固定、依位置讀取，主機台 CEID、時間、序號都在報告裡。所以提供一個**由使用者決定**的簡化模式：只收事件，不讀 S1～S7。它是 EAP 還沒提供 S1～S7 時的過渡方案，也是平台做不到時的備援，**不取代完整模式**。給廠商的規格仍要求提供 S1～S7（規格 §4.4）。
+
+**代價：** S1～S7 是「狀態的快照」，用來修正事件流的錯誤（§15.9：OES 重啟後立刻恢復視窗、補上漏送的事件、得知 EAP 不知道 PM3 的狀態）。只收事件時，這些都做不到。規則因此只有一條：**知道可能漏了事件，就把視窗改為「不明」**，不當作沒漏。「不明」是 fail-open（§15.3）：分類器有設定就用分類器，沒有就不分類地照常判定，偵測不會中斷。
+
+**設定：**
+
+- 開關 `secs.toolEvents.eap.eventsOnly`（bool，**預設 false**）。舊的設定檔沒有這個欄位時，讀進來就是完整模式，行為完全不變。EAP 分頁的標籤是「Events only — do not poll S1–S7」，旁邊附一句盲點說明；修改需要 Engineer 以上。
+- **存檔即生效**，和其他 `secs.toolEvents.eap` 設定一樣（hot-apply）：開關切換會讓連線重建。比對設定是否改變的判斷（`EapSecsLink` 決定要不要重連的那個比較）要把這個欄位加進去。
+- 開關打開時，S1～S7（含 S4）的欄位**變灰但保留原值**，切回完整模式不必重新輸入；`Read ids from EAP` 照常可用，讀到的 ID 一樣只填欄位、要按 Save 才生效。
+- **必填只剩轉發 CEID**。`IdProblem()`：轉發 CEID 為 0 時視同「只連線」（`IsLinkTestOnly`，和「什麼都沒設定就只做連線測試」同一規則），S1～S7 填了什麼都不檢查；連線狀態 CEID 有填時，仍不可和轉發 CEID 相同。
+
+**連線行為（開關打開、轉發 CEID 有填時）：**
+
+| 項目 | 完整模式（§15.9） | 只收事件 |
+|---|---|---|
+| 通訊建立後 | S1F17 → S1F1 → S2F37 → S1F3 | S1F17 → S1F1 → S2F37（轉發 CEID，以及有填的連線狀態 CEID），**之後把視窗改為「不明」** |
+| 輪詢 | 每 30 秒 S1F3（S1～S7） | 每 30 秒 **S1F1**（Are You There），只當心跳，不讀任何值 |
+| 靜默逾時（`silenceTimeoutSeconds`，75 秒） | 沒有成功的 S1F3、也沒收到 S6F11 | 沒有成功的 **S1F1**、也沒收到 S6F11 |
+| 通訊恢復（含程式啟動後第一次連線、切換模式造成的重連） | 不改視窗，接著的 S1F3 會修正 | **改為「不明」**，等下一筆製程事件 |
+| 斷線期間 | 不改視窗 | 不改視窗；漏掉的 End 由 `maxWindowSeconds`（600 秒）兜底，重連時改為「不明」 |
+| 連線狀態 CEID 值 0 | 改為「不明」 | 改為「不明」 |
+| 連線狀態 CEID 值 1 | 立刻送 S1F3 補回視窗 | **不做任何事**，維持「不明」到下一筆製程事件 |
+| S4 | 有填就讀 | 不讀 |
+| 序號跳號 | 記 `EapEventSequenceGap`，下一次 S1F3 修正 | **先改為「不明」，再照常處理這筆事件**；警告內文改為「不會被修正，視窗已改為不明」 |
+| 序號變小（EAP 重啟） | 記 `EapSequenceReset` | 同左，**並先改為「不明」**再處理這筆事件 |
+
+說明：
+
+- **為什麼通訊恢復就改為「不明」：** 斷線期間的事件 EAP 不會 spooling（規格 E9），而簡化模式沒有 S1F3 可以補，所以重連那一刻 OES 無從知道視窗是否還對。只在**恢復時**改、不在**斷線時**改：HSMS 常有幾秒鐘的短暫斷線，斷線就改會讓視窗來回跳動。斷線期間維持原狀，最壞的情況（漏掉 End）由 600 秒上限兜底。
+- **跳號時先改為「不明」再處理：** 如果這筆是 Start，視窗馬上重新開啟，「不明」只維持一瞬間；只有漏掉的是 End、而這筆不是 Start 時，「不明」才會持續到下一筆 Start。
+- **為什麼用 S1F1 當心跳：** HSMS linktest 只證明 socket 還通（§15.9 刻意不用它）；S1F1 需要 EAP 的 SECS 層回應，而且不需要任何 ID、每個 equipment 都支援，完整模式上線時本來就會送。殘留的盲點是「EAP 的 SECS 層還會回應，但轉發功能壞了」；S1F2 若是平台的 SECS 函式庫自動回覆，這個盲點就更大。對真 EAP 驗收時要確認，並寫進規格 §8。
+- **只收事件不呼叫 `ReportToolContext` 的「位置」報告**，只送「不明」：沒有 S1／S2，就沒有「目前在哪個視窗」可報。「不明」走既有的 `ToolContextReport(ToolContextReportState.Unknown, …)`，和 `ToolEventContextUnknown` 同一條路；視窗本來就是「不明」時不重複記錄。
+- **引擎、`ReceiveToolEvent`、CEID 對照表、VID 030～032 都不變。** 簡化模式只會讓 VID 030 比較常是「不明」（1）。FDC 那條路的 `TOOL_EVENT` 也不變；兩個來源同時在用時，EAP 連線重連造成的「不明」也會蓋掉 `TOOL_EVENT` 開的視窗，現場只有一個來源，所以不另外處理。
+
+**看得見的標示：**
+
+- EAP 分頁狀態列：連上時用**橘色**，文字為 `connected to … — events only, window not polled`，比照只連線模式，避免綠色被讀成「視窗有人在核對」。第三行說明看不到什麼（下表），連線狀態 CEID 沒填時再加上 §15.9 的 `ToolLinkGap()` 內容。
+- 系統日誌：連線啟動時記一筆 **`EapEventsOnly`**（Information，每次啟動一筆，不是每次重連），內文寫明盲點；重連時的「不明」由引擎記 `ToolEventContextUnknown`，原因寫 `EAP link (re)established in events-only mode — window not polled`。
+- `eap_` 日誌：連線時的 `[EAP] connecting …` 行註明 `events only`。
+
+**簡化模式看不到的事（寫進 EAP 分頁說明、`EapEventsOnly` 內文與規格 §4.4）：**
+
+| 情況 | 結果 |
+|---|---|
+| PM3 製程進行中重啟 OES，或 OES 和 EAP 之間斷線 | 重連後是「不明」，要等下一筆製程事件才恢復 |
+| EAP 漏送一筆事件，而且之後沒有新事件 | 序號看不出來（還沒有下一個序號），漏掉的 End 要到 600 秒上限才回到「不明」；漏掉的 Start 讓這段製程被當成「視窗外」，只能從 `ToolEventUnmappedPlasma` 事後看出 |
+| EAP 不知道 PM3 的狀態（剛啟動、和主機台斷線） | 沒有 S1 = 2 可讀；只有連線狀態 CEID（有提供時）的值 0 會讓 OES 知道 |
+| EAP 的 SECS 層還會回應，但轉發功能壞了 | 偵測不到，視窗停在最後的狀態，最多由 600 秒上限兜底 |
+
+**實作紀錄：**
+
+- **心跳怎麼判斷有回應：** `Aqusen.Secs` 0.10.1 的 `GemHost.AreYouThereAsync` 把逾時、S1F0、S9F7 都吞掉，只寫日誌，呼叫端分辨不出來。所以函式庫在 0.11.0 新增 `QueryOnlineDataAsync`，回傳 `OnlineDataResult`（`Succeeded`、MDLN、SOFTREV 或失敗原因）；`AreYouThereAsync` 行為不變。心跳只在 `Succeeded` 時呼叫 `Heard()`，失敗記 `EapHeartbeatFailed`（每小時最多一筆）。不採用「從日誌文字判斷」：日誌文字改過（0.10.1），心跳會因此靜默失效。
+- 上線時那次 S1F1 也改用 `QueryOnlineDataAsync`（兩種模式相同，日誌不變）；只收事件模式下，它有回應就算聽到 EAP。
+- 第一次連線前視窗本來就是「不明」，所以那次送出的「不明」不會產生日誌；切換模式造成的重連則會記一筆 `ToolEventContextUnknown`，這是預期的。
+- 序號：`CheckSequenceLocked` 在只收事件模式下回傳「可能漏了事件」的原因，`OnEventReport` 在交出這筆事件**之前**先送「不明」；兩者走引擎的同一個佇列，所以順序不會反過來。完整模式的行為不變（回傳 null）。
+- 狀態列第三行沿用 `EapLinkStatus.ToolLinkGap` 欄位：只收事件時放 `EventsOnlyGap()`，取代 `ToolLinkGap()`，因為 S4 在這個模式下根本不讀；`EapToolLinkNotMonitored` 也改記 `EapEventsOnly`。
+
+**程式：** `ToolEventSettings.cs`（`EapLinkSettings.EventsOnly`、`Required`／`IdProblem()`／`IsLinkTestOnly` 依開關、`EventsOnlyGap()`）、`EapSecsLink.cs`（設定步驟、`HeartbeatAsync`、通訊恢復與序號時的「不明」、連線狀態 CEID 值 1、`EapEventsOnly`、重連比較）、`EapViewModel.cs`／`EapPanel.xaml`（開關、S1～S7 欄位 `StatusSvidsEnabled`、狀態列）。
+
+**測試：** `EapLinkSettingsTests`（只需轉發 CEID、S1～S7 保留不檢查、轉發 CEID 為 0 即只連線、兩個 CEID 相同仍拒絕、盲點說明）、`EapSecsLinkTests`（不送 S1F3 且事件照樣交出、S1F1 心跳與靜默、每次重連改為不明、跳號與 EAP 重啟先報不明再交事件、連線狀態 1 不恢復、切換開關重連與同設定不重連）、`ToolEventUiTests`（存檔、欄位變灰但保留、錯誤訊息、狀態列）。拿掉心跳的 `Heard()`、或讓跳號不回報不明，各有測試失敗。
+
+**實機驗證（2026-10-29，`run-app` + `Test_SECS` 的「EAP (PM3 event forwarder)」）：** EAP 分頁打開 Events only、只填轉發 CEID 6100／連線狀態 CEID 6101 後，S1～S7 欄位變灰；狀態列橘色 `connected to … — events only, window not polled`，第三行列出看不到的情況；`eap_` 日誌沒有任何 S1F3，S1F1 每 30 秒一次；系統日誌 `EapEventsOnly`、`EapLinkConnected … events only`。按 PM3 Chamber Process Start 後視窗進入 A（`ToolEventWindowOpened`）；關掉 `Test_SECS` 後重連時記 `ToolEventContextUnknown … it was window A`，連不上時在最後一筆事件後約 75 秒記 `ToolEventContextUnknown (nothing from the EAP for 75 s)`，狀態列顯示 `Nothing from the EAP for 75 s`。
+
+**驗證時踩到的坑，也是盲點的實例：** 第一次把假 EAP 放在 5000 埠，正好是 OES 自己給 FDC 的 SECS 介面。關掉 `Test_SECS` 後，EAP 連線 1 秒內就「重連成功」——連到 OES 自己（MDLN `OESLM`），而且 S1F1 一直有回應，所以靜默逾時永遠不會觸發。這正是上表最後一列「對方會回 S1F1、但沒有轉發」的情況：只收事件模式分不出來，完整模式則會因為 S1F3 讀不到 S1～S7 而記 `EapReportRejected`。現場設定 EAP 位址時，不要指向 OES 自己。

@@ -112,6 +112,30 @@ public class AppSettingsDefaultsTests
     }
 
     /// <summary>
+    /// A settings.json written before the EAP link existed loads with it off — an upgrade opens
+    /// no connection until someone asks for one — with the address the EAP gave already filled
+    /// in, and the nine ids unset, so the link cannot start until someone enters them.
+    /// </summary>
+    [Fact]
+    public void SettingsWithoutTheEapLink_LoadWithItOff()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>(
+            """{"secs":{"toolEvents":{"enabled":true}}}""", OnDisk)!;
+
+        var eap = settings.Secs.ToolEvents.Eap;
+        Assert.False(eap.Enabled);
+        Assert.Equal("10.2.3.120", eap.RemoteHost);
+        Assert.Equal(20347, eap.RemotePort);
+        Assert.Equal(0, eap.DeviceId);
+        Assert.Equal(75, eap.SilenceTimeoutSeconds);
+        Assert.All(eap.StatusSvids, id => Assert.Equal(0u, id));
+        Assert.Equal(0u, eap.ForwardCeid);
+        // No ids at all is the link-test-only configuration (#65), not a half-filled one.
+        Assert.True(eap.IsLinkTestOnly);
+        Assert.Null(eap.IdProblem());
+    }
+
+    /// <summary>
     /// The table round-trips through the real <c>SettingsService</c> with its edges as words, the
     /// way a site writes them by hand.
     /// </summary>

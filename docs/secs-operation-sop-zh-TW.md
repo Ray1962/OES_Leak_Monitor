@@ -464,9 +464,9 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 
 **目的：** 讓洩漏判定只在正確的製程裡運作。PM3 交替跑 Chamber Process／precoat（製程 A）與 Chamber Clean（製程 B）等不同電漿；OES 只看光譜，主機台才確切知道此刻是哪一個。廠內 EAP 把主機台的 PM3 ProcessStart／ProcessEnd CEID 以 S2F41 `TOOL_EVENT` 轉送給 OES，OES 依對照表開關「製程視窗」，指定了製程類別的比值只在該類別的視窗內判定。
 
-**誰做：** Engineer／設備工程師。Operator 只看 SECS 分頁的狀態列（§12.4）。
+**誰做：** Engineer／設備工程師。Operator 只看 EAP 分頁的狀態（§12.4）。
 
-**先跟 EAP 平台確認：** 平台會轉送 PM3 的 CEID（給平台方的介面規格在 `eap-integration-spec-zh-TW`）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。
+**先跟 EAP 平台確認：** 平台會轉送 PM3 的 CEID。現場 OES 的 SECS host 是 FDC，所以 OES 以 SECS host 身分連到 EAP 取得事件（§12.7，給平台方的規格在 `eap-tool-event-secs-spec-zh-TW`）；可以不加篩選地整批轉送，對照表沒有的 CEID OES 只記錄、不處理。FDC 讀 VID 030／031 標記製程，規格在 `fdc-integration-spec-zh-TW`。
 
 ### 12.1 確認比值已指定製程類別
 
@@ -483,28 +483,31 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
     { "ceid": 3100439529, "className": "A", "edge": "Start", "name": "PM3 Chamber Process/precoat start", "plasmaThreshold": 0 },
     { "ceid": 3100439530, "className": "A", "edge": "End",   "name": "PM3 Chamber Process/precoat end",   "plasmaThreshold": 0 },
     { "ceid": 3099591660, "className": "B", "edge": "Start", "name": "PM3 Chamber Clean start",           "plasmaThreshold": 0 },
-    { "ceid": 3099591661, "className": "B", "edge": "End",   "name": "PM3 Chamber Clean end",             "plasmaThreshold": 0 }
+    { "ceid": 3099591661, "className": "B", "edge": "End",   "name": "PM3 Chamber Clean end",             "plasmaThreshold": 0 },
+    { "ceid": 3100167145, "className": "LEAK_CHECK", "edge": "Start", "name": "PM3 Auto Leak check start", "plasmaThreshold": 0 },
+    { "ceid": 3100167146, "className": "LEAK_CHECK", "edge": "End",   "name": "PM3 Auto Leak check end",   "plasmaThreshold": 0 }
   ],
   "maxWindowSeconds": 600,
   "applyInTestMode": false
 }
 ```
 
-- `className` 要和 Ratio Setup 的 Process class 拼法一致。留空表示只記錄、不開關視窗（例如 Auto Leak check 若想留紀錄）。
+- `className` 要和 Ratio Setup 的 Process class 拼法一致。留空表示只記錄、不開關視窗。
+- `LEAK_CHECK` 這兩列沒有比值會指定，不影響任何判定；它讓主機台測漏期間 VID 031 顯示 `LEAK_CHECK`，FDC 才能把 OES 讀值和主機台的測漏結果對齊（`fdc-integration-spec-zh-TW` §6.4）。
 - `plasmaThreshold` ≤ 0 表示沿用（製程分類器設定裡同名類別的門檻，否則用記錄器的觸發門檻）。
 - CEID 以主機台的事件表（`EAP ceid-events.md`）為準；上面是 PM3 的值。
 
 ### 12.3 套用
 
-1. 開啟 App，SECS 分頁的 **CEID 表**應顯示剛填的四列。
-2. 到 Monitor 分頁 **Stop → Start**（重新開始採集）。對照表與 `Use tool events` 都是在這時才套用；套用前 SECS 分頁會有橘色字「…not yet in force — restart acquisition…」。
+1. 開啟 App，EAP 分頁的 **CEID 表**應顯示剛填的各列。
+2. 到 Monitor 分頁 **Stop → Start**（重新開始採集）。對照表與 `Use tool events` 都是在這時才套用；套用前 EAP 分頁會有橘色字「…not yet in force — restart acquisition…」。
 3. 系統日誌出現 `ToolEventsApplied`。
 
-`Max window (s)` 與 `Apply tool events in test mode` 可以直接在 SECS 分頁改，按 **Save & apply** 即生效。
+`Max window (s)` 與 `Apply tool events in test mode` 可以直接在 EAP 分頁改，按 **Save & apply** 即生效。
 
 ### 12.4 確認有在運作
 
-看 SECS 分頁的狀態列，或請 Host 讀 VID 030～032：
+看 EAP 分頁的狀態，或請 Host 讀 VID 030～032：
 
 | 情況 | 狀態列 | VID 030 ／ 031 |
 |---|---|---|
@@ -526,9 +529,45 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 
 - [ ] Ratio Setup：要在製程 A 判定的比值，Process class = `A`
 - [ ] `settings.json` 的 `secs.toolEvents` 已填，且 `enabled` = true
-- [ ] 已 Stop → Start，SECS 分頁沒有橘色字
+- [ ] 已 Stop → Start，EAP 分頁沒有橘色字
 - [ ] Profile 有 `TOOL_EVENT`（Host 送一次，HCACK = 0）
 - [ ] 主機台跑一次 Chamber Process：狀態列顯示 `in window A`，結束後 `outside any window`
+
+### 12.7 EAP 連線（OES 的 SECS host 是 FDC 時）
+
+OES 的 SECS 連線只能有一個 host。host 是 FDC 時，EAP 沒辦法送 `TOOL_EVENT`，改由 **OES 以 SECS host 身分主動連到 EAP**（方案 2b）：EAP 當 equipment，OES 連上後讀 EAP 的 S1～S7（PM3 目前的視窗等），之後每 30 秒再讀一次，並接收 EAP 以 S6F11 轉發的主機台事件。給平台方的規格是 `eap-tool-event-secs-spec-zh-TW`。12.1～12.3 的比值類別、CEID 對照表、`Use tool events` 照做，只是事件改從這條連線進來。
+
+**設定（Engineer）：**
+
+1. 跟 EAP 平台確認監聽位址（現場為 `10.2.3.120:20347`）、Device ID，以及 **EAP 指定的 9 個識別碼**（S1～S7 的 SVID、轉發事件 CEID、主機台連線狀態 CEID；其中 S4 與主機台連線狀態 CEID 是選填，平台不提供就填 0），並把 **OES PC 的 IP** 交給對方，讓 EAP 主機的防火牆放行。填進規格書 §10 的現場設定紀錄。
+2. 到 **EAP 分頁**的 `EAP link (SECS host) — applies on save`：勾 `Connect to the EAP`，填 `EAP address`、`Port`、`Device ID`，`Silence timeout (s)` 用預設 75。**EAP 還沒給識別碼時，`EAP ids` 全部留 0 先存檔**：OES 只做連線測試（狀態列橘色 `link test only`，並顯示 EAP 回的型號與版本），用來確認網路、防火牆與 Device ID，不影響量測。連線測試連上後，OES 會自動向 EAP 查詢名稱；平台使用規格 §4.3 的約定名稱時，下方表格 9 項都是 ✓，按 **Use these ids** 把編號填進欄位，**對照 EAP 方給的編號確認一次**，再進行下一步。平台不支援名稱查詢或名稱不同時，在 `EAP ids` 依 EAP 方給的編號手動填入 9 個編號（S4 與主機台連線狀態 CEID 不提供就留 0）。已在運作的連線也可以按 **Read ids from EAP** 核對：黃底的列代表欄位中的編號和 EAP 的名稱對不上。
+3. 按 **Save & apply**，**立即生效**，不用重新開始採集。編號沒填齊或有重複時存檔會被擋下，並說明原因。
+
+**確認：**
+
+| 看哪裡 | 正常 |
+|---|---|
+| `EAP link` 第一行 | 綠色 `connected to 10.2.3.120:20347 (since …)` |
+| `EAP link` 第二行 | `Last S1F3` 的時間每 30 秒更新一次；`PM3 …` 與主機台狀態一致；`tool link up` |
+| `Tool events` 那一行 | 主機台跑 Chamber Process 時是 `in window A` |
+| 系統日誌 | 有 `EapLinkConnected`；沒有 `EapLinkSetupFailed`、`EapReportRejected`、`ToolEventResync` |
+
+有問題時依操作手冊 §9.15 檢查。收送的每一則訊息都在 `Logs\eap_YYYYMMDD.log`。
+
+**沒有 EAP 也能先驗 OES（同一台電腦）：** 用 `Test_SECS`（SECS 測試程式，見 §9）假扮 EAP。
+
+1. 開 `Test_SECS.exe`，角色選 **Equipment simulator (passive)**，Device profile 選 **EAP (PM3 event forwarder)**，Port 改成一個沒用到的號碼（例如 `29347`，**不要用 OES 的 5000**），按 **Connect**。
+2. OES 的 EAP 分頁：`EAP address` 暫時改成 `127.0.0.1`、`Port` 填同一個號碼，`EAP ids` 填 `Test_SECS` 的預設值：S1～S7 = `6001`～`6007`、Forward CEID = `6100`、Tool-link CEID = `6101`。Save & apply → 狀態轉綠。
+3. 在 `Test_SECS` 按 `PM3 Chamber Process Start`／`End`、`Tool link down`、`Resend last event` 等按鈕，對照 EAP 分頁的狀態與系統日誌。關掉 `Test_SECS` 等 75 秒，狀態應轉橘、視窗改為不明。
+4. 測完把位址、Port、編號改回現場的值，Save & apply。
+
+**給 EAP 廠商自測：** `Test_SECS` 角色選 **Host (active)**、Device profile 選 **OES (2b host)**，連到 EAP 平台，依序按「1. Establish and go online」「2. Enable the EAP events」「3. Read S1–S7」，再讓主機台跑一次製程。日誌的 `[OES]` 行寫出 S1～S7 的意思，`[EAP]` 行寫出每筆轉發事件的解讀；格式不符會寫 `REJECTED`。平台的編號和預設值不同時，在 `Test_SECS.exe` 旁放一份 `eap-ids.json`（欄位見 `Test_SECS` 的 `整合指南`）。
+
+**檢核：**
+
+- [ ] `EAP link` 綠色，`Last S1F3` 每 30 秒更新
+- [ ] 主機台跑一次 Chamber Process：`in window A`，結束後 `outside any window`
+- [ ] 拔掉 OES 網路線 90 秒後接回：75 秒時轉橘、視窗不明；接回後自動恢復
 
 ---
 
@@ -542,6 +581,7 @@ CEID = 1 + cc + 27 + nnn         （ 8 碼）
 | **Profile 範本（要改的是這份）** | `{Config}\profiles\oes-leak-monitor.json` | 編號一律以 `cc=00` 書寫 |
 | 有效 profile（產生物，不要改） | `{Config}\profiles\.effective\oes-leak-monitor.json` | 每次啟動依腔體號重寫 |
 | SECS 收送日誌 | `{Config}\Logs\secs_YYYYMMDD.log` | 每日一檔，保留 `logRetentionDays` 天 |
+| EAP 連線收送日誌 | `{Config}\Logs\eap_YYYYMMDD.log` | §12.7 的 EAP 連線；保留天數同上 |
 | 系統稽核日誌 | `{Config}\Logs\{YYMMDDHH}.csv` | `SecsStarted`／`SecsStopped`／`SecsSettingsSaved` 等記在這裡 |
 
 分頁中段會直接顯示前三個路徑的實際值——**現場找檔案看那裡就好，不用背。**

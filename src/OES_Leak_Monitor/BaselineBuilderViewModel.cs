@@ -135,10 +135,22 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
         get => _selectedFile;
         set
         {
+            var previous = _selectedFile;
             if (!Set(ref _selectedFile, value)) return;
+            if (previous is not null) previous.PropertyChanged -= OnSelectedFileChanged;
+            if (value is not null) value.PropertyChanged += OnSelectedFileChanged;
             RedrawTrend();
             RaiseCanExec();
         }
+    }
+
+    /// <summary>The window is redrawn whenever it moves, not only by the commands that move it:
+    /// the two boxes on the panel set it through their binding, and a shading that kept showing
+    /// the previous window would let someone check one window and build from another.</summary>
+    private void OnSelectedFileChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(BuilderFileViewModel.FromSec) or nameof(BuilderFileViewModel.ToSec))
+            RedrawTrend();
     }
 
     private DateTime _startDate;
@@ -342,7 +354,6 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
         file.ToSec = best.ToSec;
         Status = $"Flattest {want:0.#} s window: {best.FromSec:0.#}–{best.ToSec:0.#} s " +
                  $"({best.Frames} frames). Check it against the trace before building.";
-        RedrawTrend();
     }
 
     private void UseWholeFile()
@@ -351,7 +362,6 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
         if (file?.Scan is null || file.Scan.FrameCount == 0) return;
         file.FromSec = file.Scan.ElapsedSec[0];
         file.ToSec = file.Scan.ElapsedSec[^1];
-        RedrawTrend();
     }
 
     /// <summary>Called by the panel when the operator drags a window on the chart.</summary>
@@ -361,7 +371,6 @@ public sealed class BaselineBuilderViewModel : INotifyPropertyChanged
         if (file?.Scan is null) return;
         file.FromSec = Math.Min(fromSec, toSec);
         file.ToSec = Math.Max(fromSec, toSec);
-        RedrawTrend();
         RaiseCanExec();
     }
 

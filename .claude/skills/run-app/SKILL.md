@@ -1,6 +1,6 @@
 ---
 name: run-app
-description: Launch OES_Leak_Monitor and drive its window from a WSL shell — select a tab, press a button, screenshot and read back the result. Use when asked to run, start, screenshot, or "see it working" in the real app, or to verify anything with a window on it (the automated tests cover only the SECS interface and the leak engine).
+description: Launch OES_Leak_Monitor and drive its window from a WSL shell — select a tab, press a button, run a multi-step sequence, screenshot and read back the result. Use when asked to run, start, screenshot, or "see it working" in the real app, to retake a user-manual screenshot, or to verify anything with a window on it (the automated tests cover only the SECS interface and the leak engine).
 ---
 
 # Running OES_Leak_Monitor and looking at it
@@ -73,6 +73,62 @@ Button: 'Create diagnostic bundle'  225x36 at -2386,269  enabled=True
 That one line proved the button existed, was the right size, sat above the framework panel,
 and was **enabled while signed out as Guest** — which was the ungated-access requirement.
 Reach for the screenshot when layout, colour, or truncation is the question.
+
+## Several steps in a row: `scripts/steps.ps1`
+
+`drive.ps1` does one tab and one button. Anything longer — sign in, connect, start a replay,
+fill a dialog, tick a row, shoot several tabs — goes through `steps.ps1`, which takes the
+whole sequence as one `;`-separated string (verbs are listed at the top of the script):
+
+```bash
+S='C:\Users\infor\source\repos\Ray1962\OES_Leak_Monitor\.claude\skills\run-app\scripts\steps.ps1'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \
+  "\$env:OESLM_USER='<user>'; \$env:OESLM_PASSWORD='<password>'; & '$S' -Steps 'launch|OES;login;press|OES|Connect;sleep|6;press|OES|Start;tab|OES|Logs;shot|logs'"
+```
+
+Shots land in `%TEMP%\oeslm-shots\`, already scaled to 1200 px. The sign-in comes from
+`OESLM_USER` / `OESLM_PASSWORD` on the command line, never from a file in the repo. A line
+starting `!!` means that step did nothing. A sequence longer than ~110 s exceeds the Bash
+timeout: run it with `run_in_background` and wait for the notification.
+
+What the script works around, so you do not rediscover it:
+
+- **A dialog is a child of the main window** in the UIA tree, not a second top-level window.
+- **A UIA toggle does not raise `Click`.** `GoldenRunCaptureDialog` enables **Start Capture**
+  from the checkbox's `Click`, so after `dlg-toggle` it stays disabled; `dlg-edit` the name
+  box afterwards and `TextChanged` re-evaluates it.
+- **List and grid rows are named after their view-model type**, so `rows`/`row`/`tick` match
+  on the cells' text instead.
+- **Text boxes have no name.** `edits` lists the on-screen ones with the index `edit` takes.
+
+## Retaking a user-manual screenshot
+
+The manual's figures (`docs/images/manual-*.png`) were taken while **replaying the
+2026-08-14 leak recording**, so the Leak Monitor, Ratio Review and Logs shots show a real
+Normal → Warning → Alarm. Retake one the same way when its tab's layout changes:
+
+1. **Snapshot what you will disturb**: `sha1sum` and copy
+   `%APPDATA%\OES_Leak_Monitor\settings.json` (it holds the site's SECS acceptance
+   configuration — it must come back byte-identical), copy `C:\DualOES\_batches.csv`, and
+   list today's day folder `C:\DualOES\YYYYMM\DD\`.
+2. **Extract the recording** — it is archived: `P_OES1_0814220358.csv` from
+   `C:\DualOES\202608\14.zip` into a temp folder — and point `simulationCsvPath` in
+   `settings.json` at it.
+3. **Play it**: `launch|OES;login;press|OES|Connect;sleep|6;press|OES|Start;tab|OES|Replay;press|OES|Play`.
+   At 5× the 9:37 recording takes about two minutes; the leak shows from ~6:30 in.
+   The tabs that need the leak on screen are shot before the replay ends.
+4. **Shoot, read every image, and check each caption against what the image and the log
+   actually show** — a caption written from memory is how Fig. 4 came to blame the wrong
+   cause.
+5. **Restore**: kill the app, copy `settings.json` back and confirm the sha matches, restore
+   `_batches.csv`, and delete everything the replay added to today's folder (`SIMP_*`,
+   `_config_*`, `_log_*`, and any `P_Ratio_*` written after the replay ended).
+6. Copy the PNG over `docs/images/manual-<tab>.png` and regenerate the manual.
+
+Tool events are never applied during a replay, so the EAP tab's "in window A" needs the
+replay stopped, **Apply tool events in test mode** ticked, and `Test_SECS` running its
+"EAP (PM3 event forwarder)" profile on the EAP port, then **PM3 Chamber Process Start**
+pressed in it.
 
 ## Cleaning up
 

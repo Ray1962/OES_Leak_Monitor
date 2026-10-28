@@ -8,14 +8,21 @@ target PC needs no .NET install).
 
 Steps:
 
-1. Check that the versions pinned in `OES_Leak_Monitor.csproj` exist in
-   `/mnt/c/Users/infor/source/repos/Ray1962/LocalPackages` (`ls` the folder) —
-   at the time of writing `Aqst.OesApp.Core` **0.1.10**, `Aqst.OesApp.Wpf`
-   **0.1.16**, `Aqst.OesSpectrometer` **0.6.2**, `Aqusen.Secs` **0.6.0**. Read
-   the csproj rather than trusting these numbers; they move. If an
-   `Aqst.OesApp.*` package is missing, STOP and tell the user to `dotnet pack`
-   it from the sibling repo `Ray1962/DualOes_PlasmaMonitor` first — do not
-   continue. A missing `Aqusen.Secs` is packed from `Ray1962/Test_SECS`.
+1. Read the in-house versions from the csproj — it is the only place they are
+   written down for this step:
+
+   ```
+   grep -E 'PackageReference Include="(Aqst|Aqusen)\.' src/OES_Leak_Monitor/OES_Leak_Monitor.csproj
+   ```
+
+   and check that each `<Id>.<Version>.nupkg` exists in
+   `/mnt/c/Users/infor/source/repos/Ray1962/LocalPackages` (`ls` the folder).
+   If one is missing, STOP — do not continue — and tell the user where it
+   comes from: `Aqst.OesApp.*` is `dotnet pack`ed from the sibling repo
+   `Ray1962/DualOes_PlasmaMonitor`, `Aqst.OesSpectrometer` from
+   `Ray1962/Aqst.OesSpectrometer`, and `Aqusen.Secs` from `Ray1962/Test_SECS`
+   (copy its nupkg into `LocalPackages`; `docs/dev/nuget-packages.md` has the
+   steps).
 
 2. Run the publish. This is a WPF/Windows build, so use the Windows .NET SDK
    (the WSL shell has no native `dotnet`):
@@ -25,7 +32,7 @@ Steps:
    ```
 
 3. When it finishes, verify `src/OES_Leak_Monitor/bin/Publish/win-x64/` holds
-   all **22** expected files. Report the full output folder path and the `.exe`
+   all **24** expected files. Report the full output folder path and the `.exe`
    size. **Anything missing means the folder is not shippable — say so rather
    than reporting success**, because the app launches happily without most of
    these and only fails on the production PC.
@@ -37,6 +44,7 @@ Steps:
    | WPF native | `wpfgfx_cor3.dll`, `PresentationNative_cor3.dll`, `D3DCompiler_47_cor3.dll`, `PenImc_cor3.dll`, `vcruntime140_cor3.dll` |
    | VC++ runtime | `vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll` |
    | Operator docs | `user-manual-zh-TW.html`, `daily-inspection-plan-zh-TW.html`, `secs-operation-sop-zh-TW.html`, `secs-acceptance-sheet-zh-TW.html`, `CONTEXT-zh-TW.html`, `golden-run-baseline-troubleshooting-zh-TW.html`, `baseline-builder-sop-zh-TW.html`, `secs-ratio-svid-example-zh-TW.html` |
+| Integration specs | `fdc-integration-spec-zh-TW.html`, `eap-tool-event-secs-spec-zh-TW.html` (the site has no outside network, so the copies on the PC are the ones the FDC and EAP people read) |
    | Field diagnostic | `check-oes-connect.ps1`, `check-oes-connect.cmd` |
 
    The authority on this list is `publish.cmd`'s own check — if it and this
@@ -55,5 +63,5 @@ Notes:
   The exception is `secs-acceptance-sheet-zh-TW.html`, which is a hand-authored
   form with no Markdown source: restore it from git, never regenerate it.
 - If the publish fails on restore, a package from step 1 is missing.
-- `publish.cmd` runs the same publish and then re-checks all 22 files itself, so
+- `publish.cmd` runs the same publish and then re-checks all 24 files itself, so
   prefer it when the user wants the folder opened in Explorer afterwards.
