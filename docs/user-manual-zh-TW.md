@@ -1155,7 +1155,7 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 這個分頁**不需要登入就看得到**：被問到「OES 有沒有收到主機台的製程」時，Operator 不必等工程師。設定要 Engineer 以上才能修改。
 
-![圖 12　EAP 分頁，已連上 EAP 並在製程 A 的視窗中。綠字第一行是連線狀態，第二行是最近一次 S1F3 的結果（PM3 在視窗內、主機台連線正常、序號）；下一行 `Tool events: in window A` 是 OES 目前判定的製程。中間是 EAP 位址與九個 ID 的設定，最下面是 CEID 對照表。這張圖是在測試模式下拍的，所以勾選了 **Apply tool events in test mode**（出廠不勾）；接真實光譜時不需要這個選項。](images/manual-eap.png)
+![圖 12　EAP 分頁，已連上 EAP 並在製程 A 的視窗中。綠字第一行是連線狀態，第二行是最近一次 S1F3 的結果（PM3 在視窗內、主機台連線正常、序號）；下一行 `Tool events: in window A` 是 OES 目前判定的製程。中間是 EAP 連線的設定：`Connect to the EAP` 右邊的 **`Events only — do not poll S1–S7`** 沒有勾選，這是正式運作的狀態（§6.14.2）；下一列是九個 ID。最下面是 CEID 對照表。這張圖是在測試模式下拍的，所以勾選了 **Apply tool events in test mode**（出廠不勾）；接真實光譜時不需要這個選項。](images/manual-eap.png)
 
 PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。主機台的製程事件（PM3 ProcessStart／ProcessEnd 的 CEID）送到廠內 EAP，EAP 再轉給 OES。OES 依對照表開關「**製程視窗**」：指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定，不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
 
@@ -1177,19 +1177,23 @@ OES 在這條連線上是 **host**，主動連到 EAP（預設 `10.2.3.120:20347
 | `Tool link not fully monitored — …`（橘，第三行） | EAP 不提供 S4 或連線狀態 CEID（`S4 tool link`／`Tool-link CEID` 填 0）。連線照常運作，這行說明 OES 因此看不到什麼 |
 | `EAP link: connected to … — <型號 版本> (since hh:mm:ss)`（綠） | 已連上，事件也已啟用。型號與版本是 EAP 回的 S1F2，用來確認連到的是對的 EAP |
 | `EAP link: connected to … — link test only (EAP ids not set); no events are read`（橘） | 識別碼全部是 0：只驗證連線，不讀 S1～S7、不收事件、不影響製程視窗。填入 EAP 方給的識別碼並 Save & apply，就轉為正式運作 |
+| `EAP link: connected to … — events only, window not polled`（橘） | 只收事件模式（§6.14.2）：事件照常接收，但不讀 S1～S7，沒有人核對製程視窗，所以不用綠色 |
+| `Events only — S1–S7 are not read, …`（橘，第三行） | 只收事件模式看不到的情況（§6.14.2）。取代上面那行 `Tool link not fully monitored` |
 | `EAP link: connecting to … — …`（紅） | 連不上或斷線，會自動重試；破折號後面是原因 |
 | `Last S1F3 hh:mm:ss · PM3 … · tool link up · SEQ n · last event: …` | 最後一次讀 S1～S7 的時間與內容，以及最後一筆轉發事件 |
-| 橘色 `Nothing from the EAP for 75 s — the process window has been set to unknown.` | 太久沒有成功讀到 S1～S7，也沒收到事件。製程視窗改為不明，照沒有製程事件時的方式判定，**不會漏判** |
+| `Last event: …`／`No event received yet — …` | 只收事件模式下取代上一行：沒有 S1～S7 可顯示，只列最後一筆轉發事件 |
+| 橘色 `Nothing from the EAP for 75 s — the process window has been set to unknown.` | 太久沒有成功讀到 S1～S7（只收事件模式是 S1F1），也沒收到事件。製程視窗改為不明，照沒有製程事件時的方式判定，**不會漏判** |
 
-**斷線本身不會讓視窗變成不明**：OES 會自己重連，連上後立刻讀一次 S1～S7，視窗就恢復正確。只有超過 `Silence timeout (s)` 完全沒有成功的通訊，才會改為不明。讀到的視窗和 OES 自己記的不同時，以讀到的為準並記一筆 `ToolEventResync`（Warning），這筆就是 EAP 漏送事件的紀錄。EAP 回報它和主機台斷線，或回報「不明」時，也會立刻改為不明。
+**斷線本身不會讓視窗變成不明**（只收事件模式例外，見 §6.14.2）：OES 會自己重連，連上後立刻讀一次 S1～S7，視窗就恢復正確。只有超過 `Silence timeout (s)` 完全沒有成功的通訊，才會改為不明。讀到的視窗和 OES 自己記的不同時，以讀到的為準並記一筆 `ToolEventResync`（Warning），這筆就是 EAP 漏送事件的紀錄。EAP 回報它和主機台斷線，或回報「不明」時，也會立刻改為不明。
 
 設定（Engineer 以上，`EAP link (SECS host) — applies on save`，**存檔即生效**）：
 
 | 項目 | 說明 |
 |---|---|
 | `Connect to the EAP` | 預設不勾 |
+| `Events only — do not poll S1–S7` | 預設不勾。勾選後只需要 `Forward CEID`，S1～S7 欄位變灰（值保留）。只在 EAP 還沒提供 S1～S7 時使用，見 §6.14.2 |
 | `EAP address`／`Port`／`Device ID` | 預設 `10.2.3.120`／`20347`／`0`；EAP 若另開 HSMS port 或主備切換到別的 IP，在這裡改 |
-| `Silence timeout (s)` | 預設 75，可設 35～600 |
+| `Silence timeout (s)` | 預設 75，可設 35～600。只收事件模式下量的是 S1F1 的回應 |
 | `EAP ids`：S1～S7、`Forward CEID`、`Tool-link CEID` | EAP 方指定的 9 個編號，預設是 0（未設定）。`S4 tool link (optional)` 和 `Tool-link CEID (optional)` 是選填：EAP 不提供就留 0。其餘 7 個填齊而且不重複，連線才會啟動 |
 | `Read ids from EAP` | 向已連上的 EAP 查詢狀態變數與事件的名稱（S1F11、S1F23），依規格約定的名稱找出 9 個編號，結果列在下方表格。**不會改動任何欄位**。識別碼全部是 0 的連線測試，連上時會自動查一次 |
 | 名稱查詢表格 | 每個識別碼一列：約定名稱、找到的編號、狀態（✓／`wrong type`／`not found`／`not provided`／`ambiguous`）、欄位目前的值、說明。找到的編號和欄位不同時，整列以黃底標出，用來核對已輸入的編號；狀態不是 ✓ 的以橘字標出。`Every name the EAP reported` 展開後是平台回報的全部名稱，名稱和約定不同時照它人工核對 |
@@ -1197,9 +1201,27 @@ OES 在這條連線上是 **host**，主動連到 EAP（預設 `10.2.3.120:20347
 
 收到的事件會不會被採用，仍由下方 `Use tool events` 決定。收送的每一則訊息都記在 `Logs\eap_YYYYMMDD.log`（不是 `secs_` 那個檔），分頁最下方有路徑。
 
-系統日誌的相關訊息：`EapLinkConnected`／`EapLinkLost`／`EapLinkConnectFailed`（連不上時只記第一次，之後每小時一筆累計）、`EapLinkSetupFailed`（EAP 拒絕啟用事件，多半是 CEID 填錯）、`EapStatusQueryFailed`（讀 S1～S7 失敗）、`EapLogWriteFailed`（`eap_` 通訊日誌寫不進去）、`EapReportRejected`（EAP 送來的資料格式不符，不採用）、`EapEventSequenceGap`（有事件沒送到）、`EapSequenceReset`（EAP 重啟）、`ToolEventContextUnknown`（視窗改為不明，附原因）。
+系統日誌的相關訊息：`EapLinkConnected`／`EapLinkLost`／`EapLinkConnectFailed`（連不上時只記第一次，之後每小時一筆累計）、`EapLinkSetupFailed`（EAP 拒絕啟用事件，多半是 CEID 填錯）、`EapStatusQueryFailed`（讀 S1～S7 失敗）、`EapLogWriteFailed`（`eap_` 通訊日誌寫不進去）、`EapReportRejected`（EAP 送來的資料格式不符，不採用）、`EapEventSequenceGap`（有事件沒送到）、`EapSequenceReset`（EAP 重啟）、`ToolEventContextUnknown`（視窗改為不明，附原因）、`EapEventsOnly`（以只收事件模式啟動，附看不到的情況）、`EapHeartbeatFailed`（只收事件模式下 EAP 沒有回應 S1F1）。
 
-#### 6.14.2 工具事件的狀態、設定與 CEID 對照表
+#### 6.14.2 只收事件模式
+
+EAP 廠商還沒提供 S1～S7 的編號時，正式運作的連線不會啟動，只能做連線測試，主機台的製程事件完全進不來。轉發事件本身只需要 `Forward CEID` 就收得到，所以勾選 **`Events only — do not poll S1–S7`**、填好 `Forward CEID`（有 `Tool-link CEID` 就一起填），按 Save & apply，就能先開始接收事件。
+
+這是**過渡用的**。S1～S7 是 OES 用來核對、修正製程視窗的依據；不讀它們，OES 就無從得知有沒有漏掉事件，所以**只要可能漏了事件，就把製程視窗改為不明**，等下一筆製程事件再恢復：
+
+- **每次連上 EAP**：包括 OES 重啟、斷線重連、切換這個選項。PM3 製程進行中重啟 OES，要等下一筆製程事件才會回到正確的視窗。
+- **序號跳號**（有事件沒送到）或**序號變小**（EAP 重啟）。
+- **EAP 回報它和主機台斷線**（`Tool-link CEID` 的值為 0）。恢復連線（值為 1）時**不會**自動恢復，同樣等下一筆製程事件。
+
+「不明」時照沒有製程事件時的方式判定，**不會停止偵測**。每 30 秒改送一次 S1F1 確認 EAP 還在，75 秒沒有回應、也沒有事件，同樣改為不明。
+
+**這個模式看不到的情況**：EAP 漏送事件之後又沒有新事件時，漏掉的 End 要到最長視窗時間（600 秒）才會結束，漏掉的 Start 則讓那段製程被當成「不在視窗內」；EAP 自己不知道 PM3 狀態時，OES 也無從得知；EAP 還會回應 S1F1、但轉發功能壞了時，偵測不到。
+
+EAP 提供 S1～S7 之後：填入編號（或按 `Read ids from EAP` → `Use these ids`），**取消勾選** `Events only`，Save & apply，連線會重建並立刻讀 S1～S7，回到正式運作。
+
+> **注意：** EAP 位址不可以填 OES 自己（例如 `127.0.0.1` 加上 SECS 分頁的 port）。OES 自己的 SECS 介面也會回應 S1F1，只收事件模式會以為 EAP 一直在線，卻永遠收不到事件。
+
+#### 6.14.3 工具事件的狀態、設定與 CEID 對照表
 
 **狀態**（不需登入）：
 
