@@ -1,7 +1,7 @@
 # The generated operator docs are what the fab reads. This fails a push or PR whose HTML
 # was not regenerated from its Markdown, whose publish lists disagree, or whose package
 # table in docs/dev/nuget-packages.md no longer matches the app's csproj.
-# (The .NET build and tests need the local NuGet feed and Windows, so they are not here.)
+# (The .NET build and tests run on Windows in build.yml.)
 name: docs
 
 on:

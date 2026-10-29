@@ -1,0 +1,36 @@
+# Builds the app and runs its tests on every push to master and every PR. Windows, because
+# the app and its tests are WPF; restore goes through .github/nuget.ci.config, since the
+# in-house packages come from GitHub Packages here rather than the local feed. A PR from a
+# fork gets no read access to those private packages, so its restore fails.
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet restore tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj --configfile .github/nuget.ci.config
+
+      - name: Build
+        run: dotnet build tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug --no-restore
+
+      - name: Test
+        run: dotnet test tests/OES_Leak_Monitor.Tests/OES_Leak_Monitor.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"
