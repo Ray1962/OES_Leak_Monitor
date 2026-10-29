@@ -12,7 +12,7 @@ This is the path that actually works here, cold.
 `CLAUDE.md` is explicit that everything with a window on it is verified by running the
 app. That is only true if you can *see* it, so this skill ends at a screenshot you read.
 
-## The four facts that make it work
+## The six facts that make it work
 
 1. **There is no native `dotnet` in WSL.** Use `"/mnt/c/Program Files/dotnet/dotnet.exe"`.
 2. **Launch the built `.exe`, not `dotnet run`** — faster, and `dotnet run` holds a
@@ -24,6 +24,14 @@ app. That is only true if you can *see* it, so this skill ends at a screenshot y
    `SelectionItemPattern` selects a tab, `InvokePattern` presses a button, and both report
    the control's real size and enabled state — which is often the whole answer, before any
    screenshot. PowerShell 5.1 (`powershell.exe`) has `UIAutomationClient`; pwsh 7 may not.
+5. **Check for a running copy first**: `Get-Process OES_Leak_Monitor`. One already open is
+   usually the user's published build (`bin\Publish\win-x64`), sharing `settings.json`, the
+   log folder and SECS port 5000 with the one you would launch. Ask the user to close it
+   and wait for them to say it is closed; the auto-mode classifier refuses `Stop-Process`
+   on it, and a bare "continue" is not that consent.
+6. **`Test_SECS` playing the EAP listens on 5047.** Its default, 5000, is this app's own
+   SECS port towards the FDC, so the EAP link ends up talking to itself. Set it with
+   `edit|TS|1|5047` before `press|TS|Connect`, and the same port on the EAP tab.
 
 ## Do it
 
@@ -44,6 +52,18 @@ cp /mnt/c/Users/infor/AppData/Local/Temp/oeslm.png "$SCRATCH/shot.png"   # then 
 ```
 
 **Look at the screenshot.** A blank frame is a failure to launch, not a pass.
+
+## Leave the machine as you found it
+
+Every run, not only a screenshot retake, writes into the user's real folders:
+
+1. **Before launching**: `sha1sum` and copy `%APPDATA%\OES_Leak_Monitor\settings.json` (it
+   holds the site's SECS acceptance configuration — it must come back byte-identical),
+   copy `C:\DualOES\_batches.csv`, and list today's day folder `C:\DualOES\YYYYMM\DD\`.
+2. **After closing**: copy `settings.json` back and confirm the sha matches, restore
+   `_batches.csv`, and delete what the run added to today's folder (`P_Ratio_*` from a
+   test-mode capture; `SIMP_*`, `_config_*`, `_log_*` from a replay). Keep files whose
+   first row predates your launch — those are the user's.
 
 ## Things that will trip you
 
@@ -100,6 +120,8 @@ What the script works around, so you do not rediscover it:
 - **List and grid rows are named after their view-model type**, so `rows`/`row`/`tick` match
   on the cells' text instead.
 - **Text boxes have no name.** `edits` lists the on-screen ones with the index `edit` takes.
+- **`buttons|TS` lists what `press` can find** — Test_SECS's profile actions (PM3 Chamber
+  Process Start, …) included. Cheaper than reading the profile's source for their labels.
 
 ## Retaking a user-manual screenshot
 
@@ -107,10 +129,7 @@ The manual's figures (`docs/images/manual-*.png`) were taken while **replaying t
 2026-08-14 leak recording**, so the Leak Monitor, Ratio Review and Logs shots show a real
 Normal → Warning → Alarm. Retake one the same way when its tab's layout changes:
 
-1. **Snapshot what you will disturb**: `sha1sum` and copy
-   `%APPDATA%\OES_Leak_Monitor\settings.json` (it holds the site's SECS acceptance
-   configuration — it must come back byte-identical), copy `C:\DualOES\_batches.csv`, and
-   list today's day folder `C:\DualOES\YYYYMM\DD\`.
+1. **Snapshot what you will disturb** ("Leave the machine as you found it", step 1).
 2. **Extract the recording** — it is archived: `P_OES1_0814220358.csv` from
    `C:\DualOES\202608\14.zip` into a temp folder — and point `simulationCsvPath` in
    `settings.json` at it.
@@ -120,9 +139,7 @@ Normal → Warning → Alarm. Retake one the same way when its tab's layout chan
 4. **Shoot, read every image, and check each caption against what the image and the log
    actually show** — a caption written from memory is how Fig. 4 came to blame the wrong
    cause.
-5. **Restore**: kill the app, copy `settings.json` back and confirm the sha matches, restore
-   `_batches.csv`, and delete everything the replay added to today's folder (`SIMP_*`,
-   `_config_*`, `_log_*`, and any `P_Ratio_*` written after the replay ended).
+5. **Restore**: kill the app, then step 2 of "Leave the machine as you found it".
 6. Copy the PNG over `docs/images/manual-<tab>.png` and regenerate the manual.
 
 Tool events are never applied during a replay, so the EAP tab's "in window A" needs the

@@ -39,6 +39,8 @@ The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj a
 
 The library is developed in a sibling checkout, `C:\Users\infor\source\repos\Test_SECS` (`/mnt/c/Users/infor/source/repos/Test_SECS` from WSL; GitHub `Ray1962/Test_SECS`). Its default branch is **`main`**, not `master` — base PRs there on `main`. How a release is cut on that side (version bump, `dotnet pack … -o nupkgs`, committed nupkg, `scripts/check-release.py`) is in that repo's `CLAUDE.md`; read it before changing the library.
 
+**Merging that PR is the user's call.** Name it and link it — "merge Test_SECS PR #N?" — and merge only on an answer that names it; the auto-mode classifier refuses a merge the user did not ask for. Test_SECS merges with a merge commit, this repo squashes. "Merged" is `gh pr view N -R Ray1962/Test_SECS --json state` reading `MERGED` and the nupkg listed by `git ls-tree origin/main nupkgs/` — check it before building on the version, whatever was said.
+
 On this side, once the new version is merged there:
 
 1. Copy `Test_SECS\nupkgs\Aqusen.Secs.<version>.nupkg` into `LocalPackages` — the `aqusen` source finds it without the copy, but a machine without a Test_SECS checkout only has `local-aqst`.

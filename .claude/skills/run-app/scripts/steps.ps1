@@ -7,7 +7,7 @@
 
     launch|OES          kill|OES          login           sleep|5
     tab|OES|Replay      press|OES|Play    toggle|OES|Raise leak*
-    edits|OES           edit|OES|3|330    texts|OES|ALARM
+    edits|OES           edit|OES|3|330    texts|OES|ALARM   buttons|TS
     rows|OES            row|OES|*13:49*   tick|OES|SIMP_OES1_*
     dlg-text            dlg-edit|Name     dlg-toggle|I confirm*     dlg-press|Start Capture
     shot|name           shot-dlg|name
@@ -146,6 +146,7 @@ foreach ($step in ($Steps -split ';')) {
     # Text boxes have no name; 'edits' lists the on-screen ones with the index 'edit' takes.
     'edits'  { $i = 0; foreach ($e in (All (Root $a) $CT::Edit)) { if (-not $e.Current.IsOffscreen) { $v = ''; try { $v = $e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch {}; Write-Host "[$i] '$(($v -split "`n")[0])'" }; $i++ } }
     'edit'   { SetValue @(All (Root $a) $CT::Edit)[[int]$b] $c; Write-Host "$a edit[$b]=$c" }
+    'buttons' { foreach ($x in (All (Root $a) $CT::Button)) { if (-not $x.Current.IsOffscreen) { Write-Host "BUTTON: $($x.Current.Name)" } } }
     'texts'  { foreach ($x in (All (Root $a) $CT::Text)) { if ($x.Current.Name -match $b) { Write-Host "TEXT: $($x.Current.Name)" } } }
     'rows'   { $i = 0; foreach ($r in (Rows $a)) { Write-Host "[$i] $(RowText $r)"; $i++ } }
     'row'    { $hit = $false; foreach ($r in (Rows $a)) { $t = RowText $r; if ($t -like $b) { $r.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); Write-Host "selected $t"; $hit = $true; break } }; if (-not $hit) { Write-Host "!! no row like $b" } }
