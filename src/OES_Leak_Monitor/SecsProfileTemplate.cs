@@ -46,8 +46,11 @@ public static class SecsProfileTemplate
     /// (<see cref="SecsChamberCoding.IsValidChamber"/> rejects it), which is the point:
     /// a profile that was never stamped cannot be mistaken for a stamped one. The 250 ratio
     /// slot rows are generated from <see cref="SecsRatioSlots"/> into <see cref="SlotRowsMarker"/>.
+    /// <see cref="Body"/> is normalised to LF first: a raw string takes this file's own line
+    /// endings, and a Windows checkout (<c>text=auto</c>) turns them into CRLF, which the
+    /// marker never matches — the template then shipped without its 250 slot rows.
     /// </summary>
-    public static readonly string Json = Body.Replace(SlotRowsMarker, SecsRatioSlots.ProfileRows());
+    public static readonly string Json = Body.ReplaceLineEndings("\n").Replace(SlotRowsMarker, SecsRatioSlots.ProfileRows());
 
     private const string SlotRowsMarker = "    //@ratio-slot-rows\n";
 
