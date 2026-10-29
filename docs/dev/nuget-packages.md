@@ -1,6 +1,6 @@
 # NuGet packages
 
-The local feed, the four in-house packages, what each upgrade changed for this app, and how a new `Aqusen.Secs` reaches it.
+The local feed, the GitHub Packages feed CI restores from, the four in-house packages, what each upgrade changed for this app, and how a new `Aqusen.Secs` reaches it.
 
 ## NuGet feed prerequisite
 
@@ -15,7 +15,7 @@ The local feed, the four in-house packages, what each upgrade changed for this a
 
 `nuget.config` also lists a second local source, `aqusen`, pointing at `Test_SECS\nupkgs`. Both on purpose: `local-aqst` is what makes a build reproducible on a machine with no `Test_SECS` checkout, `aqusen` is what picks up a fresh pack during development without a copy step. `Secs4Net` 2.4.4 comes from nuget.org (via `Aqusen.Secs`, and referenced directly for `SecsGemOptions`).
 
-The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj as the source of truth and update this table when it moves — `tools/check-docs.py` fails while the two disagree, or while the csproj references an in-house package the table does not list. Bumping `Aqst.OesApp.*` means editing `<Version>` in that library's csproj, re-packing (the `<PackageOutputPath>` writes straight into the local feed), then bumping the `<PackageReference>` here — and in `DualOes_PlasmaMonitor`'s own app and `template/`, which pin the same packages.
+The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj as the source of truth and update this table when it moves — `tools/check-docs.py` fails while the two disagree, or while the csproj references an in-house package the table does not list. Bumping `Aqst.OesApp.*` means editing `<Version>` in that library's csproj, re-packing (the `<PackageOutputPath>` writes straight into the local feed), then pushing each new nupkg to GitHub Packages ("The CI feed: GitHub Packages" below), then bumping the `<PackageReference>` here — and in `DualOes_PlasmaMonitor`'s own app and `template/`, which pin the same packages.
 
 `0.4.6` of the SDK is what supplied `OesAcquireMode` / `OesAverageMode`; it also stopped opting into `UAI_BackgroundRemove` implicitly, though `DeviceViewModel` still passes `EnableBackgroundRemove = true`, so this app's behaviour is unchanged.
 
@@ -35,6 +35,18 @@ The versions above are the ones in `OES_Leak_Monitor.csproj`; treat the csproj a
 
 `Core 0.1.9` puts **every timestamp the intensity logger hands out on one clock**. `DualIntensityLogger.Stop()` and a `Configure` that disables the logger stamped their `StateChanged` event with `DateTime.UtcNow`, while frames, CSV rows and file names all carry local time. Nothing computed across the two, so nothing broke and nothing was logged as wrong — it surfaced only when someone read the audit CSV and found a session ending eight hours before it started, because `MainViewModel.OnIntensityStateChanged` writes that stamp straight through as the entry's `Value` (`e.Timestamp.ToString("O")`). Both paths now go through a private `LocalNow()`; `SystemLogger` keeps `UtcNow` for its flush deadline, which is a duration rather than a wall-clock reading. `Wpf 0.1.15` is only a re-pack against the new Core.
 
+## The CI feed: GitHub Packages
+
+CI (`.github/workflows/build.yml`) has no `LocalPackages`. It restores through `.github/nuget.ci.config` from `https://nuget.pkg.github.com/Ray1962/index.json`, where all four packages are **private** packages under the `Ray1962` account. That changes what a version bump involves: **a version that is in `LocalPackages` but not on GitHub Packages builds here and fails CI's restore.** So push the version before merging the PR that bumps the csproj, or that PR's own CI fails.
+
+- **Push** the same file that went into `LocalPackages`, not a re-pack: `"/mnt/c/Program Files/dotnet/dotnet.exe" nuget push '<Windows path to the .nupkg>' --source https://nuget.pkg.github.com/Ray1962/index.json --api-key "$(gh auth token)"`. The token needs the `write:packages` scope. If it is missing, the user runs `gh auth refresh -h github.com -s write:packages,read:packages`, which completes in a browser.
+- **Check it is private before anything else.** `gh api /user/packages/nuget/<Name> -q .visibility` must read `private`, and an anonymous `curl` of `https://nuget.pkg.github.com/Ray1962/download/<name>/<version>/<name>.<version>.nupkg` must get 401. `Aqst.OesSpectrometer` carries the vendor's native DLLs, and this repo is public. Where a package's visibility comes from:
+  - A nupkg whose nuspec has a `<repository url=…>` is linked to that repo and takes its visibility. `Aqusen.Secs` is linked to `Test_SECS`, which is private.
+  - A nupkg without one becomes an unlinked package of the account, private by default. The three `Aqst.*` packages are like that: their csprojs set no `RepositoryUrl`. Add it (both source repos are private) at their next version bump.
+- **A new package name needs a read grant; a new version of an existing package does not.** The grant is on the package page (`https://github.com/users/Ray1962/packages/nuget/package/<Name>`) under Package settings → Manage Actions access → add `OES_Leak_Monitor`, role Read. It is web-only and the user's to do. Until it is granted, CI's restore of that package gets 403.
+- **A version that is already on GitHub Packages cannot be pushed again.** A re-pack under the same number, which `LocalPackages` tolerates (step 4 below), has to become a new version here.
+- A PR from a fork gets no read access to these private packages, so its restore fails.
+
 ## Taking a new `Aqusen.Secs` from Test_SECS
 
 The library is developed in a sibling checkout, `C:\Users\infor\source\repos\Test_SECS` (`/mnt/c/Users/infor/source/repos/Test_SECS` from WSL; GitHub `Ray1962/Test_SECS`). Its default branch is **`main`**, not `master` — base PRs there on `main`. How a release is cut on that side (version bump, `dotnet pack … -o nupkgs`, committed nupkg, `scripts/check-release.py`) is in that repo's `CLAUDE.md`; read it before changing the library.
@@ -45,4 +57,5 @@ On this side, once the new version is merged there:
 
 1. Copy `Test_SECS\nupkgs\Aqusen.Secs.<version>.nupkg` into `LocalPackages` — the `aqusen` source finds it without the copy, but a machine without a Test_SECS checkout only has `local-aqst`.
 2. Bump the `PackageReference` in `src/OES_Leak_Monitor/OES_Leak_Monitor.csproj`, and the `Aqusen.Secs` row of the table above.
-3. If that version was restored before (a re-pack under the same number), delete `%USERPROFILE%\.nuget\packages\aqusen.secs\<version>` (`/mnt/c/Users/infor/.nuget/packages/aqusen.secs/<version>` from WSL) first — NuGet caches by version and keeps building against the stale copy.
+3. Push it to GitHub Packages and confirm it is still private ("The CI feed: GitHub Packages" above). Push before merging the bump, or CI on that PR fails its restore.
+4. If that version was restored before (a re-pack under the same number), delete `%USERPROFILE%\.nuget\packages\aqusen.secs\<version>` (`/mnt/c/Users/infor/.nuget/packages/aqusen.secs/<version>` from WSL) first — NuGet caches by version and keeps building against the stale copy.
