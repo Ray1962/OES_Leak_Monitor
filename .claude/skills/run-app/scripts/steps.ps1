@@ -5,7 +5,7 @@
   in order — sign in, connect, start a replay, fill a dialog, tick a row, screenshot several
   tabs. Steps are one string, ';'-separated, each 'verb|arg|arg':
 
-    launch|OES          kill|OES          login           sleep|5
+    ps                  launch|OES        kill|OES          login           sleep|5
     tab|OES|Replay      press|OES|Play    toggle|OES|Raise leak*
     edits|OES           edit|OES|3|330    texts|OES|ALARM   buttons|TS
     rows|OES            row|OES|*13:49*   tick|OES|SIMP_OES1_*
@@ -128,7 +128,11 @@ foreach ($step in ($Steps -split ';')) {
   $verb, $a, $b, $c = $step -split '\|'
   switch ($verb) {
     'launch' { Start-Process $exes[$a] | Out-Null; Start-Sleep 9; [StepWin]::ShowWindow((Proc $a).MainWindowHandle, 3) | Out-Null; Write-Host "launched $a" }
-    'kill'   { Get-Process $names[$a] -ErrorAction SilentlyContinue | Stop-Process -Force; Write-Host "killed $a" }
+    # Exits 0 either way: a bare Get-Process that matches nothing fails the whole command (#83). An exited
+    # process stays listed while anything (here: kill's $p) holds a handle to it, hence the HasExited filter.
+    'ps'     { $any = $false; foreach ($k in 'OES', 'TS') { foreach ($p in @(Get-Process $names[$k] -ErrorAction SilentlyContinue | Where-Object { -not $_.HasExited })) { Write-Host "running $k pid=$($p.Id) $($p.Path)"; $any = $true } }; if (-not $any) { Write-Host 'none running' } }
+    # Waits for the exit: Stop-Process returns while the process is still going, and it holds the .exe lock until it is gone.
+    'kill'   { $p = @(Get-Process $names[$a] -ErrorAction SilentlyContinue); if ($p.Count) { $p | Stop-Process -Force; $p | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue; Write-Host "killed $a" } else { Write-Host "$a was not running" } }
     'login'  { Login }
     'sleep'  { Start-Sleep -Seconds ([int]$a) }
     'tab'    { (Root $a).FindFirst($TS::Descendants, (Cond $AE::NameProperty $b)).GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); Write-Host "$a tab $b" }

@@ -24,7 +24,8 @@ app. That is only true if you can *see* it, so this skill ends at a screenshot y
    `SelectionItemPattern` selects a tab, `InvokePattern` presses a button, and both report
    the control's real size and enabled state — which is often the whole answer, before any
    screenshot. PowerShell 5.1 (`powershell.exe`) has `UIAutomationClient`; pwsh 7 may not.
-5. **Check for a running copy first**: `Get-Process OES_Leak_Monitor`. One already open is
+5. **Check for a running copy first** with the `ps` step of `scripts/steps.ps1` (below): it
+   prints each running copy with its path, or `none running`. One already open is
    usually the user's published build (`bin\Publish\win-x64`), sharing `settings.json`, the
    log folder and SECS port 5000 with the one you would launch. Ask the user to close it
    and wait for them to say it is closed; the auto-mode classifier refuses `Stop-Process`
@@ -150,7 +151,12 @@ pressed in it.
 ## Cleaning up
 
 ```bash
-powershell.exe -NoProfile -Command "Stop-Process -Name OES_Leak_Monitor -Force -ErrorAction SilentlyContinue"
+S='C:\Users\infor\source\repos\Ray1962\OES_Leak_Monitor\.claude\skills\run-app\scripts\steps.ps1'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& '$S' -Steps 'kill|OES;kill|TS;ps'"
 ```
+
+Go through `steps.ps1` for these checks rather than a bare `Get-Process` / `Stop-Process`:
+with nothing running, those exit 1 even with `-ErrorAction SilentlyContinue`, and the command
+reads as failed when it did exactly what it should. `ps` and `kill` exit 0 either way.
 
 Always close it before the next `build` or `dotnet test` (fact 3).
