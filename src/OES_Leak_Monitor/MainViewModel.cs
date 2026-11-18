@@ -16,6 +16,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // The one and only place the app folder name is spelled out — everything else
     // takes the resolved paths from this instance.
     private readonly OesAppPaths _paths = new("OES_Leak_Monitor");
+    private readonly RecordingSidecars _sidecars = new();
 
     /// <summary>Day folder the last recording opened in — where the configuration snapshot and
     /// the system-log copies go. See <see cref="MirrorRunContext"/>.</summary>
@@ -1592,16 +1593,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void OnIntensityFileRolled(object? sender, LoggerFileRolledEventArgs e)
     {
-        var axis = e.Reason == FileRollReason.SpectrumAxisChanged;
-        _systemLogger.LogIntensityLogger(
-            axis ? "SpectrumAxisChanged" : "FileRotated",
-            axis
-                ? "Wavelength axis changed mid-save — continued into a new CSV with the new axis. " +
-                  "If this followed a parameter change, re-capture the Golden Run."
-                : "Row limit reached — continued into a new CSV.",
+        var (condition, description, severity) = e.Reason switch
+        {
+            FileRollReason.SpectrumAxisChanged => ("SpectrumAxisChanged",
+                "Wavelength axis changed mid-save — continued into a new CSV with the new axis. " +
+                "If this followed a parameter change, re-capture the Golden Run.", LogSeverity.Warning),
+            // Core 0.1.11: one recording holds one exposure. Counts scale with integration time, so a
+            // Golden Run from the old one no longer applies to absolute-intensity readings.
+            FileRollReason.IntegrationTimeChanged => ("IntegrationTimeChanged",
+                "Integration time changed mid-save — continued into a new CSV, so each file holds one exposure. " +
+                "A Golden Run captured at the old integration time no longer applies.", LogSeverity.Warning),
+            _ => ("FileRotated", "Row limit reached — continued into a new CSV.", LogSeverity.Information),
+        };
+        _systemLogger.LogIntensityLogger(condition, description,
             related: $"Device={(e.DeviceIndex < DeviceProfiles.Length ? DeviceProfiles[e.DeviceIndex].Tag : $"OES{e.DeviceIndex + 1}")}",
             value: e.NewPath,
-            severity: axis ? LogSeverity.Warning : LogSeverity.Information);
+            severity: severity);
     }
 
     private void OnIntensityFilesChanged(object? sender, EventArgs e)
@@ -1619,19 +1626,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         // leaves things exactly as they were before it existed.
         // The process window the tool's events had put the monitor in goes with it, so a baseline
         // built from this recording later can know which process it was.
-        var acquisition = _leakMonitorEngine.CurrentAcquisition;
-        var toolStatus = _leakMonitorEngine.ToolStatus;
-        foreach (var f in files)
-        {
-            if (string.IsNullOrEmpty(f)) continue;
-            var failure = AcquisitionSidecar.TryWrite(f, acquisition, toolStatus);
-            if (failure is not null)
-                _systemLogger.LogSystemEvent(LogSeverity.Warning, "AcquisitionSidecarFailed",
-                    $"Could not record the acquisition conditions beside {System.IO.Path.GetFileName(f)}: " +
-                    $"{failure}. The recording is unaffected, but a Golden Run built from it later " +
-                    "will not know the integration time or averaging it was taken at.",
-                    value: f);
-        }
+        // Once per file, when it first appears (RecordingSidecars): this event also fires on close,
+        // and rewriting then stamped the file with settings it was never taken at.
+        foreach (var (f, failure) in _sidecars.Write(files, _leakMonitorEngine.CurrentAcquisition,
+                                                      _leakMonitorEngine.ToolStatus))
+            _systemLogger.LogSystemEvent(LogSeverity.Warning, "AcquisitionSidecarFailed",
+                $"Could not record the acquisition conditions beside {System.IO.Path.GetFileName(f)}: " +
+                $"{failure}. The recording is unaffected, but a Golden Run built from it later " +
+                "will not know the integration time or averaging it was taken at.",
+                value: f);
 
         var opened = files.FirstOrDefault(f => !string.IsNullOrEmpty(f));
         if (!string.IsNullOrEmpty(opened)) MirrorRunContext(System.IO.Path.GetDirectoryName(opened));
