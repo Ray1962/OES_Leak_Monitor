@@ -228,6 +228,65 @@ public class BaselineBuilderTests
         Assert.Contains("different wavelength axes", result.Error);
     }
 
+    /// <summary>A recording at a known integration time, as its .acq.json would say.</summary>
+    private static RecordingScan TakenAt(string path, double integrationMs, double level = 2000)
+    {
+        var wl = Axis();
+        var sidecar = new AcquisitionFingerprint { IntegrationTimeMs = integrationMs, AverageCount = 100 };
+        return BaselineBuilder.Scan(path, path, Epoch, wl,
+            Flat(100, level).Select(v => Frame(wl, v)).ToList(),
+            Enumerable.Range(0, 100).Select(i => (double)i).ToList(),
+            new[] { RawAbsolute() }, OpenGate(), sidecar, null, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Counts scale with integration time, so two recordings at different ones pooled into one
+    /// baseline give a level neither reads, under the first file's fingerprint. A run whose
+    /// integration time was changed mid-save is two files since Core 0.1.11 — exactly the pair
+    /// someone would tick together.
+    /// </summary>
+    [Fact]
+    public void DifferentIntegrationTimesAreRefused_NamingEachFile()
+    {
+        var result = BaselineBuilder.Build(
+            new[]
+            {
+                (TakenAt("P_OES1_1118231346.csv", 1), new SteadyWindow(0, 99)),
+                (TakenAt("P_OES1_1118231346_1.csv", 0.10000000149011612, level: 200), new SteadyWindow(0, 99)),
+            },
+            new BaselineBuildOptions { RunName = "mixed", MinFrames = 10 });
+
+        Assert.False(result.Accepted);
+        Assert.Contains("different integration times", result.Error);
+        Assert.Contains("P_OES1_1118231346.csv 1 ms", result.Error);
+        Assert.Contains("P_OES1_1118231346_1.csv 0.1 ms", result.Error);
+    }
+
+    [Fact]
+    public void OneIntegrationTimeIsNotRefused()
+    {
+        var result = BaselineBuilder.Build(
+            new[] { (TakenAt("a.csv", 0.1), new SteadyWindow(0, 99)), (TakenAt("b.csv", 0.1), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "same", MinFrames = 10 });
+
+        Assert.True(result.Accepted, result.Error);
+    }
+
+    /// <summary>
+    /// A recording from before sidecars existed does not know its integration time. That is not a
+    /// different one: refusing would make every old recording unusable beside a new one. The SOP
+    /// asks for the exposure to be confirmed by hand in that case.
+    /// </summary>
+    [Fact]
+    public void ARecordingThatDoesNotKnowItsIntegrationTimeIsNotRefused()
+    {
+        var result = BaselineBuilder.Build(
+            new[] { (TakenAt("new.csv", 1), new SteadyWindow(0, 99)), (Fake("old.csv", Flat(100, 2000)), new SteadyWindow(0, 99)) },
+            new BaselineBuildOptions { RunName = "old+new", MinFrames = 10 });
+
+        Assert.True(result.Accepted, result.Error);
+    }
+
     // --- suggestion ----------------------------------------------------------
 
     /// <summary>The soft-start case: ten seconds of ramp, then a plateau. The suggestion has one

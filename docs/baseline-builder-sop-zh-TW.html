@@ -266,6 +266,7 @@ td code{white-space:nowrap;}
 <li>在 <strong><code>Use</code></strong> 欄勾選要用的錄製。
 <ul>
 <li><strong>勾選（<code>Use</code>）和點選（看曲線）是兩回事</strong>：清單只能單選，點某一列只是把它的曲線畫到右邊，不代表要用它建基準。</li>
+<li><strong>只勾積分時間相同、而且和現在 Configuration 設定一樣的錄製。</strong> 打開每個檔旁邊的 <code>{檔名}.acq.json</code> 看 <code>integrationTimeMs</code>。存檔途中改過積分時間的那一爐會變成兩個檔（同一個時間，<code>Rot</code> 欄一個空白、一個 <code>#1</code>），兩個檔的積分時間不同，不能一起勾；勾了 Build 會拒絕（第 <a href="#15-baseline-builder-獨有的拒絕訊息">15</a> 節）。沒有 <code>.acq.json</code> 的舊錄製程式無從比對，要靠人工確認。</li>
 </ul>
 </li>
 <li>按 <strong>Scan ticked</strong>。這是唯一花時間的一步，掃描期間所有按鈕都會停用。
@@ -439,6 +440,7 @@ td code{white-space:nowrap;}
 <blockquote><p><strong>程式不會自動寫這份報告</strong>，這是人工複製貼上的步驟。系統日誌只會記 <code>GoldenRunBuiltOffline</code>（名稱、用了幾個檔、幾條比值、幾個檔被擱置、每個檔的視窗時間）——<strong>不含</strong>上面那些判斷依據。</p></blockquote>
 <h3 id="舊錄製沒有-acqjson-時">舊錄製沒有 <code>.acq.json</code> 時</h3>
 <p>每個錄製檔旁邊的 <code>{檔名}.acq.json</code> 記錄當時的積分時間與平均設定，但那是後來才加的功能，<strong>之前錄的檔沒有</strong>。</p>
+<p><strong>2026-11-18 以前的版本還有一個問題</strong>：存檔途中改積分時間不會換檔，而且收檔時會用當下的設定重寫 <code>.acq.json</code>。那段期間的錄製如果中途改過積分時間，檔案前段的實際積分時間和 <code>.acq.json</code> 寫的不一樣，也就是 sidecar 本身不可信。辨認方法是看曲線：中途改過積分時間的錄製，<strong>所有譜線會在同一個時間點一起跳一階</strong>（例如 1 ms 改成 0.1 ms，未飽和的線會降到約 1/10）。看到這種整體跳階的錄製，就不要拿來建基準。</p>
 <p>用沒有 sidecar 的錄製建基準，<code>LeakMonitorAcquisitionMismatch</code> 這道自動守衛就<strong>只比得了波長軸</strong>，積分時間差異完全偵測不到（這是刻意的：猜一個填進去，會讓該擋的時候放行）。而<strong>絕對強度會隨積分時間整個縮放</strong>。</p>
 <p><strong>可以用，但</strong>：紀錄裡要寫明「這條基準線的取像條件靠人工確認」，而且第 <a href="#14-收尾驗證">14</a> 節的實跑驗證要<strong>特別盯絕對強度項</strong>——那是唯一還能發現積分時間對不上的機會。</p>
 <hr>
@@ -486,11 +488,12 @@ td code{white-space:nowrap;}
 <blockquote><p>第 5 步是唯一能同時驗證上面三條安靜失效路徑的動作：基準沒被採用的話 % of baseline 不會在 100 附近；取像條件不對的話絕對強度項會整個偏掉。<strong>少了這一步，這份 SOP 的終點是「我按了 Save」，而不是「它在量」。</strong></p></blockquote>
 <hr>
 <h2 id="15-baseline-builder-獨有的拒絕訊息">15. Baseline Builder 獨有的拒絕訊息</h2>
-<p>下面四種訊息<strong>只有這個分頁會出現</strong>，<a href="golden-run-baseline-troubleshooting-zh-TW.md"><code>golden-run-baseline-troubleshooting-zh-TW.md</code></a> 沒有收。其餘的拒絕句子跟現場擷取共用，請查那份文件。</p>
+<p>下面五種訊息<strong>只有這個分頁會出現</strong>，<a href="golden-run-baseline-troubleshooting-zh-TW.md"><code>golden-run-baseline-troubleshooting-zh-TW.md</code></a> 沒有收。其餘的拒絕句子跟現場擷取共用，請查那份文件。</p>
 <div class="tablewrap"><table>
 <thead><tr><th>訊息（節錄）</th><th>意思</th><th>做什麼</th></tr></thead>
 <tbody>
 <tr><td><code>The selected recordings were taken on different wavelength axes …</code></td><td>選到的錄製<strong>波長軸不同</strong>（點數或起迄波長不同），合起來的基準沒有意義</td><td>只選同一軸的錄製。軸是從 CSV 標頭讀的，跟有沒有 sidecar 無關</td></tr>
+<tr><td><code>The selected recordings were taken at different integration times: {檔名} {值} ms, …</code></td><td>選到的錄製<strong>積分時間不同</strong>（看各檔的 <code>.acq.json</code>）。絕對強度隨積分時間縮放，合起來的基準兩邊都不對</td><td>只勾同一種積分時間的錄製。存檔途中改過積分時間的那一爐，<code>Rot</code> 空白和 <code>#1</code> 兩個檔要分開用</td></tr>
 <tr><td><code>only {n} usable frames across the selected windows, fewer than the {60} required</code></td><td>所有視窗<strong>加總</strong>不足 60 幀</td><td>放寬視窗，或再加一份錄製（流程 B）</td></tr>
 <tr><td><code>none of the selected recordings ran process {X}, which is the class this ratio measures (they are: …)</code></td><td>這條比值只量製程 X，但選到的錄製裡沒有 X</td><td>見<a href="#附錄-a多製程站台分類器開啟時">附錄 A</a></td></tr>
 <tr><td><code>Every selected recording was set aside by the consistency check.</code></td><td>每一份都被判為異類</td><td>錄製之間差異太大，多半是操作點根本不同。重新挑檔，不要用 <code>Keep anyway</code> 硬推</td></tr>
@@ -506,6 +509,8 @@ td code{white-space:nowrap;}
 <tr><td>異常錄製門檻</td><td>固定 <strong>5 σ</strong>，<strong>不可調</strong>；需要至少 3 份錄製才啟動</td></tr>
 <tr><td>一個檔一段</td><td>沒有「新增視窗」的控制項，每次選取都是取代</td></tr>
 <tr><td>多操作點</td><td>一條 Golden Run 只描述<strong>一個</strong>穩定操作點。多步驟製程要每個 step 各一份基準、人工切換</td></tr>
+<tr><td>沒有 <code>.acq.json</code> 的錄製</td><td>不知道積分時間，<strong>不會因為積分時間被拒絕</strong>。和有 sidecar 的錄製一起勾時，只比得了有 sidecar 的那些。要靠人工確認</td></tr>
+<tr><td>只比積分時間</td><td>平均次數、boxcar、背景移除等其他取像條件<strong>不比對</strong>，取像條件記的是第一個檔的</td></tr>
 <tr><td>製程分類</td><td>只顯示在 <code>State</code> 欄，<strong>不能篩選、不能人工覆寫</strong>判定結果</td></tr>
 <tr><td>Build 結果不會失效</td><td>改勾選／視窗／<code>Keep anyway</code> <strong>不會</strong>使上次 Build 的結果失效，<code>Save</code> 仍可按且存的是舊結果</td></tr>
 <tr><td>掃描會被靜默作廢</td><td>改 Ratio Setup／波長修正／分類器／觸發門檻後，既有掃描<strong>沒有任何提示</strong>就不再正確</td></tr>

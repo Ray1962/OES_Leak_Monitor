@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 
@@ -404,6 +405,23 @@ public static class BaselineBuilder
                            string.Join(" and ", axes.Select(a => $"{a.AxisLength} points " +
                                $"{a.AxisStartNm:0.#}–{a.AxisEndNm:0.#} nm")) +
                            ". A baseline pooled across them would be meaningless.", options);
+
+        // Counts scale with integration time, so recordings at two of them pooled give a level
+        // neither reads — and the run would carry only the first file's fingerprint, so the live
+        // mismatch check could not see it either. Since Core 0.1.11 a change mid-save splits one
+        // run into two files, which is exactly the pair someone ticks together. A recording with
+        // no sidecar (0) does not know its exposure; that is not a different one, and the SOP has
+        // the operator confirm it by hand.
+        var exposures = picks.Where(p => p.Scan.Acquisition.IntegrationTimeMs > 0)
+                             .GroupBy(p => Math.Round(p.Scan.Acquisition.IntegrationTimeMs, 6))
+                             .ToList();
+        if (exposures.Count > 1)
+            return Refused("The selected recordings were taken at different integration times: " +
+                           string.Join(", ", picks.Where(p => p.Scan.Acquisition.IntegrationTimeMs > 0)
+                               .Select(p => $"{p.Scan.DisplayName} " +
+                                   $"{p.Scan.Acquisition.IntegrationTimeMs.ToString("0.###", CultureInfo.InvariantCulture)} ms")) +
+                           ". Counts scale with integration time, so a baseline pooled across them " +
+                           "would match neither. Tick recordings of one integration time.", options);
 
         var keys = picks[0].Scan.Traces.Keys.ToList();
         var outliers = FindOutliers(picks, keys, options);
