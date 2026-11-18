@@ -959,7 +959,7 @@ check-oes-connect.cmd</code></pre>
 </li>
 </ul>
 <p><strong>一個檔只描述一個穩定操作點。</strong> 同一份錄製裡的兩段不同 step 不能平均成一個基準（原因寫在 <code>docs/adr/0001</code>）。</p>
-<p><strong>不同積分時間的錄製檔不要一起勾。</strong> 存檔途中改過積分時間的那一爐會變成兩個檔，在清單上是同一個時間、<code>Rot</code> 欄一個空白、一個 <code>#1</code>；兩個檔各自的 <code>.acq.json</code> 記著它的積分時間。絕對強度會隨積分時間整個縮放，把兩種一起勾會平均成一個兩邊都不是的基準。<strong>目前 Baseline Builder 只會擋下波長軸不同的錄製，不會檢查積分時間</strong>，請自己確認勾選的檔積分時間相同，而且和現在 Configuration 的設定一樣。</p>
+<p><strong>不同積分時間的錄製檔不要一起勾。</strong> 存檔途中改過積分時間的那一爐會變成兩個檔，在清單上是同一個時間、<code>Rot</code> 欄一個空白、一個 <code>#1</code>；兩個檔各自的 <code>.acq.json</code> 記著它的積分時間。絕對強度會隨積分時間整個縮放，把兩種一起勾會平均成一個兩邊都不是的基準，所以 <strong>Build 會直接拒絕</strong>，訊息 <code>The selected recordings were taken at different integration times: …</code> 會列出每個檔和它的積分時間。沒有 <code>.acq.json</code> 的舊錄製不知道自己的積分時間，程式不會因它拒絕，要人工確認。另外請確認勾選的檔和現在 Configuration 的積分時間一樣，否則建好的基準一套用就會出現 <code>LeakMonitorAcquisitionMismatch</code>。</p>
 <p><strong>交替跑多種製程的機台</strong>：設定了製程分類器（§6.4.2）時，掃描會替每份錄製標出它是哪個製程（<code>State</code> 欄），建出來的是<strong>一份</strong> Golden Run，裡面每個製程各有自己的基準。每條比值只從<strong>自己 Process class 的錄製</strong>取樣；勾選的錄製裡沒有它的製程時，會被拒絕並寫明它需要哪個製程、勾到的是哪些。程序見 Baseline Builder SOP 附錄 A。</p>
 <h4 id="畫面上有什麼">畫面上有什麼</h4>
 <p>由左而右：日期範圍 + <strong>Refresh</strong>、錄製清單（<code>Use</code> 勾選欄、檔名、日期、時間、大小、<code>zip</code> 標記、<code>Window</code> 已選視窗、<code>State</code> 掃描狀態、<code>Keep anyway</code> 覆寫欄）、<strong>Scan ticked</strong>；右邊是視窗數字框 + <strong>Suggest</strong> / <strong>Whole file</strong> 與曲線圖；最下方是 Golden Run 名稱、<strong>Build</strong>、<strong>Save as active baseline</strong> 與結果面板。</p>

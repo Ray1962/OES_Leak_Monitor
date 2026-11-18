@@ -111,7 +111,7 @@
    - 狀態列會顯示 `{n} recording(s) in {資料夾}`。列出 0 筆就是日期或資料夾不對。
 3. 在 **`Use`** 欄勾選要用的錄製。
    - **勾選（`Use`）和點選（看曲線）是兩回事**：清單只能單選，點某一列只是把它的曲線畫到右邊，不代表要用它建基準。
-   - **只勾積分時間相同、而且和現在 Configuration 設定一樣的錄製。** 打開每個檔旁邊的 `{檔名}.acq.json` 看 `integrationTimeMs`。存檔途中改過積分時間的那一爐會變成兩個檔（同一個時間，`Rot` 欄一個空白、一個 `#1`），兩個檔的積分時間不同，不能一起勾。程式不會替你擋（見第 [16](#16-現行版本的限制) 節）。
+   - **只勾積分時間相同、而且和現在 Configuration 設定一樣的錄製。** 打開每個檔旁邊的 `{檔名}.acq.json` 看 `integrationTimeMs`。存檔途中改過積分時間的那一爐會變成兩個檔（同一個時間，`Rot` 欄一個空白、一個 `#1`），兩個檔的積分時間不同，不能一起勾；勾了 Build 會拒絕（第 [15](#15-baseline-builder-獨有的拒絕訊息) 節）。沒有 `.acq.json` 的舊錄製程式無從比對，要靠人工確認。
 4. 按 **Scan ticked**。這是唯一花時間的一步，掃描期間所有按鈕都會停用。
 5. 掃完看 **`State`** 欄：
    - `{幀數} frames, {秒數} s` —— 正常。
@@ -338,11 +338,12 @@
 
 ## 15. Baseline Builder 獨有的拒絕訊息
 
-下面四種訊息**只有這個分頁會出現**，[`golden-run-baseline-troubleshooting-zh-TW.md`](golden-run-baseline-troubleshooting-zh-TW.md) 沒有收。其餘的拒絕句子跟現場擷取共用，請查那份文件。
+下面五種訊息**只有這個分頁會出現**，[`golden-run-baseline-troubleshooting-zh-TW.md`](golden-run-baseline-troubleshooting-zh-TW.md) 沒有收。其餘的拒絕句子跟現場擷取共用，請查那份文件。
 
 | 訊息（節錄） | 意思 | 做什麼 |
 |---|---|---|
 | `The selected recordings were taken on different wavelength axes …` | 選到的錄製**波長軸不同**（點數或起迄波長不同），合起來的基準沒有意義 | 只選同一軸的錄製。軸是從 CSV 標頭讀的，跟有沒有 sidecar 無關 |
+| `The selected recordings were taken at different integration times: {檔名} {值} ms, …` | 選到的錄製**積分時間不同**（看各檔的 `.acq.json`）。絕對強度隨積分時間縮放，合起來的基準兩邊都不對 | 只勾同一種積分時間的錄製。存檔途中改過積分時間的那一爐，`Rot` 空白和 `#1` 兩個檔要分開用 |
 | `only {n} usable frames across the selected windows, fewer than the {60} required` | 所有視窗**加總**不足 60 幀 | 放寬視窗，或再加一份錄製（流程 B） |
 | `none of the selected recordings ran process {X}, which is the class this ratio measures (they are: …)` | 這條比值只量製程 X，但選到的錄製裡沒有 X | 見[附錄 A](#附錄-a多製程站台分類器開啟時) |
 | `Every selected recording was set aside by the consistency check.` | 每一份都被判為異類 | 錄製之間差異太大，多半是操作點根本不同。重新挑檔，不要用 `Keep anyway` 硬推 |
@@ -361,7 +362,8 @@
 | 異常錄製門檻 | 固定 **5 σ**，**不可調**；需要至少 3 份錄製才啟動 |
 | 一個檔一段 | 沒有「新增視窗」的控制項，每次選取都是取代 |
 | 多操作點 | 一條 Golden Run 只描述**一個**穩定操作點。多步驟製程要每個 step 各一份基準、人工切換 |
-| 積分時間不同的錄製 | **不會被擋下**。只有波長軸不同會被拒絕；勾了不同積分時間的錄製，會平均成一個基準，取像條件記的是第一個檔的。要靠人工對照 `.acq.json` |
+| 沒有 `.acq.json` 的錄製 | 不知道積分時間，**不會因為積分時間被拒絕**。和有 sidecar 的錄製一起勾時，只比得了有 sidecar 的那些。要靠人工確認 |
+| 只比積分時間 | 平均次數、boxcar、背景移除等其他取像條件**不比對**，取像條件記的是第一個檔的 |
 | 製程分類 | 只顯示在 `State` 欄，**不能篩選、不能人工覆寫**判定結果 |
 | Build 結果不會失效 | 改勾選／視窗／`Keep anyway` **不會**使上次 Build 的結果失效，`Save` 仍可按且存的是舊結果 |
 | 掃描會被靜默作廢 | 改 Ratio Setup／波長修正／分類器／觸發門檻後，既有掃描**沒有任何提示**就不再正確 |
