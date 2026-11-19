@@ -691,7 +691,7 @@ check-oes-connect.cmd</code></pre>
 <tr><td>圓點</td><td>狀態顏色</td></tr>
 <tr><td><strong>名稱</strong></td><td>例如 <code>N₂ 337 / Ar 750</code></td></tr>
 <tr><td><strong>smoothed ratio</strong></td><td>EMA 平滑後的比值</td></tr>
-<tr><td><strong>% of Golden Run</strong></td><td>相對 Golden Run 基準線的 %（100% = 基準線）。訊號線用 <code>RawMean</code> 擷取的比值，這裡是 σ 分數（基準線 = 100、高一個 warn-σ = 120，見 §6.4.2）。出廠啟用的三條裡有兩條是這種。這條比值關掉 Golden Run 判斷時，標題會變成 <code>% of Golden Run (not judged)</code>：數字照樣顯示（看得出整體漂了多少），但它不再觸發警告或警報</td></tr>
+<tr><td><strong>% of Golden Run</strong></td><td>相對 Golden Run 基準線的 %（100% = 基準線）。訊號線用 <code>RawMean</code> 擷取的比值，這裡是 σ 分數（基準線 = 100、高一個 warn-σ = 120，見 §6.4.2）。出廠啟用的三條裡有兩條是這種。這條比值關掉 Golden Run 判斷時，標題會變成 <code>% of GR (not judged)</code>：數字照樣顯示（看得出整體漂了多少），但它不再觸發警告或警報</td></tr>
 <tr><td><strong>baseline (mean ± σ)</strong></td><td>這條比值的基準線平均值與標準差</td></tr>
 <tr><td><strong>step (vs rolling)</strong></td><td>只有開了滾動基準判斷（§6.4.2 的 Judging）的比值才有內容：平滑值相對「這條比值自己前幾分鐘中位數」的上升 %。暖機時顯示 <code>warming up N s</code>；漏氣中基準被固定住時加註 <code>(frozen)</code>；沒開時顯示 <code>—</code></td></tr>
 <tr><td><strong>斜率 / SNR</strong></td><td>上升速率，以及目前訊噪比</td></tr>
