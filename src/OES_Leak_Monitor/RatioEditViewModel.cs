@@ -95,6 +95,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _enabled        = def.Enabled;
         _processClass   = def.ProcessClass ?? "";
         _role           = def.Role;
+        _goldenRunJudging = def.GoldenRunJudging;
+        _stepJudging    = def.StepJudging;
+        _stepWarnRise   = def.StepWarnRise;
+        _stepAlarmRise  = def.StepAlarmRise;
 
         _autoName       = AutoName();
         _displayName    = string.IsNullOrWhiteSpace(def.DisplayName) ? _autoName : def.DisplayName;
@@ -294,6 +298,22 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         set => Set(ref _processClass, (value ?? "").Trim());
     }
 
+    private bool _goldenRunJudging = true, _stepJudging;
+    private double _stepWarnRise = RatioDefinition.DefaultStepWarnRise, _stepAlarmRise = RatioDefinition.DefaultStepAlarmRise;
+
+    /// <summary>Judge against the Golden Run baseline (<see cref="RatioDefinition.GoldenRunJudging"/>).
+    /// Carried through every save, so a save cannot reset it — the trap of #88.</summary>
+    public bool GoldenRunJudging { get => _goldenRunJudging; set => Set(ref _goldenRunJudging, value); }
+
+    /// <summary>Judge against the rolling baseline (<see cref="RatioDefinition.StepJudging"/>).</summary>
+    public bool StepJudging { get => _stepJudging; set => Set(ref _stepJudging, value); }
+
+    /// <summary>Step-path Warn rise, as a fraction (<see cref="RatioDefinition.StepWarnRise"/>).</summary>
+    public double StepWarnRise { get => _stepWarnRise; set => Set(ref _stepWarnRise, value); }
+
+    /// <summary>Step-path Alarm rise, as a fraction (<see cref="RatioDefinition.StepAlarmRise"/>).</summary>
+    public double StepAlarmRise { get => _stepAlarmRise; set => Set(ref _stepAlarmRise, value); }
+
     /// <summary>Builds a persistable definition from the current edits.</summary>
     public RatioDefinition ToDefinition() => new()
     {
@@ -312,6 +332,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         EmaTauSeconds = EmaTauSeconds,
         ConfirmSeconds = ConfirmSeconds,
         MinSnr = MinSnr,
+        GoldenRunJudging = GoldenRunJudging,
+        StepJudging = StepJudging,
+        StepWarnRise = StepWarnRise,
+        StepAlarmRise = StepAlarmRise,
     };
 
     /// <summary>True if the signal and reference are the same line (a meaningless ratio).

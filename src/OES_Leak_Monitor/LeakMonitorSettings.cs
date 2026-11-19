@@ -122,6 +122,45 @@ public sealed class RatioDefinition
     public double MinSnr { get; set; } = 5.0;
 
     /// <summary>
+    /// Judge this ratio against its Golden Run baseline (the factor / σ thresholds above). On by
+    /// default, so every settings file written before there was a second way of judging behaves
+    /// as it did. Turning it off stops this path raising Warning or Alarm only — the baseline
+    /// still drives the % -of-baseline display, the leak-rate fit and the capture-deviation log.
+    /// </summary>
+    public bool GoldenRunJudging { get; set; } = true;
+
+    /// <summary>
+    /// Judge this ratio against its own recent past — the <b>rolling baseline</b>: the median of
+    /// the last <see cref="LeakMonitorSettings.StepLookbackSeconds"/> of readings, excluding the
+    /// most recent <see cref="LeakMonitorSettings.StepGapSeconds"/>. Catches a leak that arrives
+    /// as a step while the leak-free level drifts by more than the leak moves it, which a fixed
+    /// baseline cannot (#89). Needs no Golden Run. Blind, by construction, to a leak present
+    /// from ignition or one that grows slowly — that stays the Golden Run path's job. Off by
+    /// default. Ignored for a value that carries a pedestal (<see cref="StepJudgingActive"/>).
+    /// </summary>
+    public bool StepJudging { get; set; }
+
+    /// <summary>Rise above the rolling baseline (EMA ÷ reference − 1, a fraction) that confirms
+    /// a Warning on the step path. There is no σ term: the live σ inflates at the very step being
+    /// detected, and a raw-frame σ puts 6σ too close to a real leak (#90).</summary>
+    public double StepWarnRise { get; set; } = DefaultStepWarnRise;
+
+    /// <summary>Rise above the rolling baseline that confirms an Alarm on the step path.</summary>
+    public double StepAlarmRise { get; set; } = DefaultStepAlarmRise;
+
+    public const double DefaultStepWarnRise = 0.10;
+    public const double DefaultStepAlarmRise = 0.15;
+
+    /// <summary>
+    /// Step judging as it actually runs: requested, and the value carries no pedestal. A rise
+    /// measured as a fraction of a reading that is mostly continuum is a fraction of the
+    /// continuum, not a leak signal — the same reason <see cref="ValueHasPedestal"/> drops the
+    /// Warn/Alarm factors.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool StepJudgingActive => StepJudging && !ValueHasPedestal;
+
+    /// <summary>
     /// True when the monitored value carries the continuum pedestal — the monitored line is read
     /// as a <see cref="LineExtractMode.RawMean"/>, which subtracts nothing. Everything that
     /// divides by the baseline mean has to know: with a mean of a few thousand counts and a σ of
@@ -178,6 +217,8 @@ public sealed class RatioDefinition
         SigmaWarn = SigmaWarn, SigmaAlarm = SigmaAlarm,
         EmaTauSeconds = EmaTauSeconds, ConfirmSeconds = ConfirmSeconds,
         MinSnr = MinSnr,
+        GoldenRunJudging = GoldenRunJudging, StepJudging = StepJudging,
+        StepWarnRise = StepWarnRise, StepAlarmRise = StepAlarmRise,
     };
 }
 
@@ -524,6 +565,73 @@ public sealed class LeakMonitorSettings
 
     /// <summary>Require at least two ratios in Alarm before the overall state is Alarm.</summary>
     public bool RequireTwoForAlarm { get; set; } = true;
+
+    /// <summary>How far back the rolling baseline reaches, seconds — long enough to average over
+    /// the frame scatter, short enough to follow a drift of a few %/10 min
+    /// (<see cref="RatioDefinition.StepJudging"/>). Shared by every ratio: it describes how a
+    /// leak step and the drift separate in time, which belongs to the process, not to a line.</summary>
+    public double StepLookbackSeconds { get; set; } = DefaultStepLookbackSeconds;
+
+    /// <summary>The most recent seconds left out of the rolling baseline, so the rising edge of a
+    /// leak does not pull the reference up with it.</summary>
+    public double StepGapSeconds { get; set; } = DefaultStepGapSeconds;
+
+    /// <summary>How much reference history the step path needs before it judges at all, seconds.
+    /// Together with <see cref="StepGapSeconds"/> this is the warm-up after every restart of the
+    /// smoothing (plasma on, Reset).</summary>
+    public double StepMinHistorySeconds { get; set; } = DefaultStepMinHistorySeconds;
+
+    public const double DefaultStepLookbackSeconds = 180;
+    public const double DefaultStepGapSeconds = 20;
+    public const double DefaultStepMinHistorySeconds = 20;
+
+    /// <summary>
+    /// Puts the step-judging values back inside their legal range and says what it changed, one
+    /// sentence per change. Clamped rather than rejected — every out-of-range value has an obvious
+    /// nearest legal one — and reported, because a threshold that silently differs from the file
+    /// is one nobody can explain afterwards. Ratio Setup refuses the same values at save; this is
+    /// for a hand-edited file.
+    /// </summary>
+    public List<string> NormalizeStepJudging()
+    {
+        var changes = new List<string>();
+        static bool Bad(double v) => double.IsNaN(v) || double.IsInfinity(v);
+
+        if (Bad(StepLookbackSeconds) || StepLookbackSeconds <= 0)
+        {
+            changes.Add($"stepLookbackSeconds {StepLookbackSeconds} → {DefaultStepLookbackSeconds} (must be > 0)");
+            StepLookbackSeconds = DefaultStepLookbackSeconds;
+        }
+        if (Bad(StepGapSeconds) || StepGapSeconds < 0 || StepGapSeconds >= StepLookbackSeconds)
+        {
+            double to = Math.Min(DefaultStepGapSeconds, StepLookbackSeconds / 2);
+            changes.Add($"stepGapSeconds {StepGapSeconds} → {to} (must be ≥ 0 and below stepLookbackSeconds {StepLookbackSeconds})");
+            StepGapSeconds = to;
+        }
+        double room = StepLookbackSeconds - StepGapSeconds;
+        if (Bad(StepMinHistorySeconds) || StepMinHistorySeconds <= 0 || StepMinHistorySeconds > room)
+        {
+            double to = Bad(StepMinHistorySeconds) || StepMinHistorySeconds <= 0
+                ? Math.Min(DefaultStepMinHistorySeconds, room) : room;
+            changes.Add($"stepMinHistorySeconds {StepMinHistorySeconds} → {to} (must be > 0 and at most stepLookbackSeconds − stepGapSeconds = {room})");
+            StepMinHistorySeconds = to;
+        }
+        foreach (var r in Ratios)
+        {
+            if (Bad(r.StepWarnRise) || r.StepWarnRise <= 0)
+            {
+                changes.Add($"{r.DisplayName}: stepWarnRise {r.StepWarnRise} → {RatioDefinition.DefaultStepWarnRise} (must be > 0)");
+                r.StepWarnRise = RatioDefinition.DefaultStepWarnRise;
+            }
+            if (Bad(r.StepAlarmRise) || r.StepAlarmRise < r.StepWarnRise)
+            {
+                double to = Math.Max(r.StepWarnRise, Bad(r.StepAlarmRise) ? RatioDefinition.DefaultStepAlarmRise : r.StepAlarmRise);
+                changes.Add($"{r.DisplayName}: stepAlarmRise {r.StepAlarmRise} → {to} (must be at least stepWarnRise {r.StepWarnRise})");
+                r.StepAlarmRise = to;
+            }
+        }
+        return changes;
+    }
 
     /// <summary>In Test Mode the ratios are still shown but alarms are not raised.</summary>
     public bool SuppressAlarmsInTestMode { get; set; } = true;

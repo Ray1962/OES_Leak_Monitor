@@ -71,7 +71,68 @@ public readonly record struct RatioSnapshot(
     /// <summary>The reading carries a continuum pedestal, so <see cref="PercentOfBaseline"/> is
     /// a σ-score rather than a percentage and the slope reads in σ/min — see
     /// <see cref="RatioDefinition.ValueHasPedestal"/>.</summary>
-    bool HasPedestal);
+    bool HasPedestal)
+{
+    /// <summary>Which judging paths are on for this entry (Golden Run is the only one unless the
+    /// entry turns step judging on).</summary>
+    public JudgingPaths EnabledPaths { get; init; } = JudgingPaths.GoldenRun;
+
+    /// <summary>The path(s) behind the current Warning or Alarm; <see cref="JudgingPaths.None"/>
+    /// in every other state.</summary>
+    public JudgingPaths RaisedBy { get; init; }
+
+    /// <summary>Smoothed value over the rolling baseline, minus one (a fraction). NaN while the
+    /// step path is off or warming up.</summary>
+    public double StepRise { get; init; } = double.NaN;
+
+    /// <summary>The rolling baseline the rise is measured against (raw-ratio units). NaN while
+    /// the step path is off or warming up.</summary>
+    public double StepReference { get; init; } = double.NaN;
+
+    /// <summary>Seconds until the step path has enough history to judge; 0 once it judges, NaN
+    /// when the path is off.</summary>
+    public double StepWarmupSecondsRemaining { get; init; } = double.NaN;
+
+    /// <summary>True while the rolling baseline is held at its pre-event value because the rise
+    /// is at or above the Warn rise.</summary>
+    public bool StepReferenceFrozen { get; init; }
+}
+
+/// <summary>The ways a ratio can be judged. A flags set, because a ratio runs either or both and
+/// an alarm can be raised by either or both.</summary>
+[Flags]
+public enum JudgingPaths
+{
+    None = 0,
+    /// <summary>Against the Golden Run baseline (factor / σ thresholds).</summary>
+    GoldenRun = 1,
+    /// <summary>Against the rolling baseline (rise thresholds).</summary>
+    Step = 2,
+}
+
+/// <summary>Short labels for <see cref="JudgingPaths"/>, as the panel and the log write them.</summary>
+public static class JudgingPathsText
+{
+    /// <summary>"GR", "Step", "GR+Step", or "" for none.</summary>
+    public static string Label(JudgingPaths p) => p switch
+    {
+        JudgingPaths.GoldenRun => "GR",
+        JudgingPaths.Step => "Step",
+        JudgingPaths.GoldenRun | JudgingPaths.Step => "GR+Step",
+        _ => "",
+    };
+}
+
+/// <summary>The rolling-baseline windows, shared by every ratio's step path
+/// (<see cref="LeakMonitorSettings.StepLookbackSeconds"/> and friends).</summary>
+public readonly record struct StepWindows(double LookbackSeconds, double GapSeconds, double MinHistorySeconds)
+{
+    public static StepWindows Default => new(LeakMonitorSettings.DefaultStepLookbackSeconds,
+        LeakMonitorSettings.DefaultStepGapSeconds, LeakMonitorSettings.DefaultStepMinHistorySeconds);
+
+    public static StepWindows From(LeakMonitorSettings s) =>
+        new(s.StepLookbackSeconds, s.StepGapSeconds, s.StepMinHistorySeconds);
+}
 
 /// <summary>
 /// Runtime monitor for one actinometric ratio: EMA smoothing, two-level threshold
@@ -99,6 +160,16 @@ public sealed class RatioMonitor
     // The Golden Run judgement: thresholds relative to the baseline mean, its confirmation
     // timers and its latch. The ratio's state is formed from its paths (see JudgingPath).
     private readonly JudgingPath _gr = new();
+
+    // The step judgement: the smoothed value against the median of this ratio's own recent raw
+    // readings (the rolling baseline). History holds raw readings within the lookback window; it
+    // stops taking frames while frozen, and is cleared wherever the EMA restarts.
+    private readonly JudgingPath _step = new();
+    private readonly StepWindows _windows;
+    private readonly List<(DateTime T, double V)> _stepHistory = new();
+    private DateTime? _stepHistoryStart;
+    private double _stepRef = double.NaN, _stepRise = double.NaN, _stepWarmup = double.NaN;
+    private bool _stepFrozen;
     private RatioState _state = RatioState.NoBaseline;
     private bool _plasmaPresent;
 
@@ -115,7 +186,15 @@ public sealed class RatioMonitor
     private readonly List<(double T, double V)> _trend = new();
     private double _slopePerMinute;
 
-    public RatioMonitor(RatioDefinition def) => _def = def;
+    public RatioMonitor(RatioDefinition def, StepWindows? windows = null)
+    {
+        _def = def;
+        _windows = windows ?? StepWindows.Default;
+        _stepWarmup = StepOn ? _windows.GapSeconds + _windows.MinHistorySeconds : double.NaN;
+    }
+
+    private bool GrOn => _def.GoldenRunJudging;
+    private bool StepOn => _def.StepJudgingActive;
 
     public string Key => _def.Key;
     public RatioState State => _state;
@@ -144,7 +223,7 @@ public sealed class RatioMonitor
         _baseMean = mean;
         _baseSigma = double.IsNaN(sigma) || sigma < 0 ? 0 : sigma;
         _hasBaseline = !double.IsNaN(mean) && mean > 0;
-        if (!_hasBaseline) _state = RatioState.NoBaseline;
+        if (!_hasBaseline && !StepOn) _state = RatioState.NoBaseline;
     }
 
     public void ClearBaseline()
@@ -155,19 +234,29 @@ public sealed class RatioMonitor
     }
 
     /// <summary>Clears the latched alarm so a recovered process can return to Normal.</summary>
-    public void Acknowledge() => _gr.Acknowledge();
+    public void Acknowledge()
+    {
+        _gr.Acknowledge();
+        _step.Acknowledge();
+    }
 
     /// <summary>True while an alarm is latched and unacknowledged.</summary>
-    public bool HasLatchedAlarm => _gr.Latched;
+    public bool HasLatchedAlarm => _gr.Latched || _step.Latched;
+
+    /// <summary>Which paths hold a latch right now.</summary>
+    public JudgingPaths LatchedPaths =>
+        (_gr.Latched ? JudgingPaths.GoldenRun : JudgingPaths.None) |
+        (_step.Latched ? JudgingPaths.Step : JudgingPaths.None);
 
     /// <summary>
     /// Re-arms a latch carried over from the monitor instance this one replaced (a ratio-set
     /// reload rebuilds every monitor). Only the operator's Acknowledge clears a latch — a
     /// confirmed leak must not disappear because acquisition was restarted.
     /// </summary>
-    public void RestoreLatchedAlarm()
+    public void RestoreLatchedAlarm(JudgingPaths paths = JudgingPaths.GoldenRun)
     {
-        _gr.RestoreLatch();
+        if (paths.HasFlag(JudgingPaths.Step)) _step.RestoreLatch();
+        if (paths.HasFlag(JudgingPaths.GoldenRun) || paths == JudgingPaths.None) _gr.RestoreLatch();
         _state = RatioState.Alarm;
     }
 
@@ -184,16 +273,17 @@ public sealed class RatioMonitor
         _rawRatio = _numerator = _denominator = double.NaN;
         _numSnr = _denSnr = double.NaN;
         _gr.ResetTimers();
+        ClearStepHistory();
         _plasmaLostSince = _lowSignalSince = null;
         _trend.Clear();
         _slopePerMinute = 0;
         _plasmaPresent = false;
-        if (clearLatch) _gr.Acknowledge();
+        if (clearLatch) Acknowledge();
         // "No Baseline" names a fault to fix. For an entry that is never judged, not having one
         // is the expected condition, so idle reads as plasma-off instead.
         _state = HasLatchedAlarm
             ? RatioState.Alarm
-            : (_hasBaseline || !_def.Alarms ? RatioState.NoPlasma : RatioState.NoBaseline);
+            : (_hasBaseline || !_def.Alarms || StepOn ? RatioState.NoPlasma : RatioState.NoBaseline);
     }
 
     /// <summary>
@@ -207,6 +297,7 @@ public sealed class RatioMonitor
     {
         _hasEma = false;
         _gr.ResetTimers();
+        ClearStepHistory();
         _plasmaLostSince = _lowSignalSince = null;
         _trend.Clear();
         _slopePerMinute = 0;
@@ -223,8 +314,9 @@ public sealed class RatioMonitor
         _state = RatioState.Disabled;
         _hasEma = false;
         _gr.ResetTimers();
+        ClearStepHistory();
         _plasmaLostSince = _lowSignalSince = null;
-        _gr.Acknowledge();
+        Acknowledge();
         _trend.Clear();
         _slopePerMinute = 0;
         _rawRatio = _numerator = _denominator = double.NaN;
@@ -301,6 +393,7 @@ public sealed class RatioMonitor
             // value doesn't bridge the gap when plasma returns.
             _state = RatioState.NoPlasma;
             _gr.ResetTimers();
+            ClearStepHistory();
             _hasEma = false;
             _trend.Clear();
             _slopePerMinute = 0;
@@ -331,6 +424,7 @@ public sealed class RatioMonitor
         }
         _lastTs = ts;
         UpdateTrend(ts, _ema);
+        if (StepOn) UpdateStepReference(ts, rawRatio);
 
         // A non-alarming entry stops here: the value, the EMA and the trend are all computed
         // above and reach the CSV, the batch record and the panel, but nothing below this line
@@ -340,6 +434,7 @@ public sealed class RatioMonitor
         if (!_def.Alarms)
         {
             _gr.ResetTimers();
+            _step.ResetTimers();
             _state = RatioState.Observing;
             return;
         }
@@ -374,18 +469,125 @@ public sealed class RatioMonitor
             // Don't let near-noise excursions accumulate confirmation time; preserve a latched
             // alarm so a real, already-confirmed leak isn't cleared by the signal dipping.
             _gr.ResetTimers();
+            _step.ResetTimers();
             _state = HasLatchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
             return;
         }
         _lowSignalSince = null;
 
-        if (!_hasBaseline)
+        // Golden Run alone, with no baseline: unjudgeable, exactly as before there was a second path.
+        if (!StepOn && !_hasBaseline)
         {
             _state = RatioState.NoBaseline;
             return;
         }
 
-        _state = _gr.Judge(_ema, WarnThreshold, AlarmThreshold, ts, _def.ConfirmSeconds, SuppressLatch);
+        bool grJudges = GrOn && _hasBaseline;
+        bool stepJudges = StepOn && !double.IsNaN(_stepRise);
+        if (grJudges)
+            _gr.Judge(_ema, WarnThreshold, AlarmThreshold, ts, _def.ConfirmSeconds, SuppressLatch);
+        else
+            _gr.ResetTimers();
+        // The step path does not depend on the baseline being replaced, so a Golden Run capture
+        // has no reason to suppress it: a step during a capture is a leak being recorded as the
+        // leak-free level, which is exactly when it must be said.
+        if (stepJudges)
+            _step.Judge(_stepRise, _def.StepWarnRise, _def.StepAlarmRise, ts, _def.ConfirmSeconds, suppressLatch: false);
+        else
+            _step.ResetTimers();
+
+        if (HasLatchedAlarm) { _state = RatioState.Alarm; return; }
+        // Nothing judges yet (step warming up, Golden Run off or without a baseline): the
+        // not-yet-judged state, which takes no part in the composite. The snapshot's warm-up
+        // seconds say why, so the panel can call it "warming up" rather than a missing baseline.
+        if (!grJudges && !stepJudges) { _state = RatioState.NoBaseline; return; }
+        _state = Worse(grJudges ? _gr.State : RatioState.Normal, stepJudges ? _step.State : RatioState.Normal);
+    }
+
+    private static RatioState Worse(RatioState a, RatioState b) =>
+        a == RatioState.Alarm || b == RatioState.Alarm ? RatioState.Alarm
+        : a == RatioState.Warning || b == RatioState.Warning ? RatioState.Warning
+        : RatioState.Normal;
+
+    /// <summary>The path(s) behind the current state: for Alarm, every latched or Alarm-confirming
+    /// path; for Warning, every path confirming at least a Warning.</summary>
+    private JudgingPaths RaisedBy()
+    {
+        JudgingPaths p = JudgingPaths.None;
+        if (_state == RatioState.Alarm)
+        {
+            if (_gr.Latched || _gr.Confirmed == RatioState.Alarm) p |= JudgingPaths.GoldenRun;
+            if (_step.Latched || _step.Confirmed == RatioState.Alarm) p |= JudgingPaths.Step;
+        }
+        else if (_state == RatioState.Warning)
+        {
+            if (_gr.Confirmed is RatioState.Warning or RatioState.Alarm) p |= JudgingPaths.GoldenRun;
+            if (_step.Confirmed is RatioState.Warning or RatioState.Alarm) p |= JudgingPaths.Step;
+        }
+        return p;
+    }
+
+    private void ClearStepHistory()
+    {
+        _stepHistory.Clear();
+        _stepHistoryStart = null;
+        _stepRef = _stepRise = double.NaN;
+        _stepWarmup = StepOn ? _windows.GapSeconds + _windows.MinHistorySeconds : double.NaN;
+        _stepFrozen = false;
+        _step.ResetTimers();
+    }
+
+    /// <summary>
+    /// Feeds one raw reading into the rolling baseline and recomputes the rise. The reference is
+    /// the median of the readings in <c>[t − lookback, t − gap]</c> (a median, so one bad frame
+    /// cannot move it), available once the history spans gap + minimum history. While the rise is
+    /// at or above the Warn rise the reference is frozen: it takes no new readings and keeps its
+    /// value, so a leak lasting longer than the lookback is not absorbed into its own reference.
+    /// </summary>
+    private void UpdateStepReference(DateTime ts, double raw)
+    {
+        _stepHistoryStart ??= ts;
+        if (!_stepFrozen)
+        {
+            _stepHistory.Add((ts, raw));
+            var cutoff = ts.AddSeconds(-_windows.LookbackSeconds);
+            int drop = 0;
+            while (drop < _stepHistory.Count && _stepHistory[drop].T < cutoff) drop++;
+            if (drop > 0) _stepHistory.RemoveRange(0, drop);
+        }
+
+        double remaining = (_windows.GapSeconds + _windows.MinHistorySeconds)
+                           - (ts - _stepHistoryStart.Value).TotalSeconds;
+        if (remaining > 0)
+        {
+            _stepWarmup = remaining;
+            _stepRef = _stepRise = double.NaN;
+            return;
+        }
+        _stepWarmup = 0;
+
+        if (!_stepFrozen)
+        {
+            var upTo = ts.AddSeconds(-_windows.GapSeconds);
+            var vals = new List<double>(_stepHistory.Count);
+            foreach (var (t, v) in _stepHistory)
+                if (t <= upTo && !double.IsNaN(v)) vals.Add(v);
+            // Keep the last reference when the window is momentarily empty — after a frozen event
+            // longer than the lookback, every pre-event reading has aged out and the next `gap`
+            // seconds would otherwise go unjudged.
+            double median = Median(vals);
+            if (!double.IsNaN(median)) _stepRef = median;
+        }
+        _stepRise = _stepRef > 0 ? _ema / _stepRef - 1.0 : double.NaN;
+        _stepFrozen = !double.IsNaN(_stepRise) && _stepRise >= _def.StepWarnRise;
+    }
+
+    private static double Median(List<double> v)
+    {
+        if (v.Count == 0) return double.NaN;
+        v.Sort();
+        int n = v.Count;
+        return n % 2 == 1 ? v[n / 2] : 0.5 * (v[n / 2 - 1] + v[n / 2]);
     }
 
     private void UpdateTrend(DateTime ts, double value)
@@ -463,5 +665,14 @@ public sealed class RatioMonitor
         _denSnr,
         _def.MonitorMode,
         _def.Role,
-        _def.ValueHasPedestal);
+        _def.ValueHasPedestal)
+    {
+        EnabledPaths = (GrOn ? JudgingPaths.GoldenRun : JudgingPaths.None) |
+                       (StepOn ? JudgingPaths.Step : JudgingPaths.None),
+        RaisedBy = RaisedBy(),
+        StepRise = StepOn ? _stepRise : double.NaN,
+        StepReference = StepOn ? _stepRef : double.NaN,
+        StepWarmupSecondsRemaining = StepOn ? _stepWarmup : double.NaN,
+        StepReferenceFrozen = StepOn && _stepFrozen,
+    };
 }
