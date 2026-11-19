@@ -128,7 +128,7 @@ public sealed class RatioViewModel : INotifyPropertyChanged
         StepText = FormatStep(s);
         PercentCaption = s.EnabledPaths.HasFlag(JudgingPaths.GoldenRun)
             ? "% of Golden Run"
-            : "% of Golden Run (not judged)";
+            : "% of GR (not judged)";
         ValueText = double.IsNaN(s.SmoothedRatio) ? "—" : s.SmoothedRatio.ToString("G4");
         BaselineText = s.HasBaseline
             ? $"{s.BaselineMean:G4} ± {s.BaselineSigma:G3}"

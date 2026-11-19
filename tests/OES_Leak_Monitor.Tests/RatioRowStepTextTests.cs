@@ -59,7 +59,7 @@ public class RatioRowStepTextTests
     public void Golden_Run_percent_is_captioned_not_judged_when_that_path_is_off()
     {
         var vm = Row(Snap(RatioState.Normal, JudgingPaths.Step, rise: 0.01));
-        Assert.Equal("% of Golden Run (not judged)", vm.PercentCaption);
+        Assert.Equal("% of GR (not judged)", vm.PercentCaption);
         Assert.Equal("100 %", vm.PercentText);   // still shown: it is the drift
     }
 }
