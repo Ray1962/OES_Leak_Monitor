@@ -324,23 +324,23 @@
                                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Warn factor (×mean)"
                                                    Style="{StaticResource ThreshLabel}"/>
                                         <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ThreshBox}"
-                                                 Text="{Binding WarnFactor}"
+                                                 Text="{Binding WarnFactor}" IsEnabled="{Binding GoldenRunFieldsEnabled}"
                                                  ToolTip="Warning trips at this multiple of the baseline mean (1.2 = +20%)."/>
                                         <TextBlock Grid.Row="0" Grid.Column="3" Text="Alarm factor (×mean)"
                                                    Style="{StaticResource ThreshLabel}"/>
                                         <TextBox Grid.Row="0" Grid.Column="4" Style="{StaticResource ThreshBox}"
-                                                 Text="{Binding AlarmFactor}"
+                                                 Text="{Binding AlarmFactor}" IsEnabled="{Binding GoldenRunFieldsEnabled}"
                                                  ToolTip="Alarm trips at this multiple of the baseline mean (1.5 = +50%)."/>
 
                                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Warn σ (×sigma)"
                                                    Style="{StaticResource ThreshLabel}"/>
                                         <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ThreshBox}"
-                                                 Text="{Binding SigmaWarn}"
+                                                 Text="{Binding SigmaWarn}" IsEnabled="{Binding GoldenRunFieldsEnabled}"
                                                  ToolTip="Also warns at baseline mean + this many σ — whichever threshold is higher wins."/>
                                         <TextBlock Grid.Row="1" Grid.Column="3" Text="Alarm σ (×sigma)"
                                                    Style="{StaticResource ThreshLabel}"/>
                                         <TextBox Grid.Row="1" Grid.Column="4" Style="{StaticResource ThreshBox}"
-                                                 Text="{Binding SigmaAlarm}"
+                                                 Text="{Binding SigmaAlarm}" IsEnabled="{Binding GoldenRunFieldsEnabled}"
                                                  ToolTip="Also alarms at baseline mean + this many σ."/>
 
                                         <TextBlock Grid.Row="2" Grid.Column="0" Text="EMA τ (s)"
@@ -360,6 +360,41 @@
                                                  Text="{Binding MinSnr}"
                                                  ToolTip="Both lines must clear this signal-to-noise ratio for the ratio to be trusted. Below it the ratio reads &quot;Low Signal&quot; and is held out of the alarm — guards against false alarms when the detection wavelength's plasma emission is near the noise floor. 0 disables the gate."/>
                                     </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Judging -->
+                            <Border Background="#F7F9FC" BorderBrush="#E3E8F0" BorderThickness="1"
+                                    CornerRadius="4" Padding="10" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Judging" FontWeight="SemiBold"
+                                               Foreground="#1F3A66" Margin="0,0,0,6"/>
+                                    <CheckBox Content="Golden Run baseline"
+                                              IsChecked="{Binding GoldenRunJudging}" Margin="0,0,0,4"
+                                              ToolTip="Warn / Alarm against the captured Golden Run, using the factor and σ thresholds above. Turned off, the Golden Run still drives the % column, the leak-rate estimate and the capture log; it just no longer raises Warning or Alarm."/>
+                                    <CheckBox Content="Rolling baseline (step)"
+                                              IsChecked="{Binding StepJudging}" IsEnabled="{Binding StepAvailable}"
+                                              ToolTip="Warn / Alarm when the smoothed value rises above the median of this ratio's own last few minutes. Follows a slow drift and still catches a leak that arrives as a step; needs no Golden Run. Blind to a leak already present at ignition, or one that grows slowly."/>
+                                    <Grid Margin="22,6,0,0" IsEnabled="{Binding StepJudging}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="24"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="90"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Warn rise (%)" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="1" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding StepWarnRisePercent}"
+                                                 ToolTip="Warning once the smoothed value has stayed this many percent above the rolling baseline for the Confirm time. The rolling baseline is held at its pre-event value from this level on."/>
+                                        <TextBlock Grid.Column="3" Text="Alarm rise (%)" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="4" Style="{StaticResource ThreshBox}"
+                                                 Text="{Binding StepAlarmRisePercent}"
+                                                 ToolTip="Alarm (latched) once the smoothed value has stayed this many percent above the rolling baseline for the Confirm time. Must be at least the Warn rise."/>
+                                    </Grid>
+                                    <TextBlock Text="A raw (RawMean) reading carries the continuum pedestal, so it can only be judged against the Golden Run baseline."
+                                               TextWrapping="Wrap" FontSize="11" Foreground="#8A6D3B" Margin="0,6,0,0"
+                                               Visibility="{Binding ValueHasPedestal, Converter={StaticResource BoolToVis}}"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
