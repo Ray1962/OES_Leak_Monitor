@@ -691,10 +691,11 @@ check-oes-connect.cmd</code></pre>
 <tr><td>圓點</td><td>狀態顏色</td></tr>
 <tr><td><strong>名稱</strong></td><td>例如 <code>N₂ 337 / Ar 750</code></td></tr>
 <tr><td><strong>smoothed ratio</strong></td><td>EMA 平滑後的比值</td></tr>
-<tr><td><strong>百分比</strong></td><td>相對基準線的 %（100% = 基準線）。訊號線用 <code>RawMean</code> 擷取的比值，這裡是 σ 分數（基準線 = 100、高一個 warn-σ = 120，見 §6.4.2）。出廠啟用的三條裡有兩條是這種</td></tr>
+<tr><td><strong>% of Golden Run</strong></td><td>相對 Golden Run 基準線的 %（100% = 基準線）。訊號線用 <code>RawMean</code> 擷取的比值，這裡是 σ 分數（基準線 = 100、高一個 warn-σ = 120，見 §6.4.2）。出廠啟用的三條裡有兩條是這種。這條比值關掉 Golden Run 判斷時，標題會變成 <code>% of Golden Run (not judged)</code>：數字照樣顯示（看得出整體漂了多少），但它不再觸發警告或警報</td></tr>
 <tr><td><strong>baseline (mean ± σ)</strong></td><td>這條比值的基準線平均值與標準差</td></tr>
+<tr><td><strong>step (vs rolling)</strong></td><td>只有開了滾動基準判斷（§6.4.2 的 Judging）的比值才有內容：平滑值相對「這條比值自己前幾分鐘中位數」的上升 %。暖機時顯示 <code>warming up N s</code>；漏氣中基準被固定住時加註 <code>(frozen)</code>；沒開時顯示 <code>—</code></td></tr>
 <tr><td><strong>斜率 / SNR</strong></td><td>上升速率，以及目前訊噪比</td></tr>
-<tr><td><strong>狀態</strong></td><td><code>Normal</code> / <code>WARNING</code> / <code>ALARM</code> / <code>No Plasma</code> / <code>Low Signal</code> / <code>No Baseline</code> / <code>Disabled</code> / <code>Observing</code> / <code>Not this process</code></td></tr>
+<tr><td><strong>狀態</strong></td><td><code>Normal</code> / <code>WARNING</code> / <code>ALARM</code> / <code>No Plasma</code> / <code>Low Signal</code> / <code>No Baseline</code> / <code>Disabled</code> / <code>Observing</code> / <code>Not this process</code>。開了滾動基準的比值，警告／警報會寫出是哪條路徑觸發的：<code>ALARM · Step</code>、<code>WARNING · GR</code>、<code>ALARM · GR+Step</code>；暖機中顯示 <code>Warming up</code></td></tr>
 </tbody></table></div>
 <p>滑鼠停在該列上會顯示詳細數值（含目前的 warn / alarm 門檻）。</p>
 <p><strong>九種狀態</strong></p>
@@ -706,7 +707,7 @@ check-oes-connect.cmd</code></pre>
 <tr><td><code>ALARM</code></td><td>紅</td><td>持續超過警報門檻（鎖存）</td></tr>
 <tr><td><code>No Plasma</code></td><td>灰</td><td>電漿閘門關著：記錄器的觸發量低於門檻，或（<code>Ratio</code> 模式）參考譜線低於它的 floor</td></tr>
 <tr><td><code>Low Signal</code></td><td>藍紫</td><td>電漿有開，但被監控的譜線（<code>Ratio</code> 模式還包括參考譜線）太靠近雜訊底。<strong>這條比值被排除在警報判定之外</strong></td></tr>
-<tr><td><code>No Baseline</code></td><td>灰</td><td>使用中的 Golden Run 沒有這條比值的基準線（見 §9.5），不參與警報</td></tr>
+<tr><td><code>No Baseline</code></td><td>灰</td><td>使用中的 Golden Run 沒有這條比值的基準線（見 §9.5），不參與警報。只用滾動基準判斷的比值在暖機的前約 40 秒顯示 <code>Warming up</code>，同樣不參與警報</td></tr>
 <tr><td><code>Disabled</code></td><td>淺灰</td><td>在 Ratio Setup 取消勾選</td></tr>
 <tr><td><code>Observing</code></td><td>鋼藍</td><td><strong>有在記錄，但不判定</strong>。這條比值的 Role 被設成 <code>TrendOnly</code> 或 <code>Guard</code>（見 §6.4.2）</td></tr>
 <tr><td><code>Not this process</code></td><td>深灰</td><td><strong>現在跑的不是這條比值負責的製程</strong>（見 §6.4.2 的 Process class）</td></tr>
@@ -841,6 +842,28 @@ check-oes-connect.cmd</code></pre>
 </li>
 </ul>
 <p>Process class 填的名稱要和分類器或 CEID 對照表裡的類別名稱相同(不分大小寫)。兩個來源都沒有啟用時,填了也不會篩選,這條比值照樣每一段都判定。</p>
+<p><strong>Judging（判斷方式）</strong>　每條比值可以用兩種方式判斷，兩種都開時，狀態取比較嚴重的那一個：</p>
+<div class="tablewrap"><table>
+<thead><tr><th>選項</th><th>判斷依據</th><th>擅長</th><th>看不到</th></tr></thead>
+<tbody>
+<tr><td><strong>Golden Run baseline</strong></td><td>上方 Alarm thresholds 的倍數／σ 門檻，相對使用中的 Golden Run</td><td>開電漿時就已經在漏、慢慢變大的漏氣</td><td>基準本身漂得比漏氣訊號還大時（會誤報或漏報）</td></tr>
+<tr><td><strong>Rolling baseline (step)</strong></td><td>平滑值相對這條比值<strong>自己前 3 分鐘</strong>（排除最近 20 秒）的中位數，上升超過 <code>Warn rise (%)</code> / <code>Alarm rise (%)</code>，並持續 <code>Confirm</code> 秒</td><td>開閥那種 10–20 秒內衝上去的跳階；跟著慢速漂移走，不需要 Golden Run</td><td>開電漿時就已經在漏、慢慢變大的漏氣</td></tr>
+</tbody></table></div>
+<ul>
+<li>只勾 Rolling baseline 時，上方 Golden Run 的倍數與 σ 欄會變灰（數值保留）；% of Golden Run 欄仍然顯示，只是不再判定。
+</li>
+<li>滾動基準在每次開始擷取（或 Reset Run、電漿熄滅後重新點燃）後要<strong>約 40 秒暖機</strong>才開始判斷。量測 SOP 請在開始擷取後至少 40 秒才開閥。
+</li>
+<li>上升超過 Warn rise 時基準會<strong>固定在漏氣前的值</strong>（畫面標 <code>(frozen)</code>），所以漏很久也不會被吸收掉。
+</li>
+<li>訊號線用 <code>RawMean</code> 擷取的比值不能勾 Rolling baseline：讀值裡大部分是連續背景，「上升 %」量到的是背景，不是漏氣。
+</li>
+<li>兩個都不勾無法存檔；只想記錄不判定，請把 Role 改成 <code>TrendOnly</code>。
+</li>
+<li>滾動基準的時間窗（180 / 20 / 20 秒）是全機共用設定，在 <code>settings.json</code> 的 <code>leakMonitor.stepLookbackSeconds</code>、<code>stepGapSeconds</code>、<code>stepMinHistorySeconds</code>，畫面上沒有欄位。
+</li>
+</ul>
+<blockquote><p>📝 為什麼需要它：2026-11-19 實驗機的空氣洩漏測試裡，DV=300 的漏氣三次都讓 NO/Ar 上升約 30%、OH/Ar 上升約 8%， 但同一天沒漏氣時的水準就漂了將近 30 個百分點（剛開電漿偏高、之後一路往下滑）。固定的 Golden Run 因此在開電漿時誤報、 在基準往下漂時漏報；滾動基準在 11 個錄檔上 6 次漏氣全抓到、5 次沒漏氣 0 誤報。</p></blockquote>
 <p>底部 <strong>Save</strong>（Engineer+）／ <strong>Revert</strong>（丟棄未存檔的修改）。</p>
 <hr>
 <h3 id="65-wavelength-calibration波長校正">6.5 Wavelength Calibration（波長校正）</h3>
