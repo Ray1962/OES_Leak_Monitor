@@ -84,10 +84,11 @@
                                     <ColumnDefinition Width="28"/>
                                     <ColumnDefinition Width="180"/>
                                     <ColumnDefinition Width="120"/>
-                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="120"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="130"/>
-                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="130"/>
                                 </Grid.ColumnDefinitions>
 
                                 <Ellipse Grid.Column="0" Width="13" Height="13"
@@ -104,24 +105,33 @@
                                     <TextBlock Text="{Binding ValueText}" FontSize="13"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Column="3" Text="{Binding PercentText}"
-                                           FontSize="17" FontWeight="Bold"
-                                           Foreground="{Binding StateBrush}"
-                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding PercentCaption}" FontSize="10" Foreground="#999"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding PercentText}"
+                                               FontSize="17" FontWeight="Bold"
+                                               Foreground="{Binding StateBrush}"/>
+                                </StackPanel>
 
                                 <StackPanel Grid.Column="4" VerticalAlignment="Center">
                                     <TextBlock Text="baseline (mean ± σ)" FontSize="10" Foreground="#999"/>
                                     <TextBlock Text="{Binding BaselineText}" FontSize="12"/>
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="5" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="5" VerticalAlignment="Center"
+                                            ToolTip="Rise of the smoothed value over this ratio's rolling baseline (the median of its last few minutes). Held at the pre-event level while frozen.">
+                                    <TextBlock Text="step (vs rolling)" FontSize="10" Foreground="#999"/>
+                                    <TextBlock Text="{Binding StepText}" FontSize="12"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="6" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding SlopeText}"
                                                FontSize="12" Foreground="#555"/>
                                     <TextBlock Text="{Binding SnrText}"
                                                FontSize="10" Foreground="#999"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Column="6" Text="{Binding StateText}"
+                                <TextBlock Grid.Column="7" Text="{Binding StateText}"
                                            FontWeight="Bold"
                                            Foreground="{Binding StateBrush}"
                                            VerticalAlignment="Center"/>
