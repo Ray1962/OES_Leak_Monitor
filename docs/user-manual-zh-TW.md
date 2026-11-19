@@ -463,7 +463,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 這是日常監看時盯著的畫面。由上而下四層：
 
-![圖 4　Leak Monitor 分頁在洩漏確認後的樣子（重播 2026-08-14 漏氣錄檔，基準取自錄檔開頭）。紅色橫幅 `ALARM — leak signal confirmed`，三條警報用比值都是 `ALARM`；`N₂ 337 / Ar 750` 與 `NO 237 / Ar 750` 是 `RawMean` 分子，百分比欄是 σ 分數。`Observing` 是 Guard／TrendOnly 比值；三列 `No Plasma` 是以 CO 330 為參考線的比值，這份光譜裡沒有 CO 329.6，參考線一直讀不到；`Disabled` 是停用的比值。下方趨勢圖可看到比值在 13:56 起越過 Warn（120）再越過 Alarm（150）。圖中是這台電腦的設定：9 組比值（出廠只有前 4 組，見 §10.5），並勾選了 EAP 分頁的 **Apply tool events in test mode**（出廠不勾），所以橫幅會出現 tool events 那一行。](images/manual-leak-monitor.png)
+![圖 4　Leak Monitor 分頁在洩漏確認後的樣子（重播 2026-08-14 漏氣錄檔，基準 `Replay 0814 head` 取自錄檔開頭）。紅色橫幅 `ALARM — leak signal confirmed`，四條啟用的比值都是 `ALARM`；`N₂ 337 / Ar 750` 與 `NO 237 / Ar 750` 是 `RawMean` 分子，百分比欄是 σ 分數；`N₂ 358 absolute` 是絕對強度。下面五列 `Disabled` 是停用的比值。這幾條都沒有開滾動基準，所以 `step (vs rolling)` 欄是 `—`（開了的樣子見圖 6）。下方趨勢圖可看到比值在重播後段越過 Warn（120）再越過 Alarm（150）。圖中是這台電腦的設定：9 組比值（出廠只有前 4 組，見 §10.5）；重播期間不套用主機台製程事件，橫幅第二行會這樣寫](images/manual-leak-monitor.png)
 
 #### 6.3.1 狀態橫幅（最上方大色塊）
 
@@ -589,7 +589,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 **Engineer+ 才能存檔。**
 
-![圖 5　Ratio Setup 分頁。左邊是比值清單（勾選＝啟用，下方 **Add／Remove／▲／▼**），右邊編輯選中的比值：Display name、Process class、**Role**、Monitoring method、分子與分母譜線及萃取方式、門檻。分子選 `RawMean` 時，橘色說明會提醒 Warn/Alarm factor 不再作用、改以 σ 判斷。](images/manual-ratio-setup.png)
+![圖 5　Ratio Setup 分頁，選中 `N₂ 358 / Ar 750`。左邊是比值清單（勾選＝啟用，下方 **Add／Remove／▲／▼**），右邊編輯選中的比值：Display name、Process class、**Role**、Monitoring method、分子與分母譜線及萃取方式、門檻，最下面是 **Judging**（Golden Run baseline／Rolling baseline (step)，見下文）。分子選 `RawMean` 時，分子區塊下方會多出橘色說明，提醒 Warn/Alarm factor 不再作用、改以 σ 判斷，而且這條比值不能開滾動基準。](images/manual-ratio-setup.png)
 
 > ⚠️ **這裡的修改是「暫存」的。** 按 Save 只是寫進 `settings.json`；要真正生效，必須回 Monitor 分頁 **Stop → Start** 重啟擷取。畫面上方的黃色提示條就是在講這件事。
 
@@ -699,6 +699,8 @@ Process class 填的名稱要和分類器或 CEID 對照表裡的類別名稱相
 - 兩個都不勾無法存檔；只想記錄不判定，請把 Role 改成 `TrendOnly`。
 - 滾動基準的時間窗（180 / 20 / 20 秒）是全機共用設定，在 `settings.json` 的 `leakMonitor.stepLookbackSeconds`、`stepGapSeconds`、`stepMinHistorySeconds`，畫面上沒有欄位。
 
+![圖 6　只用滾動基準判斷的兩條比值（重播 2026-11-19 實驗機 DV=300 錄檔；`NO 235.6 / Ar 750.4` 與 `OH 308.8 / Ar 750.4`，Golden Run 判斷關閉）。兩列都是 `ALARM · Step`；`step (vs rolling)` 欄是相對滾動基準的上升量（+29.9 %、+8.4 %），`(frozen)` 表示基準停在漏氣前的值。百分比欄標題是 `% of GR (not judged)`；這裡沒有使用中的 Golden Run，所以該欄是 `—`，下方畫 % of Golden Run 的趨勢圖也因此是空的。](images/manual-step-judging.png)
+
 > 📝 為什麼需要它：2026-11-19 實驗機的空氣洩漏測試裡，DV=300 的漏氣三次都讓 NO/Ar 上升約 30%、OH/Ar 上升約 8%，
 > 但同一天沒漏氣時的水準就漂了將近 30 個百分點（剛開電漿偏高、之後一路往下滑）。固定的 Golden Run 因此在開電漿時誤報、
 > 在基準往下漂時漏報；滾動基準在 11 個錄檔上 6 次漏氣全抓到、5 次沒漏氣 0 誤報。
@@ -716,7 +718,7 @@ Process class 填的名稱要和分類器或 CEID 對照表裡的類別名稱相
 | 上：**Emission lines** | 譜線目錄本身（內定表＋你自己加的線） | **存檔後立即生效**，Ratio Setup 馬上選得到 |
 | 下：**Wavelength corrections** | 每條譜線的漂移位移量 | **暫存** → Stop/Start 重啟擷取才生效 |
 
-![圖 6　Wavelength Calibration 分頁。上表是譜線目錄（內定線唯讀，自己加的線物種前面自動帶 `u`），存檔立即生效；下表是波長修正，存檔後要重新開始擷取才生效。](images/manual-wavecal.png)
+![圖 7　Wavelength Calibration 分頁。上表是譜線目錄（內定線唯讀，自己加的線物種前面自動帶 `u`），存檔立即生效；下表是波長修正，存檔後要重新開始擷取才生效。](images/manual-wavecal.png)
 
 #### 6.5.1 Emission lines（譜線目錄）
 
@@ -820,7 +822,7 @@ x ≈ s · Q
 
 用**已經存在硬碟上的錄製檔**產生 Golden Run。
 
-![圖 7　Baseline Builder 分頁。左邊勾選要用的錄製檔並按 **Scan ticked**；右上圖是各比值相對自身中位數的走勢，在上面拖曳或在 **Baseline window** 輸入秒數（這裡是 30–330 s，避開 400 s 後的漏氣段）；下方按 **Build** 後列出每條基準的 mean ± σ 與 mean/σ，以及沒有建出基準的比值與原因。確認無誤才按 **Save as active baseline**。](images/manual-baseline-builder.png)
+![圖 8　Baseline Builder 分頁。左邊勾選要用的錄製檔並按 **Scan ticked**；右上圖是各比值相對自身中位數的走勢，在上面拖曳或在 **Baseline window** 輸入秒數（這裡是 30–330 s，避開 400 s 後的漏氣段）；下方按 **Build** 後列出每條基準的 mean ± σ 與 mean/σ，以及沒有建出基準的比值與原因。確認無誤才按 **Save as active baseline**。](images/manual-baseline-builder.png)
 
 > **照著做的程序在另一份文件**：[`baseline-builder-sop-zh-TW.md`](baseline-builder-sop-zh-TW.md)（交付資料夾裡是 `baseline-builder-sop-zh-TW.html`）。本節說明這個分頁**每個區塊是什麼**，操作順序、判斷準則、紀錄與驗證步驟都在那份 SOP 裡——兩邊各寫一份程序必然會不同步。
 
@@ -915,7 +917,7 @@ x ≈ s · Q
 
 把一份**已錄製的全光譜 CSV** 當成即時光譜餵進整條流程 —— Leak Monitor、兩張趨勢圖、以及兩個記錄器都會收到 —— 用來在**沒有硬體**的情況下驗證偵測演算法。與 §6.9 Recordings 的差別：Recordings 是把資料畫出來給人看，Replay 是把資料**重新跑一遍給程式判斷**。
 
-![圖 8　Replay 分頁播放中。上方是錄檔名稱、幀數、波長範圍；`PLAYING` 與進度（`1:02 / 9:37`、第 35／322 幀）；**Raise leak alarms during replay** 打勾時重播也會觸發並鎖存警報。下方是目前送出的那一幀光譜。重播期間記錄器寫出的檔名帶 `SIM` 前綴。](images/manual-replay.png)
+![圖 9　Replay 分頁播放中。上方是錄檔名稱、幀數、波長範圍；`PLAYING` 與進度（`1:02 / 9:37`、第 35／322 幀）；**Raise leak alarms during replay** 打勾時重播也會觸發並鎖存警報。下方是目前送出的那一幀光譜。重播期間記錄器寫出的檔名帶 `SIM` 前綴。](images/manual-replay.png)
 
 **控制項**
 
@@ -1002,7 +1004,7 @@ x ≈ s · Q
 
 回放記錄器寫出的比值 CSV（`{prefix}_Ratio_*.csv`）。**已被壓縮的日期一併列出**（標示 `zip`），直接從壓縮檔讀取。
 
-![圖 9　Ratio Review 分頁，開啟圖 4 那次重播寫出的 `SIMP_Ratio_*.csv`（% of baseline 模式）。橘色與紅色底色是當時整體狀態為 Warning、Alarm 的時段；圖例中標 `(σ-score)` 的是 `RawMean` 分子的比值。](images/manual-ratio-review.png)
+![圖 10　Ratio Review 分頁，開啟一次重播 2026-08-14 漏氣錄檔寫出的 `SIMP_Ratio_*.csv`（% of baseline 模式）。橘色與紅色底色是當時整體狀態為 Warning、Alarm 的時段；圖例中標 `(σ-score)` 的是 `RawMean` 分子的比值。](images/manual-ratio-review.png)
 
 **三種檢視模式**（同樣以綠框標示目前模式）：
 
@@ -1090,7 +1092,7 @@ x ≈ s · Q
 - **洩漏率校正的啟用／暫停／清除**
 - Ratio CSV 被略過的原因
 
-![圖 10　Logs 分頁。左上 **Create diagnostic bundle** 打包診斷資料；表格每列是一筆系統日誌，Warning 與 Error 列以底色標示。這裡可看到一次重播的完整經過：測試模式連線、擷取開始、重播開始、Golden Run 擷取、Normal → Warning → Alarm，以及重播結束時清除鎖存警報的紀錄。](images/manual-logs.png)
+![圖 11　Logs 分頁。左上 **Create diagnostic bundle** 打包診斷資料；表格每列是一筆系統日誌，Warning 與 Error 列以底色標示。這裡可看到一次重播的完整經過：測試模式連線、擷取開始、重播開始、Golden Run 擷取、Normal → Warning → Alarm，以及重播結束時清除鎖存警報的紀錄。](images/manual-logs.png)
 
 日誌檔位置：`%APPDATA%\OES_Leak_Monitor\Logs\yyMMddHH.csv`（每小時一個檔）。欄位：
 
@@ -1158,7 +1160,7 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 這個分頁**不需要登入就看得到**：被問到「OES 有沒有接上 FDC」時，Operator 不必等工程師。
 
-![圖 11　SECS 分頁，FDC 尚未連上時（`LISTENING`，在 port 5000 等 FDC 連入）。上方是連線狀態與 Control state，中間是設定（要 Engineer 以上），下方是收發紀錄。沒有 host 連線時，送不出去的警報會以 `Device is not selected` 列在紀錄裡，這是正常的。](images/manual-secs.png)
+![圖 12　SECS 分頁，FDC 尚未連上時（`LISTENING`，在 port 5000 等 FDC 連入）。上方是連線狀態與 Control state，中間是設定（要 Engineer 以上），下方是收發紀錄。沒有 host 連線時，送不出去的警報會以 `Device is not selected` 列在紀錄裡，這是正常的。](images/manual-secs.png)
 
 **FDC** 是 OES 唯一的 SECS host，從這條連線讀洩漏狀態、收警報；OES 在這條連線上是 equipment，等 FDC 連進來。一條 SECS 連線只能有一個 host，所以 EAP 不會連進來。和 EAP 的連線、主機台製程事件的狀態與設定都在 **EAP 分頁**（§6.14）。
 
@@ -1187,7 +1189,7 @@ Logs 分頁上方有一顆 **Create diagnostic bundle**。求助之前先按它�
 
 這個分頁**不需要登入就看得到**：被問到「OES 有沒有收到主機台的製程」時，Operator 不必等工程師。設定要 Engineer 以上才能修改。
 
-![圖 12　EAP 分頁，已連上 EAP 並在製程 A 的視窗中。綠字第一行是連線狀態，第二行是最近一次 S1F3 的結果（PM3 在視窗內、主機台連線正常、序號）；下一行 `Tool events: in window A` 是 OES 目前判定的製程。中間是 EAP 連線的設定：`Connect to the EAP` 右邊的 **`Events only — do not poll S1–S7`** 沒有勾選，這是正式運作的狀態（§6.14.2）；下一列是九個 ID。最下面是 CEID 對照表。這張圖是在測試模式下拍的，所以勾選了 **Apply tool events in test mode**（出廠不勾）；接真實光譜時不需要這個選項。](images/manual-eap.png)
+![圖 13　EAP 分頁，已連上 EAP 並在製程 A 的視窗中。綠字第一行是連線狀態，第二行是最近一次 S1F3 的結果（PM3 在視窗內、主機台連線正常、序號）；下一行 `Tool events: in window A` 是 OES 目前判定的製程。中間是 EAP 連線的設定：`Connect to the EAP` 右邊的 **`Events only — do not poll S1–S7`** 沒有勾選，這是正式運作的狀態（§6.14.2）；下一列是九個 ID。最下面是 CEID 對照表。這張圖是在測試模式下拍的，所以勾選了 **Apply tool events in test mode**（出廠不勾）；接真實光譜時不需要這個選項。](images/manual-eap.png)
 
 PM3 交替跑 Chamber Process／precoat（製程 A）、Chamber Clean（製程 B）等不同電漿。OES 只看光譜，不知道此刻是哪一個；**主機台知道**。主機台的製程事件（PM3 ProcessStart／ProcessEnd 的 CEID）送到廠內 EAP，EAP 再轉給 OES。OES 依對照表開關「**製程視窗**」：指定了製程類別（§6.4.2 的 Process class）的比值只在該類別的視窗內判定，不在任何視窗內時顯示 `Not this process`。沒有指定類別的比值不受影響，每一段電漿都判定。
 
