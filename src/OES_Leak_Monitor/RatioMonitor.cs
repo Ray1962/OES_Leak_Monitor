@@ -96,8 +96,9 @@ public sealed class RatioMonitor
     private double _baseMean, _baseSigma;
     private bool _hasBaseline;
 
-    private DateTime? _aboveWarnSince, _aboveAlarmSince;
-    private bool _latchedAlarm;
+    // The Golden Run judgement: thresholds relative to the baseline mean, its confirmation
+    // timers and its latch. The ratio's state is formed from its paths (see JudgingPath).
+    private readonly JudgingPath _gr = new();
     private RatioState _state = RatioState.NoBaseline;
     private bool _plasmaPresent;
 
@@ -154,10 +155,10 @@ public sealed class RatioMonitor
     }
 
     /// <summary>Clears the latched alarm so a recovered process can return to Normal.</summary>
-    public void Acknowledge() => _latchedAlarm = false;
+    public void Acknowledge() => _gr.Acknowledge();
 
     /// <summary>True while an alarm is latched and unacknowledged.</summary>
-    public bool HasLatchedAlarm => _latchedAlarm;
+    public bool HasLatchedAlarm => _gr.Latched;
 
     /// <summary>
     /// Re-arms a latch carried over from the monitor instance this one replaced (a ratio-set
@@ -166,7 +167,7 @@ public sealed class RatioMonitor
     /// </summary>
     public void RestoreLatchedAlarm()
     {
-        _latchedAlarm = true;
+        _gr.RestoreLatch();
         _state = RatioState.Alarm;
     }
 
@@ -182,15 +183,15 @@ public sealed class RatioMonitor
         _emaVar = 0;
         _rawRatio = _numerator = _denominator = double.NaN;
         _numSnr = _denSnr = double.NaN;
-        _aboveWarnSince = _aboveAlarmSince = null;
+        _gr.ResetTimers();
         _plasmaLostSince = _lowSignalSince = null;
         _trend.Clear();
         _slopePerMinute = 0;
         _plasmaPresent = false;
-        if (clearLatch) _latchedAlarm = false;
+        if (clearLatch) _gr.Acknowledge();
         // "No Baseline" names a fault to fix. For an entry that is never judged, not having one
         // is the expected condition, so idle reads as plasma-off instead.
-        _state = _latchedAlarm
+        _state = HasLatchedAlarm
             ? RatioState.Alarm
             : (_hasBaseline || !_def.Alarms ? RatioState.NoPlasma : RatioState.NoBaseline);
     }
@@ -205,14 +206,14 @@ public sealed class RatioMonitor
     public void MarkNotApplicable()
     {
         _hasEma = false;
-        _aboveWarnSince = _aboveAlarmSince = null;
+        _gr.ResetTimers();
         _plasmaLostSince = _lowSignalSince = null;
         _trend.Clear();
         _slopePerMinute = 0;
         _rawRatio = _numerator = _denominator = double.NaN;
         _numSnr = _denSnr = double.NaN;
         _plasmaPresent = false;
-        _state = _latchedAlarm ? RatioState.Alarm : RatioState.NotApplicable;
+        _state = HasLatchedAlarm ? RatioState.Alarm : RatioState.NotApplicable;
     }
 
     /// <summary>Marks the ratio excluded — resets the latch and smoothing so a later
@@ -221,9 +222,9 @@ public sealed class RatioMonitor
     {
         _state = RatioState.Disabled;
         _hasEma = false;
-        _aboveWarnSince = _aboveAlarmSince = null;
+        _gr.ResetTimers();
         _plasmaLostSince = _lowSignalSince = null;
-        _latchedAlarm = false;
+        _gr.Acknowledge();
         _trend.Clear();
         _slopePerMinute = 0;
         _rawRatio = _numerator = _denominator = double.NaN;
@@ -299,7 +300,7 @@ public sealed class RatioMonitor
             // Plasma off: hold the latch, but restart smoothing/trend so a stale
             // value doesn't bridge the gap when plasma returns.
             _state = RatioState.NoPlasma;
-            _aboveWarnSince = _aboveAlarmSince = null;
+            _gr.ResetTimers();
             _hasEma = false;
             _trend.Clear();
             _slopePerMinute = 0;
@@ -338,7 +339,7 @@ public sealed class RatioMonitor
         // recorded, only what is judged.
         if (!_def.Alarms)
         {
-            _aboveWarnSince = _aboveAlarmSince = null;
+            _gr.ResetTimers();
             _state = RatioState.Observing;
             return;
         }
@@ -363,7 +364,7 @@ public sealed class RatioMonitor
             // Grace: hold an active display briefly so a single frame at the SNR floor doesn't
             // flicker the banner to LowSignal. A latched alarm is never grace-gated (it already
             // shows Alarm); only the Normal/Warning -> LowSignal flip is held.
-            if (!_latchedAlarm && StateIsActive(_state))
+            if (!HasLatchedAlarm && StateIsActive(_state))
             {
                 _lowSignalSince ??= ts;
                 if ((ts - _lowSignalSince.Value).TotalSeconds < IdleGraceSeconds)
@@ -372,8 +373,8 @@ public sealed class RatioMonitor
             _lowSignalSince = null;
             // Don't let near-noise excursions accumulate confirmation time; preserve a latched
             // alarm so a real, already-confirmed leak isn't cleared by the signal dipping.
-            _aboveWarnSince = _aboveAlarmSince = null;
-            _state = _latchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
+            _gr.ResetTimers();
+            _state = HasLatchedAlarm ? RatioState.Alarm : RatioState.LowSignal;
             return;
         }
         _lowSignalSince = null;
@@ -384,19 +385,7 @@ public sealed class RatioMonitor
             return;
         }
 
-        double warn = WarnThreshold, alarm = AlarmThreshold;
-        if (_ema >= warn) _aboveWarnSince ??= ts; else _aboveWarnSince = null;
-        if (_ema >= alarm) _aboveAlarmSince ??= ts; else _aboveAlarmSince = null;
-
-        double confirm = Math.Max(0, _def.ConfirmSeconds);
-        var confirmed = RatioState.Normal;
-        if (_aboveAlarmSince is { } a && (ts - a).TotalSeconds >= confirm)
-            confirmed = RatioState.Alarm;
-        else if (_aboveWarnSince is { } w && (ts - w).TotalSeconds >= confirm)
-            confirmed = RatioState.Warning;
-
-        if (confirmed == RatioState.Alarm && !SuppressLatch) _latchedAlarm = true;
-        _state = _latchedAlarm ? RatioState.Alarm : confirmed;
+        _state = _gr.Judge(_ema, WarnThreshold, AlarmThreshold, ts, _def.ConfirmSeconds, SuppressLatch);
     }
 
     private void UpdateTrend(DateTime ts, double value)
