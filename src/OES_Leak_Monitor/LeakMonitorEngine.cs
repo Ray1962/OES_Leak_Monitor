@@ -412,12 +412,13 @@ public sealed class LeakMonitorEngine : IDisposable
         // _defs holds wavelength-corrected *clones* (not the persisted _settings.Ratios
         // objects), so the drift correction never leaks back into settings.json. Any future
         // live mutation of a ratio must therefore write through to _settings.Ratios too.
+        ValidateStepJudging();
         var lookup = WavelengthCalibration.Build(_settings.WavelengthCorrections);
         foreach (var def in _settings.Ratios)
         {
             var corrected = WavelengthCalibration.Correct(def, lookup);
             _defs[corrected.Key] = corrected;
-            _monitors.Add(new RatioMonitor(corrected));
+            _monitors.Add(new RatioMonitor(corrected, StepWindows.From(_settings)));
         }
         BuildClassifier();
         ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // also builds the estimator
@@ -1290,7 +1291,14 @@ public sealed class LeakMonitorEngine : IDisposable
                 // Shared with the offline builder — see RatioFrameSampling for why that must be
                 // one definition and not two.
                 var fs = RatioFrameSampling.Evaluate(def, wl, inten, triggerPlasma, floor);
+                var latchedBefore = mon.LatchedPaths;
                 mon.Update(fs.Numerator, fs.Denominator, sample.Timestamp, fs.PlasmaPresent);
+                var newlyLatched = mon.LatchedPaths & ~latchedBefore;
+                if (newlyLatched != JudgingPaths.None)
+                    _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorRatioAlarmLatched",
+                        $"Ratio {def.DisplayName} latched an Alarm on the " +
+                        $"{JudgingPathsText.Label(newlyLatched)} path — it stays in Alarm until acknowledged.",
+                        related: $"Ratio={mon.Key},Path={JudgingPathsText.Label(newlyLatched)}");
                 double value = fs.Value;
 
                 if (_capturing)
@@ -1478,12 +1486,14 @@ public sealed class LeakMonitorEngine : IDisposable
     public void Acknowledge(string? user = null)
     {
         LeakAlarmLevel oldOverall, newOverall;
-        List<string> cleared;
+        List<string> cleared, clearedWithPath;
         lock (_gate)
         {
-            cleared = _monitors.Where(m => m.HasLatchedAlarm)
-                               .Select(m => _defs.TryGetValue(m.Key, out var d) ? d.DisplayName : m.Key)
-                               .ToList();
+            var latchedNow = _monitors.Where(m => m.HasLatchedAlarm).ToList();
+            cleared = latchedNow.Select(m => _defs.TryGetValue(m.Key, out var d) ? d.DisplayName : m.Key)
+                                .ToList();
+            clearedWithPath = latchedNow.Select((m, i) => $"{cleared[i]} ({JudgingPathsText.Label(m.LatchedPaths)})")
+                                        .ToList();
             foreach (var mon in _monitors) mon.Acknowledge();
             oldOverall = _overall;
             _overall = ComputeOverall();
@@ -1496,7 +1506,7 @@ public sealed class LeakMonitorEngine : IDisposable
                 $"cleared, composite {oldOverall} → {newOverall}. Nothing clears a latch without " +
                 "an entry of its own, so this alarm ended here.",
                 related: $"User={user ?? "(unknown)"}",
-                value: string.Join(", ", cleared));
+                value: string.Join(", ", clearedWithPath));
 
         if (cleared.Count > 0)
             Acknowledged?.Invoke(this, new LeakAcknowledgedEventArgs
@@ -1722,29 +1732,30 @@ public sealed class LeakMonitorEngine : IDisposable
         RatioSlotTable? identityChanged;
         lock (_gate)
         {
-            var latched = _monitors.Where(m => m.HasLatchedAlarm).Select(m => m.Key).ToHashSet();
+            var latched = _monitors.Where(m => m.HasLatchedAlarm).ToDictionary(m => m.Key, m => m.LatchedPaths);
             var previousDefs = new Dictionary<string, RatioDefinition>(_defs);
 
             _monitors.Clear();
             _defs.Clear();
+            ValidateStepJudging();
             var lookup = WavelengthCalibration.Build(_settings.WavelengthCorrections);
             foreach (var def in _settings.Ratios)
             {
                 var corrected = WavelengthCalibration.Correct(def, lookup);
                 _defs[corrected.Key] = corrected;
-                _monitors.Add(new RatioMonitor(corrected));
+                _monitors.Add(new RatioMonitor(corrected, StepWindows.From(_settings)));
             }
             BuildClassifier();
             ApplyGoldenRun(_settings.FindGoldenRun(_settings.ActiveGoldenRun)); // rebuilds the estimator
 
-            foreach (var key in latched)
+            foreach (var (key, paths) in latched)
             {
                 var mon = _monitors.FirstOrDefault(m => m.Key == key);
                 previousDefs.TryGetValue(key, out var before);
                 _defs.TryGetValue(key, out var after);
                 if (mon is not null && after is { Enabled: true } && (before?.MeasuresSameAs(after) ?? false))
                 {
-                    mon.RestoreLatchedAlarm();
+                    mon.RestoreLatchedAlarm(paths);
                 }
                 else
                 {
@@ -2228,6 +2239,33 @@ public sealed class LeakMonitorEngine : IDisposable
     /// wavelength look like a dead leak monitor. Reset by <see cref="ConfigureTrigger"/>, so a
     /// corrected setting reports again if it is still wrong.
     /// </summary>
+    // Ratios already told that step judging cannot run on them, so a reload on every
+    // acquisition start does not repeat the same warning.
+    private readonly HashSet<string> _stepPedestalWarned = new();
+
+    /// <summary>
+    /// Puts out-of-range step-judging values back in range (logged, one entry per change) and
+    /// warns once per ratio that asks for step judging on a value that carries a pedestal, where
+    /// it is ignored (<see cref="RatioDefinition.StepJudgingActive"/>). Runs before every monitor
+    /// build, on the persisted settings, so what is judged and what is saved agree.
+    /// </summary>
+    private void ValidateStepJudging()
+    {
+        foreach (var change in _settings.NormalizeStepJudging())
+            _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorStepSettingsClamped",
+                $"Step-judging setting out of range and corrected: {change}.");
+        foreach (var def in _settings.Ratios)
+        {
+            if (!(def.StepJudging && def.ValueHasPedestal) || !_stepPedestalWarned.Add(def.Key)) continue;
+            _log?.LogSystemEvent(LogSeverity.Warning, "LeakMonitorStepJudgingIgnored",
+                $"Ratio {def.DisplayName} asks for step judging, but its monitored value is read as " +
+                "a raw mean and carries the continuum pedestal — a rise measured as a fraction of " +
+                "it is a fraction of the continuum, not a leak signal. Step judging is ignored for " +
+                "this ratio.",
+                related: $"Ratio={def.Key}");
+        }
+    }
+
     private void WarnGateUnusableOnce()
     {
         if (_gateWarned) return;

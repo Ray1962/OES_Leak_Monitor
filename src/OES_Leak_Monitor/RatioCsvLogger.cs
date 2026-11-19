@@ -62,6 +62,8 @@ public sealed class RatioCsvLogger : IDisposable
     private string[] _ratioLabels = Array.Empty<string>();
     // Aligned with _ratioKeys: whether that ratio's percent column is a σ-score (see the header).
     private bool[] _pedestal = Array.Empty<bool>();
+    // Keys of the step-judged ratios, in column order — each gets a "_stepRise" column (#96).
+    private string[] _stepKeys = Array.Empty<string>();
     // Classifier discriminant labels, fixed when the file is opened. Empty when no process
     // classifier is configured, in which case no process columns are written at all and the
     // file is identical to the one this logger has always produced.
@@ -156,6 +158,10 @@ public sealed class RatioCsvLogger : IDisposable
                 bool hasRate = snap.LeakRate is { HasEstimate: true };
                 row.Append(',').Append(Num(hasRate ? snap.LeakRate!.LeakRate : (double?)null));
                 row.Append(',').Append(Num(hasRate ? snap.LeakRate!.Sigma : (double?)null));
+                // Blank while warming up: there is no reference yet, so there is no rise.
+                foreach (var key in _ratioKeys)
+                    if (Array.IndexOf(_stepKeys, key) >= 0)
+                        row.Append(',').Append(Num(FindRatio(snap, key)?.StepRise));
                 if (_discriminantLabels.Length > 0)
                 {
                     row.Append(',').Append(Safe(snap.ProcessClass));
@@ -221,6 +227,7 @@ public sealed class RatioCsvLogger : IDisposable
             _ratioKeys = monitored.Select(r => r.Key).ToArray();
             _ratioLabels = monitored.Select(r => r.DisplayName ?? "").ToArray();
             _pedestal = monitored.Select(r => r.ValueHasPedestal).ToArray();
+            _stepKeys = monitored.Where(r => r.StepJudgingActive).Select(r => r.Key).ToArray();
             _discriminantLabels = _engine.ProcessDiscriminantLabels.ToArray();
             _toolColumns = _engine.ToolStatus.State != ToolEventContext.Disabled;
             _writer = new StreamWriter(_currentPath, append: false, Utf8Bom) { AutoFlush = true };
@@ -250,6 +257,13 @@ public sealed class RatioCsvLogger : IDisposable
                       .Append(_pedestal[i] ? "_sigmaScore" : "_pctBaseline");
             }
             header.Append(",OverallState,LeakRate,LeakRateSigma");
+            // What step judging saw: the rise over the rolling baseline, per step-judged ratio.
+            // After the leak-rate columns rather than beside each ratio, because readers locate
+            // the (ratio, %) pairs by position before OverallState — and only for ratios that
+            // run the path, so a configuration without step judging writes the file it always did.
+            for (int i = 0; i < _ratioKeys.Length; i++)
+                if (Array.IndexOf(_stepKeys, _ratioKeys[i]) >= 0)
+                    header.Append(',').Append(ColumnName(_ratioLabels[i], _ratioKeys[i])).Append("_stepRise");
             // Process columns are appended last and only when a classifier is configured, so a
             // reader keying on column names is unaffected and an unconfigured site's file is
             // unchanged. The discriminant values are written beside the verdict on purpose: a

@@ -268,6 +268,12 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
                 StatusMessage = $"“{r.DisplayName}”: the signal and reference must be different lines.";
                 return;
             }
+            if (r.JudgingError is { } judging)
+            {
+                SelectedRatio = r;
+                StatusMessage = $"“{r.DisplayName}”: {judging}";
+                return;
+            }
         }
 
         var defs = Ratios.Select(r => r.ToDefinition()).ToList();

@@ -94,6 +94,34 @@ acknowledgement clears it, and that clearing is always attributable to a named u
 The requirement that a threshold stay crossed for a stated number of seconds before the
 state changes. It is what separates a leak from a spike.
 
+**Judging path**:
+One way of deciding whether a ratio's reading is a leak: a pair of Warn / Alarm levels, the
+sustained confirmation for each, and a latch of its own. A ratio has up to two — against its
+Golden Run baseline, and against its rolling baseline — and its state is the more severe of
+the ones it runs. Which path raised an alarm is part of the alarm.
+
+**Rolling baseline**:
+A ratio's own recent past used as its reference — the median of its last few minutes of
+readings, leaving out the most recent seconds. Judging against it is **step judging**: it
+follows a slow drift in the leak-free level and still sees a leak that arrives as a step,
+which a Golden Run cannot do once the level has drifted by more than the leak moves it. It
+needs no Golden Run, and is blind by construction to a leak present from ignition or one
+that grows slowly.
+
+**Rise**:
+How far a ratio's smoothed reading sits above its rolling baseline, as a fraction. The step
+path's Warn and Alarm levels are rises, with no σ term.
+
+**Frozen reference**:
+A rolling baseline held at its pre-event value while the rise is at or above the Warn
+level, so a leak that lasts longer than the look-back window is not absorbed into the
+reference it is measured against.
+
+**Warm-up**:
+The seconds after the smoothing restarts (plasma on, a reset) during which the rolling
+baseline has too little history to judge. The step path says nothing then; it is not the
+same as having no baseline.
+
 **Composite level**:
 The single Normal / Warning / Alarm verdict for the whole tool, formed from the
 individual entries' states. Entries that are unreadable take no part in it.

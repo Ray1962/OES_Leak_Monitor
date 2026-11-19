@@ -95,6 +95,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _enabled        = def.Enabled;
         _processClass   = def.ProcessClass ?? "";
         _role           = def.Role;
+        _goldenRunJudging = def.GoldenRunJudging;
+        _stepJudging    = def.StepJudging;
+        _stepWarnRise   = def.StepWarnRise;
+        _stepAlarmRise  = def.StepAlarmRise;
 
         _autoName       = AutoName();
         _displayName    = string.IsNullOrWhiteSpace(def.DisplayName) ? _autoName : def.DisplayName;
@@ -197,6 +201,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
             if (!Set(ref _signalMode, value)) return;
             OnPropertyChanged(nameof(SignalIsRaw));
             OnPropertyChanged(nameof(ValueHasPedestal));
+            OnPropertyChanged(nameof(StepAvailable));
         }
     }
 
@@ -294,6 +299,88 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         set => Set(ref _processClass, (value ?? "").Trim());
     }
 
+    private bool _goldenRunJudging = true, _stepJudging;
+    private double _stepWarnRise = RatioDefinition.DefaultStepWarnRise, _stepAlarmRise = RatioDefinition.DefaultStepAlarmRise;
+
+    /// <summary>Judge against the Golden Run baseline (<see cref="RatioDefinition.GoldenRunJudging"/>).
+    /// Carried through every save, so a save cannot reset it — the trap of #88.</summary>
+    public bool GoldenRunJudging
+    {
+        get => _goldenRunJudging;
+        set { if (Set(ref _goldenRunJudging, value)) OnPropertyChanged(nameof(GoldenRunFieldsEnabled)); }
+    }
+
+    /// <summary>Judge against the rolling baseline (<see cref="RatioDefinition.StepJudging"/>).</summary>
+    public bool StepJudging
+    {
+        get => _stepJudging;
+        set { if (Set(ref _stepJudging, value)) OnPropertyChanged(nameof(GoldenRunFieldsEnabled)); }
+    }
+
+    /// <summary>Step-path Warn rise, as a fraction (<see cref="RatioDefinition.StepWarnRise"/>).</summary>
+    public double StepWarnRise
+    {
+        get => _stepWarnRise;
+        set { if (Set(ref _stepWarnRise, value)) OnPropertyChanged(nameof(StepWarnRisePercent)); }
+    }
+
+    /// <summary>Step-path Alarm rise, as a fraction (<see cref="RatioDefinition.StepAlarmRise"/>).</summary>
+    public double StepAlarmRise
+    {
+        get => _stepAlarmRise;
+        set { if (Set(ref _stepAlarmRise, value)) OnPropertyChanged(nameof(StepAlarmRisePercent)); }
+    }
+
+    /// <summary>The Warn rise as the editor shows it, in percent (10 = +10 %).</summary>
+    public double StepWarnRisePercent
+    {
+        get => Math.Round(_stepWarnRise * 100, 6);
+        set => StepWarnRise = value / 100.0;
+    }
+
+    /// <summary>The Alarm rise as the editor shows it, in percent.</summary>
+    public double StepAlarmRisePercent
+    {
+        get => Math.Round(_stepAlarmRise * 100, 6);
+        set => StepAlarmRise = value / 100.0;
+    }
+
+    /// <summary>
+    /// Step judging can be turned on: the reading carries no pedestal. A rise measured as a
+    /// fraction of a raw reading is a fraction of the continuum (<see cref="RatioDefinition.StepJudgingActive"/>).
+    /// </summary>
+    public bool StepAvailable => !ValueHasPedestal;
+
+    /// <summary>The Golden Run factor and σ fields are editable unless step judging is the only
+    /// path — then they keep their values, greyed, ready for the path being turned back on.</summary>
+    public bool GoldenRunFieldsEnabled => _goldenRunJudging || !_stepJudging;
+
+    /// <summary>
+    /// Why this entry cannot be saved as it stands, or null. An alarming entry must be judged
+    /// some way (one that is only meant to be recorded has a role for that), and the step
+    /// rises must make an Alarm at least as hard to reach as a Warning.
+    /// </summary>
+    public string? JudgingError
+    {
+        get
+        {
+            if (Role != RatioRole.Alarm) return null;
+            bool stepRuns = _stepJudging && StepAvailable;
+            if (!_goldenRunJudging && !stepRuns)
+                return StepAvailable
+                    ? "choose at least one way of judging it (Golden Run baseline or rolling baseline). " +
+                      "To record a ratio without judging it, set its role to TrendOnly."
+                    : "its reading is raw (it carries the continuum pedestal), so it can only be judged " +
+                      "against the Golden Run baseline — turn that on, or set its role to TrendOnly.";
+            if (stepRuns)
+            {
+                if (!(_stepWarnRise > 0)) return "the step Warn rise must be above 0 %.";
+                if (!(_stepAlarmRise >= _stepWarnRise)) return "the step Alarm rise must be at least the Warn rise.";
+            }
+            return null;
+        }
+    }
+
     /// <summary>Builds a persistable definition from the current edits.</summary>
     public RatioDefinition ToDefinition() => new()
     {
@@ -312,6 +399,10 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         EmaTauSeconds = EmaTauSeconds,
         ConfirmSeconds = ConfirmSeconds,
         MinSnr = MinSnr,
+        GoldenRunJudging = GoldenRunJudging,
+        StepJudging = StepJudging,
+        StepWarnRise = StepWarnRise,
+        StepAlarmRise = StepAlarmRise,
     };
 
     /// <summary>True if the signal and reference are the same line (a meaningless ratio).

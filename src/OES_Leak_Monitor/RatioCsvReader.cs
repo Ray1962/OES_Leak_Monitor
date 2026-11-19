@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 
 namespace OES_Leak_Monitor;
@@ -49,6 +50,13 @@ public sealed class RatioTrendData
     /// <summary>True when the file carried the LeakRate columns (and at least one finite value).</summary>
     public bool HasLeakRate { get; init; }
 
+    /// <summary>
+    /// The step path's rise over the rolling baseline (a fraction; NaN while warming up), keyed
+    /// by ratio key — only for ratios the file was written with step judging on (#96). Empty for
+    /// every file written before that, or by a configuration without it.
+    /// </summary>
+    public IReadOnlyDictionary<string, double[]> StepRise { get; init; } = new Dictionary<string, double[]>();
+
     public int RowCount => Timestamps.Count;
 }
 
@@ -91,6 +99,16 @@ public static class RatioCsvReader
         // A ratio column is "{label} [{key}]", or a bare key in a file written before the label
         // was carried there. Split them so the plot can show the name while everything else
         // still keys on the identifier that Golden Runs and calibrations are bound to.
+        // "{label} [{key}]_stepRise" columns, wherever they sit after OverallState.
+        var stepCols = new List<(int Index, string Key)>();
+        for (int c = stateIdx + 1; c < cols.Length; c++)
+        {
+            var name = cols[c].Trim();
+            if (!name.EndsWith("_stepRise", StringComparison.OrdinalIgnoreCase)) continue;
+            stepCols.Add((c, SplitColumn(name.Substring(0, name.Length - "_stepRise".Length)).Key));
+        }
+        var step = stepCols.Select(_ => new List<double>()).ToArray();
+
         var keys = new string[ratioCount];
         var labels = new Dictionary<string, string>(ratioCount);
         for (int i = 0; i < ratioCount; i++)
@@ -131,6 +149,7 @@ public static class RatioCsvReader
             double r = rateIdx >= 0 ? ParseNum(Field(f, rateIdx)) : double.NaN;
             rate.Add(r);
             sigma.Add(sigmaIdx >= 0 ? ParseNum(Field(f, sigmaIdx)) : double.NaN);
+            for (int j = 0; j < stepCols.Count; j++) step[j].Add(ParseNum(Field(f, stepCols[j].Index)));
             if (!double.IsNaN(r)) anyRate = true;
         }
 
@@ -157,6 +176,8 @@ public static class RatioCsvReader
             LeakRate = rate.ToArray(),
             LeakRateSigma = sigma.ToArray(),
             HasLeakRate = rateIdx >= 0 && anyRate,
+            StepRise = stepCols.Select((c, j) => (c.Key, Values: step[j].ToArray()))
+                               .ToDictionary(x => x.Key, x => x.Values),
         };
     }
 

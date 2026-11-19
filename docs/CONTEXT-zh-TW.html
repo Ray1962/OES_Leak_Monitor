@@ -134,6 +134,11 @@ td code{white-space:nowrap;}
 <p><strong>Low signal（訊號過弱）</strong>： 某一筆受監看項目的譜線太貼近雜訊、不值得相信的狀態。它會被排除在複合判定之外，而不是被當成正常回報—— 讀不出來不等於通過。</p>
 <p><strong>Latched（鎖存）</strong>： 形容警報：引發它的條件已經消失，它仍然維持成立。只有人為的 acknowledge 能清掉，而且那次清除一定記得到 是哪個使用者做的。</p>
 <p><strong>Sustained confirmation（持續確認）</strong>： 狀態改變之前，門檻必須連續被突破達指定秒數的要求。這是把「漏氣」和「一根突波」分開的東西。</p>
+<p><strong>Judging path（判斷路徑）</strong>： 判斷一條比值的讀值算不算漏氣的一種方式：一組 Warn／Alarm 門檻、各自的持續確認，以及自己的鎖存。一條比值最多有兩條—— 相對 Golden Run 基準，以及相對滾動基準——狀態取它所開的路徑中比較嚴重的那一個。警報是哪條路徑觸發的，屬於警報的一部分。</p>
+<p><strong>Rolling baseline（滾動基準）</strong>： 拿比值自己最近的過去當參考——最近幾分鐘讀值的中位數，排除最近幾秒。用它來判斷稱為 <strong>step judging（跳階判斷）</strong>： 它跟著無漏氣水準的慢速漂移走，仍然看得到以跳階形式出現的漏氣；而當水準漂得比漏氣訊號還大時，Golden Run 做不到這件事。 它不需要 Golden Run，但本質上看不到開電漿時就已經存在、或慢慢變大的漏氣。</p>
+<p><strong>Rise（上升量）</strong>： 比值的平滑讀值高出滾動基準多少，以比例表示。跳階路徑的 Warn／Alarm 門檻就是上升量，沒有 σ 項。</p>
+<p><strong>Frozen reference（固定的基準）</strong>： 上升量達到 Warn 門檻時，滾動基準停在事件前的值，讓持續得比回看時間窗還久的漏氣，不會被吸收進拿來量它的基準裡。</p>
+<p><strong>Warm-up（暖機）</strong>： 平滑重新開始（電漿點燃、Reset）後，滾動基準歷史還不夠、無法判斷的那幾十秒。這時跳階路徑不表示意見；這跟「沒有基準」不是同一件事。</p>
 <p><strong>Composite level（複合等級）</strong>： 整台機器唯一那個 Normal／Warning／Alarm 判定，由各項目各自的狀態合成。讀不出來的項目不參與合成。</p>
 <p><strong>Acknowledge（人工確認）</strong>： 由具名人員結束一個鎖存警報的動作。它是唯一能清掉鎖存的東西，所以一個警報結束時若沒有這筆紀錄，代表它是 自己消失的——那是關於這台儀器的事實，不是關於腔體的。</p>
 <p><strong>Dropout（掉幀）</strong>： plasma gate 短暫關閉、但前後兩側都是好幀：這是儀器故障，而且會被當成故障計數。電漿真的熄掉持續時間更長， 不算 dropout。</p>

@@ -61,6 +61,9 @@ internal static class RecordedRun
 
         public float[] Wavelengths => _data.Wavelengths;
 
+        /// <summary>Seconds from the recording's start to frame <paramref name="i"/>.</summary>
+        public double ElapsedSeconds(int i) => _data.ElapsedSec[i];
+
         /// <summary>Wall-clock span the recording covers, seconds.</summary>
         public double DurationSeconds =>
             _data.FrameCount < 2 ? 0 : _data.ElapsedSec[_data.FrameCount - 1] - _data.ElapsedSec[0];
