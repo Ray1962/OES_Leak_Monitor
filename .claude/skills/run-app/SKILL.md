@@ -124,6 +124,12 @@ What the script works around, so you do not rediscover it:
 - **The Leak Monitor rows have no UIA pattern** — they react to the mouse only. `click|OES|<text>`
   is a real mouse click on the centre of the matching text (selects a row, #104), and
   `key|OES|{ESC}` sends keys to the window.
+- **A Win32 MessageBox is not pressable** — its button reads `確定` on this zh-TW Windows and
+  `dlg-press` does not find it. `dlg-key|{ENTER}` sends Enter to the dialog. Until it is
+  dismissed it is modal: a `click|` on the main window does nothing (the capture-finished
+  box "Golden Run captured with warnings" is one; it appears ~20 s after Start Capture).
+- **`launch|` always starts another copy**, it never attaches. To keep driving a running app,
+  start the next sequence with its first real step, and check `ps` for duplicates.
 - **`combo|OES|<item>` picks from a ComboBox** — the first on-screen one that lists a
   matching item. Do not `click` a ratio's name to select it on a chart tab: the same text is
   in the OxyPlot legend's neighbourhood, and a legend click hides that series.

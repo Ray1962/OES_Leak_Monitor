@@ -9,7 +9,7 @@
     tab|OES|Replay      press|OES|Play    toggle|OES|Raise leak*
     edits|OES           edit|OES|3|330    texts|OES|ALARM   buttons|TS
     rows|OES            row|OES|*13:49*   tick|OES|SIMP_OES1_*   click|OES|OH 308.8*   key|OES|{ESC}   combo|OES|NO 235*
-    dlg-text            dlg-edit|Name     dlg-toggle|I confirm*     dlg-press|Start Capture
+    dlg-text            dlg-key|{ENTER}   dlg-edit|Name     dlg-toggle|I confirm*     dlg-press|Start Capture
     shot|name           shot-dlg|name
     radio|TS|Equipment simulator (passive)                          profile|TS|EapForwarder
 
@@ -163,8 +163,10 @@ foreach ($step in ($Steps -split ';')) {
     'row'    { $hit = $false; foreach ($r in (Rows $a)) { $t = RowText $r; if ($t -like $b) { $r.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); Write-Host "selected $t"; $hit = $true; break } }; if (-not $hit) { Write-Host "!! no row like $b" } }
     'tick'   { $hit = $false; foreach ($r in (Rows $a)) { $t = RowText $r; if ($t -like $b) { Toggle $r '*' "row $t"; $hit = $true; break } }; if (-not $hit) { Write-Host "!! no row like $b" } }
     'click'  {
-      $t = Find (Root $a) $CT::Text $b
-      if (-not $t) { Write-Host "!! no text like $b" }
+      # On-screen only: every tab's controls are in the tree, and a hidden tab's text of the
+      # same name sits wherever its tab would draw it — over whatever is showing now.
+      $t = $null; foreach ($x in (All (Root $a) $CT::Text)) { if (-not $x.Current.IsOffscreen -and $x.Current.Name -like $b) { $t = $x; break } }
+      if (-not $t) { Write-Host "!! no on-screen text like $b" }
       else {
         [StepWin]::SetForegroundWindow((Proc $a).MainWindowHandle) | Out-Null; Start-Sleep -Milliseconds 300
         $rc = $t.Current.BoundingRectangle
@@ -190,6 +192,9 @@ foreach ($step in ($Steps -split ';')) {
     'dlg-text'   { $d = Dialog; if ($d) { Write-Host "DIALOG: $($d.Current.Name)"; foreach ($x in (All $d $CT::Text)) { Write-Host "  $($x.Current.Name)" } } }
     'dlg-edit'   { $d = Dialog; if ($d) { SetValue $d.FindFirst($TS::Descendants, (Cond $AE::ControlTypeProperty $CT::Edit)) $a; Write-Host "dialog edit=$a" } }
     'dlg-toggle' { $d = Dialog; if ($d) { Toggle $d $a 'dialog' } }
+    # A Win32 MessageBox (e.g. "Golden Run captured with warnings") shows its button as
+    # 確定 on a zh-TW Windows and dlg-press cannot reach it; Enter to the dialog itself can.
+    'dlg-key'    { $d = Dialog; if ($d) { [StepWin]::SetForegroundWindow([IntPtr]$d.Current.NativeWindowHandle) | Out-Null; Start-Sleep -Milliseconds 300; [System.Windows.Forms.SendKeys]::SendWait($a); Write-Host "dialog key $a" } }
     'dlg-press'  { $d = Dialog; if ($d) { Press $d $a 'dialog' } }
     'shot'     { Shot (Proc OES).MainWindowHandle $a }
     'shot-dlg' { $d = Dialog; if ($d) { Shot ([IntPtr]$d.Current.NativeWindowHandle) $a } }

@@ -178,7 +178,7 @@ check-oes-connect.cmd
 | 8 | **Configuration** | 光譜儀硬體參數 + 資料記錄器設定 | Engineer+ |
 | 9 | **Recordings** | 回放已存的光譜 CSV（線圖／熱圖／單幀光譜） | 全開放 |
 | 10 | **Batch Trend** | 跨批次趨勢：一批一個點，判斷這一批和前面幾十批有無不同 | 全開放 |
-| 11 | **Ratio Review** | 回放已存的比值 CSV（% 基準／原始比值／洩漏率） | 全開放 |
+| 11 | **Ratio Review** | 回放已存的比值 CSV（% vs reference／原始比值／洩漏率） | 全開放 |
 | 12 | **Logs** | 系統稽核日誌、一鍵診斷打包 | 全開放 |
 | 13 | **SECS** | 與 Host（現場為 FDC）的 SECS 連線狀態（設定需 Engineer+，看狀態不需要） | 檢視全開放 |
 | 14 | **EAP** | 與 EAP 的連線，以及主機台製程事件的狀態、設定與 CEID 對照表（設定需 Engineer+，看狀態不需要） | 檢視全開放 |
@@ -463,7 +463,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 這是日常監看時盯著的畫面。由上而下四層：
 
-![圖 4　Leak Monitor 分頁在洩漏確認後的樣子（重播 2026-08-14 漏氣錄檔，基準 `Replay 0814 head` 取自錄檔開頭）。紅色橫幅 `ALARM — leak signal confirmed`，四條啟用的比值都是 `ALARM`；`N₂ 337 / Ar 750` 與 `NO 237 / Ar 750` 是 `RawMean` 分子，百分比欄是 σ 分數；`N₂ 358 absolute` 是絕對強度。下面五列 `Disabled` 是停用的比值。這幾條都沒有開滾動基準，所以 `step (vs rolling)` 欄是 `—`（開了的樣子見圖 6）。下方趨勢圖可看到比值在重播後段越過 Warn（120）再越過 Alarm（150）。圖中是這台電腦的設定：9 組比值（出廠只有前 4 組，見 §10.5）；重播期間不套用主機台製程事件，橫幅第二行會這樣寫](images/manual-leak-monitor.png)
+![圖 4　Leak Monitor 分頁在洩漏確認後的樣子（重播 2026-08-14 漏氣錄檔，基準 `Replay 0814 head` 取自錄檔開頭）。紅色橫幅 `ALARM — leak signal confirmed`；`N₂ 337 / Ar 750` 與 `NO 237 / Ar 750` 是 `RawMean` 分子，百分比欄是 σ 分數；`N₂ 358 absolute` 是絕對強度。下面五列 `Disabled` 是停用的比值。這幾條都沒有開滾動基準，所以 `step (vs rolling)` 欄是 `—`（開了的樣子見圖 6）。已點選 `NO 237 / Ar 750` 這一列（反白）：趨勢圖畫出它自己的 `warn +20 %`／`alarm +40 %` 線，其他比值的線變淡；它的綠線剛越過 Warn，所以這一列是 `WARNING`。縱軸是 % vs reference，0 是基準。圖中是這台電腦的設定：9 組比值（出廠只有前 4 組，見 §10.5）；重播期間不套用主機台製程事件，橫幅第二行會這樣寫](images/manual-leak-monitor.png)
 
 #### 6.3.1 狀態橫幅（最上方大色塊）
 
@@ -581,7 +581,22 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 #### 6.3.6 趨勢圖
 
-畫每個比值的 **% of baseline** 隨時間變化。保留時間預設 **30 分鐘**，與 Monitor 分頁的強度趨勢**共用同一個設定**（Configuration → Trend charts，見 §10.7）。放大時時間軸仍會跟隨最新資料。
+**圖上畫的，就是判斷用的量。** 縱軸是 **% vs reference**，**0 就是參考**：
+
+| 比值的判斷方式 | 畫什麼 | 線型 |
+|---|---|---|
+| 只用 Golden Run | 相對 Golden Run 偏離多少（% of Golden Run − 100） | 實線 |
+| 只用滾動基準 | 相對滾動基準的上升量（`step (vs rolling)` 欄的值） | 實線 |
+| 兩種都用 | 兩條線，同一個顏色：上升量是實線，Golden Run 是**虛線**，圖例名稱後面加 `(GR)` | 實線＋虛線 |
+
+所以沒有漏氣時曲線在 0 附近，漏氣時往上跳；基準往下漂時曲線是負的，也照樣畫出來。只用滾動基準、沒有 Golden Run 的比值也有曲線可看。
+
+> 📝 **Y 軸從 100 改成 0。** 舊版的縱軸是「% of baseline」，基準線是 100，另有固定的 120／150 兩條線。那兩條線不屬於任何一條比值（每條比值的門檻都不一樣），而且開了滾動基準以後，% of Golden Run 根本不是判斷用的量。曲線形狀沒有變，只是整條往下移了 100。列上的百分比欄、比值 CSV、SECS 回報的值都**沒有改**，仍然是相對 Golden Run 的 %（100 = 基準線）。
+
+- **看某條比值的門檻：** 在上方的比值列上**點一下**，該列會反白，圖上畫出它自己的 Warn（橘）／Alarm（紅）線，其他比值的線變淡；Y 軸會自動拉到看得見 Alarm 線。兩種判斷都開時兩組門檻都畫（Golden Run 那組是點線，標籤前加 `GR`）。再點一次同一列或按 **Esc** 取消。
+- **暖機灰區：** 開始擷取後滾動基準還在暖機的那段（約 40 秒），圖上是一塊淺灰色、標 `warming up` 的區域。這段時間上升量還算不出來，所以沒有線，不是程式壞了。
+
+保留時間預設 **30 分鐘**，與 Monitor 分頁的強度趨勢**共用同一個設定**（Configuration → Trend charts，見 §10.7）。放大時時間軸仍會跟隨最新資料。
 
 ---
 
@@ -699,7 +714,7 @@ Process class 填的名稱要和分類器或 CEID 對照表裡的類別名稱相
 - 兩個都不勾無法存檔；只想記錄不判定，請把 Role 改成 `TrendOnly`。
 - 滾動基準的時間窗（180 / 20 / 20 秒）是全機共用設定，在 `settings.json` 的 `leakMonitor.stepLookbackSeconds`、`stepGapSeconds`、`stepMinHistorySeconds`，畫面上沒有欄位。
 
-![圖 6　只用滾動基準判斷的兩條比值（重播 2026-11-19 實驗機 DV=300 錄檔；`NO 235.6 / Ar 750.4` 與 `OH 308.8 / Ar 750.4`，Golden Run 判斷關閉）。兩列都是 `ALARM · Step`；`step (vs rolling)` 欄是相對滾動基準的上升量（+29.9 %、+8.4 %），`(frozen)` 表示基準停在漏氣前的值。百分比欄標題是 `% of GR (not judged)`；這裡沒有使用中的 Golden Run，所以該欄是 `—`，下方畫 % of Golden Run 的趨勢圖也因此是空的。](images/manual-step-judging.png)
+![圖 6　只用滾動基準判斷的兩條比值（重播 2026-11-19 實驗機 DV=300 錄檔；`NO 235.6 / Ar 750.4` 與 `OH 308.8 / Ar 750.4`，Golden Run 判斷關閉、沒有使用中的 Golden Run）。兩列都是 `ALARM · Step`（警報已鎖存）。趨勢圖畫的是相對滾動基準的上升量：左邊灰色 `warming up` 是開始擷取後的暖機期；之後 NO 約 +30 %、OH 約 +8 %，關閥後回到 0 附近。已點選 NO 那一列，所以圖上是它的 `warn +10 %`／`alarm +15 %` 線，OH 的線變淡。百分比欄標題是 `% of GR (not judged)`，沒有 Golden Run 所以是 `—`。](images/manual-step-judging.png)
 
 > 📝 為什麼需要它：2026-11-19 實驗機的空氣洩漏測試裡，DV=300 的漏氣三次都讓 NO/Ar 上升約 30%、OH/Ar 上升約 8%，
 > 但同一天沒漏氣時的水準就漂了將近 30 個百分點（剛開電漿偏高、之後一路往下滑）。固定的 Golden Run 因此在開電漿時誤報、
@@ -852,7 +867,7 @@ x ≈ s · Q
 
 #### 圖怎麼看
 
-每條比值都除以它自己在整段錄製的中位數，所以量級差很多的線可以共用一個縱軸；軸上直接寫 `× own median`。這**不是** Leak Monitor 的「% of baseline」——這個分頁的前提就是基準還不存在。
+每條比值都除以它自己在整段錄製的中位數，所以量級差很多的線可以共用一個縱軸；軸上直接寫 `× own median`。這**不是** Leak Monitor 的「% vs reference」——這個分頁的前提就是基準還不存在。
 
 #### 結果面板的六個區塊
 
@@ -986,7 +1001,7 @@ x ≈ s · Q
 
 > **開啟時預設就是記錄器的 trigger wavelength 那一條**，和以前一樣；清單會被記住，下次開啟沿用。
 >
-> ⚠️ **`Normalize` 不是 Leak Monitor 的「% of baseline」。** 這裡的分母是**該條線自己的全段平均**，那裡的分母是 **Golden Run 基線**。圖上 Y 軸會寫 `Intensity (× own mean)` 以示區別。若某條線的平均值 ≤ 0（例如扣過背景的雜訊），該條會維持原始 counts 並在下方狀態列註明。
+> ⚠️ **`Normalize` 不是 Leak Monitor 的「% vs reference」。** 這裡的分母是**該條線自己的全段平均**，那裡的參考是 **Golden Run 基線或滾動基準**。圖上 Y 軸會寫 `Intensity (× own mean)` 以示區別。若某條線的平均值 ≤ 0（例如扣過背景的雜訊），該條會維持原始 counts 並在下方狀態列註明。
 >
 > ⚠️ **`Peak ±0.5 nm` 預設關閉是刻意的。** 取窗內最大值會對**弱線**造成系統性向上偏差，同時抬高它的平均與散度 —— 而 §1.1 的判準正是「變化是雜訊的幾倍」。回顧分析要的是那個位置**實際量到**的值；真的碰到軸漂移，請用 §6.5.2 的漂移修正對症處理。
 
@@ -1004,17 +1019,23 @@ x ≈ s · Q
 
 回放記錄器寫出的比值 CSV（`{prefix}_Ratio_*.csv`）。**已被壓縮的日期一併列出**（標示 `zip`），直接從壓縮檔讀取。
 
-![圖 10　Ratio Review 分頁，開啟一次重播 2026-08-14 漏氣錄檔寫出的 `SIMP_Ratio_*.csv`（% of baseline 模式）。橘色與紅色底色是當時整體狀態為 Warning、Alarm 的時段；圖例中標 `(σ-score)` 的是 `RawMean` 分子的比值。](images/manual-ratio-review.png)
+![圖 10　Ratio Review 分頁，開啟一次重播 2026-08-14 漏氣錄檔寫出的 `SIMP_Ratio_*.csv`（% vs reference 模式）。下方說明列寫 `judging from _config_090442.json`：判斷方式與門檻取自這份設定快照。**Thresholds:** 選了 `NO 237 / Ar 750`，所以畫出它的 Warn／Alarm 線（+20 %／+40 %），其他線變淡。橘色與紅色底色是當時整體狀態為 Warning、Alarm 的時段；圖例中標 `(σ-score)` 的是 `RawMean` 分子的比值。](images/manual-ratio-review.png)
 
 **三種檢視模式**（同樣以綠框標示目前模式）：
 
 | 模式 | 內容 |
 |---|---|
-| **% of baseline** | 各比值相對基準線的百分比，附 100 / 120 / 150 % 參考線 |
+| **% vs reference** | 和 Leak Monitor 趨勢圖（§6.3.6）畫法相同：0 是參考，跳階判斷的比值畫上升量，Golden Run 判斷的比值畫偏離量（兩者都有時 Golden Run 是虛線）。暖機區段是灰色。 |
 | **Raw ratio** | 未正規化的原始比值 |
 | **Leak rate** | 校正後的 `Q̂`（mbar·L/s），附半透明 ±1σ 帶 |
 
 圖表背景會用半透明色帶標出當時的 Warning / Alarm 狀態。
+
+**依錄檔當時的設定判斷。** 每條比值當時用哪種判斷、門檻多少，從同一個日期資料夾裡的設定快照 `_config_HHmmss.json` 讀（§7.3；壓縮過的日期就從同一個 `DD.zip` 讀），取**錄檔結束前最新的一份**，而不是現在的設定——設定可能已經改過。圖下方的說明列會寫 `judging from _config_…json`。
+
+- **Thresholds:**（只在 % vs reference 模式出現）選一條比值，畫出它當時的 Warn／Alarm 線，其他線變淡；預設 `(none)` 不畫。
+- Golden Run 的門檻線在這裡是 **factor 換算**（例如 Warn factor 1.1 → +10 %）。即時判斷其實取 factor 與 σ 兩種門檻中較大的，而當時的 σ 沒有記在檔案裡，所以這條線是實際門檻的**下限**。訊號線用 `RawMean`（σ 分數）的比值不受影響，門檻線是準的。
+- **找不到設定快照時**（例如只拷了 CSV 出來）：有 `_stepRise` 欄的比值畫上升量加 Golden Run 虛線，其餘畫 Golden Run 偏離量；不畫門檻線，說明列寫 `no config snapshot`。
 
 > 📝 **Leak rate** 模式只有在該 CSV 含有 `LeakRate` / `LeakRateSigma` 欄位時才有東西可畫。校正功能上線前錄的舊檔沒有這兩欄，仍然可以正常開啟與檢視前兩種模式。
 
@@ -1360,7 +1381,7 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
 
 > 📝 **舊檔（欄名只有 `R_xxxxxxxx`）照樣讀得開**，只是 Ratio Review 的圖例會顯示代號而不是名字 —— 那些檔案裡沒有名字可用。
 
-> 第二欄的名稱會說明它裝的是什麼：一般是 `…_pctBaseline`（% 基準）；若該比值的訊號線用 `RawMean`（`Ratio` 與 `AbsoluteIntensity` 都一樣），就會是 **`…_sigmaScore`**（σ 分數）。出廠的 `R_N2Ar` 與 `R_NOAr` 就是這種。兩者都畫在同一組 100/120/150 標尺上，但**不是同一個量**，所以 Ratio Review 會在圖例標上 `(σ-score)`。
+> 第二欄的名稱會說明它裝的是什麼：一般是 `…_pctBaseline`（% 基準）；若該比值的訊號線用 `RawMean`（`Ratio` 與 `AbsoluteIntensity` 都一樣），就會是 **`…_sigmaScore`**（σ 分數）。出廠的 `R_N2Ar` 與 `R_NOAr` 就是這種。兩者在 Ratio Review 都畫在同一個 % vs reference 軸上（都減掉 100），但**不是同一個量**，所以圖例會標上 `(σ-score)`。
 
 > ⚠️ 顯示名稱裡的逗號會被寫成分號、中括號會被寫成小括號 —— 否則會把 CSV 的欄位切壞。取名字時盡量只用物種、波長與斜線，例如 `N2 337.1 / Ar 750.4`、`N2 337.1 (abs)`。
 
@@ -1517,7 +1538,7 @@ Timestamp,NO 237 / Ar 750.4 [R_7c40d2f9],NO 237 / Ar 750.4 [R_7c40d2f9]_pctBasel
 | 現象 | 通常原因 |
 |---|---|
 | **原始比值本身就不一樣** | 比值定義被改過。抽取模式在 `PeakHeight` ↔ `RawMean` 之間切換會讓數值差 2–4 倍（`RawMean` 含連續光背景）；或波長校正 overlay 動過 |
-| 原始比值相同、**% of baseline 不同** | 基線不同 —— 換了 Golden Run，或基線抓的位置不同 |
+| 原始比值相同、**% of Golden Run 不同** | 基線不同 —— 換了 Golden Run，或基線抓的位置不同 |
 | **轉態整體延後** | 基線偏高（多半是抓在洩漏已經開始的區間），或 warn / alarm 門檻被調高 |
 | **完全不跳警報** | 先確認有勾 Raise leak alarms during replay；再看主力比值是不是被 SNR gate 擋成 `LowSignal` |
 | 日誌沒有任何 `LeakMonitorState` | 沒勾 Raise leak alarms during replay（狀態其實有變，只是沒寫進日誌） |
@@ -1643,7 +1664,7 @@ Ratio Setup 與 Wavelength Calibration 的修改是**暫存**的。按完 **Save
 先分清楚是**光譜**不同還是**判讀**不同 —— 重播送出的光譜是逐幀原樣的，所以幾乎都是後者。
 
 1. 打開這一輪的 `SIMP_Ratio_*.csv` 和實機當時的 `P_Ratio_*.csv`，比**原始比值欄**（不是百分比欄）。若相同（差 0.001 % 以內），光譜路徑沒問題，往下看第 2 點；若不同，是比值定義或波長校正被改過。
-2. 比 **% of baseline** 欄。原始值相同而百分比不同，就是基線不同 —— 檢查目前作用中的 Golden Run 是哪一個、什麼時候抓的、抓的時候在放哪一段。基線抓在洩漏區間是最常見的原因。
+2. 比 **% of Golden Run** 欄。原始值相同而百分比不同，就是基線不同 —— 檢查目前作用中的 Golden Run 是哪一個、什麼時候抓的、抓的時候在放哪一段。基線抓在洩漏區間是最常見的原因。
 3. 檢查 `SIMP_Ratio_*.csv` 的列數等不等於錄檔幀數。少了就是那一輪被中途按了 Stop（日誌會寫 `stopped by the operator`），不能拿來比。
 4. 確認錄檔對得起來：一次採集常被切成好幾個輪替檔，比較的兩段要涵蓋同一段時間。
 
