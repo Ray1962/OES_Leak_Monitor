@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>修改報告 2026-11-19～20</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#0-起因1119-實驗機漏氣測試">0. 起因：11/19 實驗機漏氣測試</a>
+<a class="l2" href="#1-step-judging滾動基準判定pr-98issue-9097">1. Step judging：滾動基準判定（PR #98，issue #90–#97）</a>
+<a class="l2" href="#2-趨勢圖改為-vs-referencepr-109111issue-101108">2. 趨勢圖改為「% vs reference」（PR #109–#111，issue #101–#108）</a>
+<a class="l2" href="#3-取線窗存檔不再被重設並記錄在-golden-run-上pr-118issue-88114117">3. 取線窗存檔不再被重設，並記錄在 Golden Run 上（PR #118，issue #88、#114–#117）</a>
+<a class="l2" href="#4-不對稱基準窗與-line-previewpr-124issue-112120123">4. 不對稱基準窗與 Line preview（PR #124，issue #112、#120–#123）</a>
+<a class="l2" href="#5-像素數取線窗預設過窄警告與-apply-suggested-widthspr-131issue-125130">5. 像素數取線窗預設、過窄警告與 Apply suggested widths（PR #131，issue #125–#130）</a>
+<a class="l2" href="#6-測試與驗證">6. 測試與驗證</a>
+<a class="l2" href="#7-對現場的注意事項">7. 對現場的注意事項</a>
+</nav>
+<main>
+<h1 id="修改報告2026-11-19--2026-11-20">修改報告：2026-11-19 ～ 2026-11-20</h1>
+<p>這份報告整理 11/19–11/20 兩天對 OES Leak Monitor 的所有修改，說明<strong>改了什麼</strong>、<strong>為什麼要改</strong>。 期間共合併 9 個 PR（#98、#99、#100、#109、#110、#111、#118、#124、#131），全部以 squash 合併進 master，最後一個 commit 是 <code>0517649</code>。 11/20 晚上已用 <code>SelfContained-win-x64</code> 重新發布交付資料夾。</p>
+<h2 id="0-起因1119-實驗機漏氣測試">0. 起因：11/19 實驗機漏氣測試</h2>
+<p>11/19 在實驗機做了洩漏閥（DV）0/200/300/400 的漏空氣測試，錄檔在 <code>C:\DualOES\202611\19</code>。 這次測試暴露出幾個問題，後面所有的修改都是從這裡來的：</p>
+<ol>
+<li><strong>取線錯誤。</strong> 兩組 OH 比值的基準窗落在 OH 帶上，讀值為負，被 Golden Run 丟掉。只剩 NO/Ar 一組，加上 <code>requireTwoForAlarm</code>，Alarm 永遠不會觸發。當晚已在實驗機用修正後的取線（NO 235.6、OH 308.8 Integral）解決，並用 Replay 驗證。
+</li>
+<li><strong>基準漂移比漏氣訊號還大。</strong> 開電漿後 NO/OH 會持續衰減，40 分鐘內漂移約 10–40%。DV=300 的訊號只有 NO +30%、OH +7–9%。固定的 Golden Run 基準因此一開頭就誤報，後段又漏報。
+</li>
+<li><strong>Ratio Setup 存檔會重設取線窗。</strong> 中心不在譜線目錄的取線區，存檔時會被改回預設窗（#88）。
+</li>
+<li><strong>趨勢圖畫的不是判定依據。</strong> 圖上固定畫 100/120/150 的「% of baseline」線，看不出滾動基準判定的上升量。
+</li>
+<li><strong>預設取線窗太窄。</strong> 光譜儀像素間距約 0.6 nm，預設 ±0.5 nm 的訊號窗只涵蓋 1 個像素。
+</li>
+</ol>
+<hr>
+<h2 id="1-step-judging滾動基準判定pr-98issue-9097">1. Step judging：滾動基準判定（PR #98，issue #90–#97）</h2>
+<p><strong>改了什麼</strong></p>
+<ul>
+<li>每個比值除了 Golden Run 判定以外，可以再開「滾動基準（step）」判定。
+</li>
+<li>參考值是 <code>[t − 180 s, t − 20 s]</code> 這段時間原始比值的中位數。
+</li>
+<li>上升量（rise）超過 Warn rise / Alarm rise，並經過確認時間後就會 latch。上升量超過 Warn 時參考值會凍結，避免基準被漏氣本身拉高。
+</li>
+<li>判定前要先累積資料（warm-up），期間顯示 "Warming up"，不列入綜合判定。
+</li>
+<li>程式結構：
+<ul>
+<li>原本 <code>RatioMonitor</code> 的確認／latch 狀態機抽成 <code>JudgingPath</code>。Golden Run 和 step 是同一種 path 的兩個實例。</li>
+<li>狀態取兩條 path 中較嚴重的那個。Acknowledge 會同時清掉兩條 path 的 latch。</li>
+</ul>
+</li>
+<li>Leak Monitor 面板：
+<ul>
+<li>新增 step (vs rolling) 欄。</li>
+<li>狀態文字標出是哪條 path 觸發的，例如 "ALARM · Step"、"WARNING · GR"。</li>
+</ul>
+</li>
+<li>Ratio Setup：
+<ul>
+<li>新增 Judging 區塊。</li>
+<li>存檔會拒絕三種設定：兩條 path 都關、Warn rise ≤ 0、Alarm rise 小於 Warn rise。</li>
+</ul>
+</li>
+<li>Ratio CSV：step 判定的比值多一欄 <code>_stepRise</code>，放在 <code>LeakRateSigma</code> 後面，所以舊的讀取程式不受影響。
+</li>
+<li>RawMean（pedestal）讀值不能做 step 判定。
+</li>
+<li>SECS 的資料格式不變。
+</li>
+</ul>
+<p><strong>為什麼</strong></p>
+<p>固定基準對付不了開電漿後的衰減漂移。用滾動基準在 11 個錄檔做模擬：DV=300/400 六次全部抓到，DV=0/200 沒有誤報，而且比 Golden Run 判定更早發出警報。</p>
+<p>判定不用 σ，是因為即時 σ 在漏氣那一步會被放大，反而讓警報變遲鈍。</p>
+<p>新增的錄檔測試把 11 個錄檔送進引擎跑一遍，C# 結果和 Python 模擬的差距在 1 ms 以內。</p>
+<p><strong>附帶修正</strong></p>
+<ul>
+<li>PR #99：「% of Golden Run (not judged)」在 120 px 寬的欄位被截斷，改成「% of GR (not judged)」。
+</li>
+<li>PR #100：重拍使用手冊圖 4、5，新增 step judging 的圖 6。
+</li>
+</ul>
+<h2 id="2-趨勢圖改為-vs-referencepr-109111issue-101108">2. 趨勢圖改為「% vs reference」（PR #109–#111，issue #101–#108）</h2>
+<p><strong>改了什麼</strong></p>
+<ul>
+<li>Leak Monitor 趨勢圖改成畫「實際被判定的量」，所有線共用一條以 0 為中心的「% vs reference」軸：
+<ul>
+<li>step 判定的比值畫上升量；</li>
+<li>Golden Run 判定的比值畫 % of GR − 100。比值同時有 step 判定時，這條線用虛線，名稱加上 " (GR)"。</li>
+</ul>
+</li>
+<li>移除固定的 120／150 線。
+<ul>
+<li>點一列就畫出該比值自己的 Warn/Alarm 線，並淡化其他線。</li>
+<li>再點一次或按 Esc 取消選取。</li>
+</ul>
+</li>
+<li>warm-up 期間畫灰色的「warming up」帶。
+</li>
+<li>Ratio Review 改成用同一套投影（<code>TrendProjection</code> / <code>RecordedTrendProjection</code>）。
+<ul>
+<li>每段錄檔的判定方式和門檻，取自錄檔旁的 <code>_config_*.json</code>：選「不晚於錄檔最後一列」的最新一份。</li>
+<li>新增 Thresholds 選單。</li>
+<li>沒有 config snapshot 的舊錄檔照樣可以畫，只是不畫門檻線。</li>
+</ul>
+</li>
+<li>修正：選取一列之後立刻用最新一幀畫門檻線。以前沒有新幀進來（例如 Replay 結束）時，選了也畫不出來。
+</li>
+<li>文件：CONTEXT 新增「% vs reference」名詞；使用手冊 §6.3.6、§6.10 改寫；圖 4、6、10 重拍。
+</li>
+</ul>
+<p><strong>為什麼</strong></p>
+<p>有了 step 判定以後，舊圖的「% of baseline」和固定 120／150 線已經對應不到實際的判定依據。操作員看圖時無法判斷離警報還有多遠。</p>
+<p>config snapshot 採用「不晚於最後一列」的規則，是因為 11/19 的 snapshot 比 ratio CSV 的第一列晚 2–68 s 才寫入。如果用「不晚於第一列」，多半會選到錯的設定。</p>
+<h2 id="3-取線窗存檔不再被重設並記錄在-golden-run-上pr-118issue-88114117">3. 取線窗存檔不再被重設，並記錄在 Golden Run 上（PR #118，issue #88、#114–#117）</h2>
+<p><strong>改了什麼</strong></p>
+<ul>
+<li>Ratio Setup 每一側只保留一份正在編輯的 <code>LineRegion</code>。它一開始是載入區段的原樣複本，只有操作員改了線、模式或窗寬時才會變。
+</li>
+<li>訊號半寬、基準間隙、基準寬、峰搜尋四個欄位可以直接編輯：
+<ul>
+<li>換線時重設為預設值；</li>
+<li>只換模式時保留原值；</li>
+<li>存檔時檢查 0–20 nm 的範圍，超出就指出是哪個欄位。</li>
+</ul>
+</li>
+<li>Golden Run 基準會記錄擷取時的取線窗（<code>WindowKey</code>，不含中心）。
+<ul>
+<li>取線窗不符時清除基準，並寫入 <code>LeakMonitorBaselineMismatch</code> 日誌。</li>
+<li>波長校正改變不會讓基準失效。</li>
+<li>#88 之前建的舊基準照舊接受。</li>
+</ul>
+</li>
+<li>存檔時會列出這次修改讓哪些比值的 Golden Run 失效。
+</li>
+</ul>
+<p><strong>為什麼</strong></p>
+<p>11/19 調好的 NO 235.6、OH 308.8 中心不在譜線目錄裡，一存檔就被改回預設窗，等於默默推翻了取線修正。當時只能用使用者譜線繞過去。</p>
+<p>基準記錄取線窗之後，換了窗就不會再拿舊基準來比，避免誤判。</p>
+<h2 id="4-不對稱基準窗與-line-previewpr-124issue-112120123">4. 不對稱基準窗與 Line preview（PR #124，issue #112、#120–#123）</h2>
+<p><strong>改了什麼</strong></p>
+<ul>
+<li>左右基準窗可以分別設定間隙和寬度（右側 gap / width）。
+</li>
+<li>Ratio Setup 新增 Line preview，可以顯示即時光譜、Freeze 畫面，或錄檔中的某一幀。
+<ul>
+<li>預覽圖上依實際量到的位置畫出訊號窗、基準窗，和引擎算出的讀值。</li>
+<li>基準窗和鄰近譜線重疊、窗內沒有峰等狀況，會顯示警告。</li>
+</ul>
+</li>
+<li>使用手冊新增圖 5a。
+</li>
+</ul>
+<p><strong>為什麼</strong></p>
+<ul>
+<li>OH 308.8 坐在 N₂ 315.9 的斜坡上，乾淨的背景只有 298.6–305 和 317–320 nm 兩段。對稱的基準窗一定會踩到其他譜帶。
+</li>
+<li>11/19 的取線錯誤要到看了光譜才發現。在設定畫面直接看到窗落在光譜的哪裡，才能在現場當下發現問題。
+</li>
+</ul>
+<h2 id="5-像素數取線窗預設過窄警告與-apply-suggested-widthspr-131issue-125130">5. 像素數取線窗預設、過窄警告與 Apply suggested widths（PR #131，issue #125–#130）</h2>
+<p><strong>改了什麼</strong></p>
+<ul>
+<li>新增 <code>LineWindowAdvice</code>。預設窗改以像素數訂定：訊號 5、基準 3、間隙 2、峰搜尋 2。再用當下光譜的像素間距換算成 nm；沒有光譜時以 0.6 nm 計算。
+</li>
+<li>Ratio Setup：
+<ul>
+<li>每一側顯示各窗涵蓋幾個像素；</li>
+<li>低於最低值時顯示 "Too narrow" 警告；</li>
+<li>新增 <strong>Apply suggested widths</strong> 按鈕，只把過窄的窗拉寬，可以用 Revert 還原。</li>
+</ul>
+</li>
+<li>出廠比值和參考線 preset 改成符合最低值。N₂ 337.1 用不對稱間隙避開 Zn 334.5。
+</li>
+<li><strong>既有設定不自動遷移。</strong>
+</li>
+<li>Integral 訊號窗不設像素下限；峰搜尋設為 0 時視為刻意固定，不做檢查。
+</li>
+</ul>
+<p><strong>為什麼</strong></p>
+<ul>
+<li>0.6 nm/px 下，原本的預設窗只有 1–2 個像素：峰稍微漂移就跑出窗外，基準也不穩。
+</li>
+<li>用 11/19 錄檔驗證的結果：
+<ul>
+<li>Ar RawMean 從 1 px 加寬到 5 px，表現持平或更好；</li>
+<li>已調好的 NO、OH Integral 帶加寬到 7 px，step SNR 反而下降 25–35%。多出來的像素不回應漏氣，而且雜訊主要來自電漿閃爍，不是像素雜訊。</li>
+</ul>
+</li>
+</ul>
+<p>所以 Integral 不設下限。</p>
+<ul>
+<li>不自動遷移，是因為改了窗之後 Golden Run 就會失效，應該由工程師自己決定什麼時候改、改完重新驗證。
+</li>
+</ul>
+<p>細節見 <code>docs/worklog-20261120.md</code>。</p>
+<hr>
+<h2 id="6-測試與驗證">6. 測試與驗證</h2>
+<ul>
+<li>單元測試與錄檔測試合計 499 個：0 失敗，7 個 skipped（需要不在 repo 內的錄檔）。每個 PR 的 CI 都通過。
+</li>
+<li>新增的錄檔測試：
+<ul>
+<li>step judging 用 11 個錄檔驗證；</li>
+<li>像素數取線窗比較新舊窗寬的 SNR，容許差 2%。</li>
+</ul>
+</li>
+<li>有畫面的部分都用 run-app 實際開程式驗證：
+<ul>
+<li>Replay 18:12 DV=300 時，"Warming up"、"ALARM · Step"、"+29.1% (frozen)" 和 <code>_stepRise</code> 欄都正常；</li>
+<li>趨勢圖、Line preview、過窄警告、Apply / Revert 也都正常。</li>
+</ul>
+</li>
+<li>每次驗證後，本機的 SECS 驗收 <code>settings.json</code> 都還原到原雜湊，<code>_batches.csv</code> 也已還原，新增的 Logs 已刪除。
+</li>
+</ul>
+<h2 id="7-對現場的注意事項">7. 對現場的注意事項</h2>
+<ol>
+<li>新功能在舊設定檔下預設都是關的：step 判定預設關閉，取線窗也不會自動加寬。舊設定的行為和以前完全一樣。
+</li>
+<li>要用 step 判定，在 Ratio Setup 的 Judging 區塊勾選即可。11/19 的建議設定是：
+<ul>
+<li>NO 235.6/Ar：+10% / +15%；</li>
+<li>OH 308.8/Ar：+2% / +3%；</li>
+<li>關閉 Golden Run 判定，並開啟 <code>RequireTwoForAlarm</code>。</li>
+</ul>
+</li>
+</ol>
+<p>這組參數是用同一批資料挑出來的，還需要 DV=0→300 的實測確認。</p>
+<ol>
+<li>step 判定要先 warm-up 約 40 s，開閥的 SOP 要配合這段時間。
+</li>
+<li>改了取線窗之後，相關比值的 Golden Run 基準會失效，要重新擷取。
+</li>
+<li>本機 SECS 驗收用的 <code>settings.json</code> 這兩天都沒有被修改。
+</li>
+</ol>
+</main>
+</div>
+</body>
+</html>

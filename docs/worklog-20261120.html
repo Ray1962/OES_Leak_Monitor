@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>修改報告 2026-11-20 像素數取線窗</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#1-問題">1. 問題</a>
+<a class="l2" href="#2-設計決定grill-會議-q1q6">2. 設計決定（grill 會議 Q1–Q6）</a>
+<a class="l2" href="#3-程式修改">3. 程式修改</a>
+<a class="l3" href="#31-新增-linewindowadvice純邏輯無-ui">3.1 新增 LineWindowAdvice（純邏輯，無 UI）</a>
+<a class="l3" href="#32-ratio-setup-介面">3.2 Ratio Setup 介面</a>
+<a class="l3" href="#33-出廠比值與-presetleakmonitorsettingsreferencelinecatalog">3.3 出廠比值與 preset（LeakMonitorSettings、ReferenceLineCatalog）</a>
+<a class="l2" href="#4-錄檔驗證1119-漏氣測試">4. 錄檔驗證（11/19 漏氣測試）</a>
+<a class="l2" href="#5-測試與驗證">5. 測試與驗證</a>
+<a class="l2" href="#6-文件">6. 文件</a>
+<a class="l2" href="#7-對現場的影響與注意事項">7. 對現場的影響與注意事項</a>
+</nav>
+<main>
+<h1 id="修改報告像素數取線窗預設過窄警告與-apply-suggested-widthspr-131">修改報告：像素數取線窗預設、過窄警告與 Apply suggested widths（PR #131）</h1>
+<ul>
+<li>日期：2026-11-20
+</li>
+<li>對應 issue：#125（問題）、#126（規格）、#127–#130（實作票，皆已關閉）
+</li>
+<li>合併：<code>0517649</code>（squash 合併進 master）
+</li>
+<li>發布：已用 <code>SelfContained-win-x64</code> 產生交付資料夾 <code>src/OES_Leak_Monitor/bin/Publish/win-x64/</code>（24 個檔案齊全，<code>.exe</code> 76,209,491 bytes）
+</li>
+</ul>
+<h2 id="1-問題">1. 問題</h2>
+<p>實驗機與現場光譜儀的像素間距約 <strong>0.6 nm/px</strong>。原本的預設取線窗是以 nm 固定值訂的（例如訊號 ±0.5 nm、基準寬 1.0 nm），換算後：</p>
+<ul>
+<li>訊號窗只涵蓋 1 個像素，峰頂稍微漂移就落在窗外，RawMean 也無法平均雜訊；
+</li>
+<li>基準窗只有 1–2 個像素，底線與雜訊估計不穩；
+</li>
+<li>間隙（gap）不到 2 個像素，線翼會漏進基準窗；
+</li>
+<li>峰搜尋範圍不到 2 個像素，跟不上一個像素的漂移。
+</li>
+</ul>
+<h2 id="2-設計決定grill-會議-q1q6">2. 設計決定（grill 會議 Q1–Q6）</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>決定</th></tr></thead>
+<tbody>
+<tr><td>Q1</td><td>預設窗改以「像素數」訂，依當下光譜的實際間距換成 nm（設定仍以 nm 儲存，<code>WindowKey</code> 不變）</td></tr>
+<tr><td>Q2</td><td>最低像素數：訊號 5、基準 3、間隙 2、峰搜尋 2</td></tr>
+<tr><td>Q3</td><td><strong>不自動遷移</strong>既有比值；在 Ratio Setup 顯示警告，並提供 <strong>Apply suggested widths</strong> 按鈕由使用者決定</td></tr>
+<tr><td>Q4</td><td>出廠比值與參考線 preset 改為符合最低值；必要時用不對稱基準窗避開鄰近譜線</td></tr>
+<tr><td>Q5</td><td>用 11/19 實驗機漏氣錄檔驗證</td></tr>
+<tr><td>Q6</td><td>驗證結果推翻了 Integral 加寬：<strong>Integral 訊號窗不設像素下限</strong>（新 Integral 線仍從 ±1.0 nm 起）；<strong>峰搜尋 = 0 視為刻意固定，不檢查</strong>；錄檔比較容許差 2%</td></tr>
+</tbody></table></div>
+<h2 id="3-程式修改">3. 程式修改</h2>
+<h3 id="31-新增-linewindowadvice純邏輯無-ui">3.1 新增 <code>LineWindowAdvice</code>（純邏輯，無 UI）</h3>
+<ul>
+<li><code>PitchOf(wavelengths)</code>：取波長軸相鄰間距的中位數；沒有光譜時退回 <code>FallbackPitchNm = 0.6</code>。
+</li>
+<li><code>Defaults(line, mode, pitch)</code>：產生新線的建議窗。PeakHeight/RawMean 訊號半寬 = 5 px × pitch / 2；Integral 為 ±1.0 nm；RawMean 不搜尋（0）。
+</li>
+<li><code>Pixels(width, pitch)</code>：<code>floor(width / pitch)</code>，即「不論落在軸上哪裡都保證涵蓋」的像素數。
+</li>
+<li><code>Check(region, pitch)</code>：列出該模式實際用到的每個窗與其最低值。RawMean 只檢查訊號窗；Integral 訊號窗與峰搜尋 0 的最低值為 0。
+</li>
+<li><code>ApplySuggested(region, pitch)</code>：只把<strong>過窄</strong>的窗拉到建議值；中心、已夠寬的窗、Integral 訊號窗、峰搜尋 0 都不動；不對稱右側分開處理。
+</li>
+<li><code>CoverageText</code> / <code>WarningText</code>：編輯器顯示用文字（例如 <code>Too narrow: Gap 1 px (needs ≥2)</code>）。
+</li>
+</ul>
+<h3 id="32-ratio-setup-介面">3.2 Ratio Setup 介面</h3>
+<ul>
+<li><code>RatioEditViewModel</code>：分子、分母各自顯示像素涵蓋文字與警告；新增 <code>HasNarrowWindows</code>、<code>ApplySuggestedWidthsCommand</code>。原本的 <code>BuildRegion</code> 改由 <code>LineWindowAdvice.Defaults</code> 取代。
+</li>
+<li><code>RatioSetupViewModel</code>：把 Line preview 量到的像素間距傳給編輯器。
+</li>
+<li><code>LinePreviewViewModel</code> / <code>LinePreview</code>：新增 <code>PitchNm</code> 與 <code>PitchChanged</code> 事件；預覽圖上也顯示 "Too narrow" 警告。
+</li>
+<li><code>RatioSetupPanel.xaml</code>：每一側加入涵蓋文字與警告列，訊號區加入 Apply suggested widths 按鈕。
+</li>
+<li>按 Apply 後的修改屬於暫存編輯，可以用 Revert 還原。
+</li>
+</ul>
+<h3 id="33-出廠比值與-presetleakmonitorsettingsreferencelinecatalog">3.3 出廠比值與 preset（<code>LeakMonitorSettings</code>、<code>ReferenceLineCatalog</code>）</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>新設定</th></tr></thead>
+<tbody>
+<tr><td>N₂ 337.1（分子）</td><td>RawMean ±1.5 nm</td></tr>
+<tr><td>N₂ 357.7（分子）</td><td>PeakHeight ±1.5 / gap 1.2 / 基準寬 1.8 / 搜尋 1.2；RawMean 版本 ±1.5</td></tr>
+<tr><td>Ar 750.4、Ar 811.5、Hα preset</td><td>PeakHeight ±1.5 / 1.2 / 1.8 / 1.2</td></tr>
+<tr><td>N₂ 337.1、N₂ 662.4 preset</td><td>Integral ±1.0，基準寬 1.8，搜尋 1.2；N₂ 337.1 左間隙 2.1、右間隙 1.2，避開 Zn 334.5</td></tr>
+</tbody></table></div>
+<p>與鄰近線重疊的檢查改用明確的允許清單（Ar 750.4 對 Cl 754.7；N₂ 357.7 對 N2 353.7、Zr 354.8、Cr 360.5、He 361.4、Cr 359.3、Zr 360.1、CN 359.0）。</p>
+<h2 id="4-錄檔驗證1119-漏氣測試">4. 錄檔驗證（11/19 漏氣測試）</h2>
+<p>新增 <code>Pixel_based_windows_lower_noise_without_losing_the_leak_step</code>，比較舊窗與新窗在 DV=300 的 step SNR：</p>
+<ul>
+<li>Ar RawMean 由 1 px 加寬到 5 px：持平或更好。
+</li>
+<li>已調好的 Integral 帶（NO 235.6、OH 308.8）加寬到 7 px：step SNR <strong>下降 25–35%</strong>。多出來的像素不回應漏氣，而雜訊主要來自<strong>電漿閃爍</strong>，不是像素雜訊。
+</li>
+</ul>
+<p>所以 Integral 訊號窗不設下限（Q6）。</p>
+<h2 id="5-測試與驗證">5. 測試與驗證</h2>
+<ul>
+<li>單元測試：新增 <code>PixelWindowTests</code>，並更新 <code>LineWindowTests</code>、<code>LinePreviewTests</code> 的預期值。
+</li>
+<li>全部測試 499 個：0 失敗，7 個 skipped（需要不在 repo 內的錄檔）。CI 通過。
+</li>
+<li>實機 UI（run-app）：警告、按鈕、Apply、Revert 行為都正確。測試後本機 <code>settings.json</code> 已還原為原雜湊，<code>_batches.csv</code> 也已還原，新增的 Logs 已刪除。
+</li>
+</ul>
+<h2 id="6-文件">6. 文件</h2>
+<ul>
+<li>使用手冊新增 §6.4.4「像素數與 Apply suggested widths」與圖 5b（<code>docs/images/manual-ratio-setup-pixel-windows.png</code>），HTML 已重新產生。
+</li>
+<li><code>docs/dev/ratio-setup-and-lines.md</code>、<code>docs/dev/leak-engine.md</code> 已更新。
+</li>
+</ul>
+<h2 id="7-對現場的影響與注意事項">7. 對現場的影響與注意事項</h2>
+<ul>
+<li><strong>既有比值不會被自動修改</strong>。開啟 Ratio Setup 時，過窄的窗會顯示警告，要由工程師按 Apply suggested widths 並重新驗證。
+</li>
+<li>本機 SECS 驗收用的 <code>settings.json</code> 裡有 12 個 ±0.5 nm 的區段，這次<strong>刻意沒有改動</strong>。
+</li>
+<li>Golden Run 基準會記錄擷取時用的取線窗（PR #118），所以套用新窗之後應重新擷取 Golden Run。
+</li>
+</ul>
+</main>
+</div>
+</body>
+</html>
