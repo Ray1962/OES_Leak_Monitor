@@ -21,6 +21,10 @@ public sealed class RatioViewModel : INotifyPropertyChanged
     public string Key { get; }
     public string DisplayName { get; }
 
+    private bool _isSelected;
+    /// <summary>The row whose thresholds the trend chart draws (#104).</summary>
+    public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+
     private RatioState _state = RatioState.NoBaseline;
     public RatioState State
     {

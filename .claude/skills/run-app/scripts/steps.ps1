@@ -8,10 +8,14 @@
     ps                  launch|OES        kill|OES          login           sleep|5
     tab|OES|Replay      press|OES|Play    toggle|OES|Raise leak*
     edits|OES           edit|OES|3|330    texts|OES|ALARM   buttons|TS
-    rows|OES            row|OES|*13:49*   tick|OES|SIMP_OES1_*
+    rows|OES            row|OES|*13:49*   tick|OES|SIMP_OES1_*   click|OES|OH 308.8*   key|OES|{ESC}
     dlg-text            dlg-edit|Name     dlg-toggle|I confirm*     dlg-press|Start Capture
     shot|name           shot-dlg|name
     radio|TS|Equipment simulator (passive)                          profile|TS|EapForwarder
+
+  'click' is a real mouse click on the centre of the text that matches — for a control that
+  reacts to the mouse and has no UIA pattern (the Leak Monitor rows). 'key' sends keys
+  (SendKeys syntax) to the app's foreground window.
 
   App is OES or TS. Patterns are PowerShell -like wildcards on the visible text. Lines that
   start with '!!' are failures: a control not found or disabled — the step did nothing.
@@ -33,6 +37,9 @@ public class StepWin {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int cmd);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h,out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h,IntPtr hdc,uint flags);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,UIntPtr e);
   public struct RECT { public int Left,Top,Right,Bottom; }
 }
 "@
@@ -155,6 +162,18 @@ foreach ($step in ($Steps -split ';')) {
     'rows'   { $i = 0; foreach ($r in (Rows $a)) { Write-Host "[$i] $(RowText $r)"; $i++ } }
     'row'    { $hit = $false; foreach ($r in (Rows $a)) { $t = RowText $r; if ($t -like $b) { $r.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); Write-Host "selected $t"; $hit = $true; break } }; if (-not $hit) { Write-Host "!! no row like $b" } }
     'tick'   { $hit = $false; foreach ($r in (Rows $a)) { $t = RowText $r; if ($t -like $b) { Toggle $r '*' "row $t"; $hit = $true; break } }; if (-not $hit) { Write-Host "!! no row like $b" } }
+    'click'  {
+      $t = Find (Root $a) $CT::Text $b
+      if (-not $t) { Write-Host "!! no text like $b" }
+      else {
+        [StepWin]::SetForegroundWindow((Proc $a).MainWindowHandle) | Out-Null; Start-Sleep -Milliseconds 300
+        $rc = $t.Current.BoundingRectangle
+        [StepWin]::SetCursorPos([int]($rc.X + $rc.Width / 2), [int]($rc.Y + $rc.Height / 2)) | Out-Null
+        [StepWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [StepWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+        Write-Host "clicked $($t.Current.Name)"
+      }
+    }
+    'key'    { [StepWin]::SetForegroundWindow((Proc $a).MainWindowHandle) | Out-Null; Start-Sleep -Milliseconds 300; [System.Windows.Forms.SendKeys]::SendWait($b); Write-Host "$a key $b" }
     'dlg-text'   { $d = Dialog; if ($d) { Write-Host "DIALOG: $($d.Current.Name)"; foreach ($x in (All $d $CT::Text)) { Write-Host "  $($x.Current.Name)" } } }
     'dlg-edit'   { $d = Dialog; if ($d) { SetValue $d.FindFirst($TS::Descendants, (Cond $AE::ControlTypeProperty $CT::Edit)) $a; Write-Host "dialog edit=$a" } }
     'dlg-toggle' { $d = Dialog; if ($d) { Toggle $d $a 'dialog' } }
