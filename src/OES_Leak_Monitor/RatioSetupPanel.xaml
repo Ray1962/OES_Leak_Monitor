@@ -258,6 +258,21 @@
                                                  IsEnabled="{Binding SignalPeakSearchEditable}"
                                                  ToolTip="Re-centre the windows on the strongest point within centre ± this (absorbs drift). 0 pins them to the centre. Always 0 for RawMean."/>
                                     </Grid>
+                                    <!-- Separate right side (#112): the right baseline window's own gap and width. -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <CheckBox Content="Separate right side" VerticalAlignment="Center"
+                                                  IsChecked="{Binding SignalSeparateRight}"
+                                                  ToolTip="Give the right baseline window its own gap and width — for a line beside a molecular band whose clean continuum is further away on one side. Off: the right window mirrors the left (Baseline gap / Baseline width)."/>
+                                        <StackPanel Orientation="Horizontal" Margin="12,0,0,0"
+                                                    Visibility="{Binding SignalSeparateRight, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="Right gap" Style="{StaticResource ThreshLabel}"/>
+                                            <TextBox Width="60" Style="{StaticResource ThreshBox}" Text="{Binding SignalRightGapNm}"
+                                                     ToolTip="Distance from the signal window's right edge to the right baseline window. Baseline gap above is then the left side."/>
+                                            <TextBlock Text="Right width" Style="{StaticResource ThreshLabel}" Margin="12,0,0,0"/>
+                                            <TextBox Width="60" Style="{StaticResource ThreshBox}" Text="{Binding SignalRightWidthNm}"
+                                                     ToolTip="Width of the right baseline window. Baseline width above is then the left side."/>
+                                        </StackPanel>
+                                    </StackPanel>
                                     <TextBlock FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,4,0,0"
                                                Text="Picking another line resets these to that extraction's defaults; changing only the extraction keeps them. Changing them makes the active Golden Run's baseline for this ratio inapplicable — capture a new one."/>
                                     <TextBlock FontSize="11" Foreground="#B36B00" TextWrapping="Wrap" Margin="0,6,0,0"
@@ -345,6 +360,21 @@
                                                  IsEnabled="{Binding ReferencePeakSearchEditable}"
                                                  ToolTip="Re-centre the windows on the strongest point within centre ± this (absorbs drift). 0 pins them to the centre. Always 0 for RawMean."/>
                                     </Grid>
+                                    <!-- Separate right side (#112): the right baseline window's own gap and width. -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <CheckBox Content="Separate right side" VerticalAlignment="Center"
+                                                  IsChecked="{Binding ReferenceSeparateRight}"
+                                                  ToolTip="Give the right baseline window its own gap and width — for a line beside a molecular band whose clean continuum is further away on one side. Off: the right window mirrors the left (Baseline gap / Baseline width)."/>
+                                        <StackPanel Orientation="Horizontal" Margin="12,0,0,0"
+                                                    Visibility="{Binding ReferenceSeparateRight, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="Right gap" Style="{StaticResource ThreshLabel}"/>
+                                            <TextBox Width="60" Style="{StaticResource ThreshBox}" Text="{Binding ReferenceRightGapNm}"
+                                                     ToolTip="Distance from the signal window's right edge to the right baseline window. Baseline gap above is then the left side."/>
+                                            <TextBlock Text="Right width" Style="{StaticResource ThreshLabel}" Margin="12,0,0,0"/>
+                                            <TextBox Width="60" Style="{StaticResource ThreshBox}" Text="{Binding ReferenceRightWidthNm}"
+                                                     ToolTip="Width of the right baseline window. Baseline width above is then the left side."/>
+                                        </StackPanel>
+                                    </StackPanel>
                                     <TextBlock FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,4,0,0"
                                                Text="Picking another line resets these to that extraction's defaults; changing only the extraction keeps them. Changing them makes the active Golden Run's baseline for this ratio inapplicable — capture a new one."/>
                                 </StackPanel>
