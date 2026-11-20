@@ -604,7 +604,7 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
 
 **Engineer+ 才能存檔。**
 
-![圖 5　Ratio Setup 分頁，選中 `N₂ 358 / Ar 750`。左邊是比值清單（勾選＝啟用，下方 **Add／Remove／▲／▼**），右邊編輯選中的比值：Display name、Process class、**Role**、Monitoring method、分子與分母譜線及萃取方式、門檻，最下面是 **Judging**（Golden Run baseline／Rolling baseline (step)，見下文）。分子選 `RawMean` 時，分子區塊下方會多出橘色說明，提醒 Warn/Alarm factor 不再作用、改以 σ 判斷，而且這條比值不能開滾動基準。](images/manual-ratio-setup.png)
+![圖 5　Ratio Setup 分頁，選中 `N₂ 358 / Ar 750`。左邊是比值清單（勾選＝啟用，下方 **Add／Remove／▲／▼**），右邊編輯選中的比值：Display name、Enabled、Process class、**Role**、Monitoring method，接著是 Signal line 與 Reference line 兩個區塊，各有譜線、擷取方式，以及 **Line windows (nm)** 四個欄位（Signal ±、Baseline gap、Baseline width、Peak search ±，見下文）；再往下是門檻，捲到最底是 **Judging**（Golden Run baseline／Rolling baseline (step)）。](images/manual-ratio-setup.png)
 
 > ⚠️ **這裡的修改是「暫存」的。** 按 Save 只是寫進 `settings.json`；要真正生效，必須回 Monitor 分頁 **Stop → Start** 重啟擷取。畫面上方的黃色提示條就是在講這件事。
 
@@ -655,6 +655,23 @@ Reset Run 底下的細長狀態列（標示 **Spectrum recorder**），顯示**�
   > 2. **% 趨勢改為 σ 分數**（基準線 = 100，高一個 warn-σ = 120），CSV 欄位也會改叫 `_sigmaScore`。
   > 3. **洩漏率校正改用絕對上升量**（見 §6.6.1）。
   > 4. **訊號線不給 SNR**（顯示 `—`）。原始強度除以連續光雜訊會得到幾百的「SNR」，那是基座不是譜線。`Ratio` 模式下，參考譜線仍然要通過 Min SNR。
+
+- **Line windows (nm)** — 決定這條線怎麼量的四個數字（Engineer 以上可改，按 **Save** 才寫入）：
+
+  | 欄位 | 意思 | 範圍 |
+  |---|---|---|
+  | **Signal ±** | 訊號視窗半寬：中心 ± 這個值。`RawMean` 時是平均寬度（0 = 中心點內插值） | `RawMean` 0–20，其餘 >0–20 |
+  | **Baseline gap** | 訊號視窗邊緣到兩側基準視窗的距離。旁邊有別的譜帶落進基準視窗時把它拉大 | 0–20 |
+  | **Baseline width** | 左右兩個基準視窗各自的寬度 | >0–20 |
+  | **Peak search ±** | 先在中心 ± 這個範圍內找最高點，再把視窗移過去（吸收波長漂移）；0 = 固定在中心。`RawMean` 一律 0、欄位變灰 | 0–20 |
+
+  - **換一條譜線**時，四個欄位會變回該擷取方式的預設值（`Integral` 半寬 1.0、其他 0.5；間距 1；基準寬 1；搜尋 1，`RawMean` 為 0）；**只換擷取方式**時，半寬、間距、基準寬保留，只調整搜尋範圍。
+  - 超出範圍時 **Save** 會被擋下，狀態列會寫是哪一組比值的哪個欄位。
+  - **沒動過的比值，存檔後完全不變**（包括中心波長不在 catalog 上的，例如 `NO 235.6`、`OH 308.8`）。舊版存檔會把這種比值的視窗重設回預設值，所以以前得另外加一條 `uNO 235.6` 這樣的使用者譜線來繞過；現在不需要了，已經加的也不必刪。
+
+  > 📝 2026-11-19 實驗機的例子：OH 308.8 落在 N₂ 315.9 帶的藍側，預設間距 1 會讓左側基準視窗落在 OH 的 R 帶頭上，讀值變成負的；可用的連續光只有 298.6–305 與 317–320 nm，對稱視窗要把間距拉到約 6.7 nm 才碰得到。左右不對稱的基準視窗與視窗預覽圖見 issue #112。
+
+> ⚠️ **改了譜線或 Line windows，原本的 Golden Run 基準線就不再套用。** 錄 Golden Run 時會記下每條比值當時的譜線與四個視窗；之後只要不一樣，程式就不用那條基準線，系統日誌會寫 `LeakMonitorBaselineMismatch`（「captured with different line windows」），該比值顯示 `No Baseline`，要重錄。存檔時若有這種比值，狀態列會列出它們。**只改波長修正不會**讓基準線失效。舊版錄的 Golden Run 沒有這份記錄，照舊套用。
 
 > ⚠️ **換了參考譜線，原本的 Golden Run 基準線就失效**（`Ratio` 模式的基準線綁定當初的參考譜線）。換完必須重錄。絕對強度模式的基準線不綁參考線，但**改變監控方式**（`Ratio` ↔ `AbsoluteIntensity`）一定會讓舊基準線失效 —— 兩種模式量的根本不是同一個東西。
 

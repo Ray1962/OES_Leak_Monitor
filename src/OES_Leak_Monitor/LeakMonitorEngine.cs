@@ -1872,6 +1872,9 @@ public sealed class LeakMonitorEngine : IDisposable
                 // record one — a later reference swap must not invalidate them.
                 ReferenceLabel = baselineDef.MonitorMode == MonitorMode.AbsoluteIntensity
                     ? "" : baselineDef.Denominator.Label,
+                NumeratorWindows = baselineDef.Numerator.WindowKey,
+                DenominatorWindows = baselineDef.MonitorMode == MonitorMode.AbsoluteIntensity
+                    ? null : baselineDef.Denominator.WindowKey,
             });
         }
 
@@ -2123,7 +2126,11 @@ public sealed class LeakMonitorEngine : IDisposable
                                     (!absolute && def.Denominator.Mode == LineExtractMode.Integral);
             bool revisionOk = b is not null &&
                               (!involvesIntegral || b.ExtractionRevision >= CurrentExtractionRevision);
-            bool usable = b is not null && b.Mean > 0 && modeMatches && labelMatches && revisionOk;
+            // Recorded windows (#88): null on a pre-#88 baseline, which is accepted as before.
+            bool windowsMatch = b is not null &&
+                                (b.NumeratorWindows is null || b.NumeratorWindows == def.Numerator.WindowKey) &&
+                                (absolute || b.DenominatorWindows is null || b.DenominatorWindows == def.Denominator.WindowKey);
+            bool usable = b is not null && b.Mean > 0 && modeMatches && labelMatches && revisionOk && windowsMatch;
             if (usable)
             {
                 mon.SetBaseline(b!.Mean, b.Sigma);
@@ -2151,6 +2158,12 @@ public sealed class LeakMonitorEngine : IDisposable
                         "with the previous integral extraction (a plain pixel sum). Integrals are " +
                         "now in counts·nm with fractional-pixel window edges, so the stored mean is " +
                         "in a different unit — capture a new Golden Run.",
+                        related: $"GoldenRun={run.Name},Ratio={mon.Key}");
+                else if (b is not null && b.Mean > 0 && !windowsMatch)
+                    _log?.LogSystemEvent(LogSeverity.Information, "LeakMonitorBaselineMismatch",
+                        $"Golden Run “{run!.Name}” has a baseline for {def.DisplayName}, but it was " +
+                        "captured with different line windows (or lines) than the ratio now uses — " +
+                        "the reading is a different number, so capture a new Golden Run.",
                         related: $"GoldenRun={run.Name},Ratio={mon.Key}");
             }
         }

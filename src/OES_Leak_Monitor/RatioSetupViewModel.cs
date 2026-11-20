@@ -274,9 +274,16 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
                 StatusMessage = $"“{r.DisplayName}”: {judging}";
                 return;
             }
+            if (r.WindowError is { } window)
+            {
+                SelectedRatio = r;
+                StatusMessage = $"“{r.DisplayName}”: {window}";
+                return;
+            }
         }
 
         var defs = Ratios.Select(r => r.ToDefinition()).ToList();
+        var invalidated = BaselinesInvalidatedBy(_engine.Settings, defs);
         _engine.Settings.Ratios = defs;
 
         try
@@ -291,9 +298,35 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
 
         IsDirty = false;
         StatusMessage =
-            "Saved. Stop OES acquisition, then press Start OES again to apply the new ratio configuration.";
+            "Saved. Stop OES acquisition, then press Start OES again to apply the new ratio configuration." +
+            (invalidated.Count == 0 ? "" :
+                $" Golden Run “{_engine.Settings.ActiveGoldenRun}” no longer matches the lines or windows of " +
+                string.Join(", ", invalidated) + " — capture a new Golden Run.");
         _log?.LogSystemEvent(LogSeverity.Information, "RatioSetupSaved",
             $"Species-ratio configuration saved ({defs.Count} ratio(s)) — applies on the next acquisition start.");
+    }
+
+    /// <summary>
+    /// Display names of the ratios whose saved lines or windows differ from what they were, while
+    /// the active Golden Run holds a baseline for them — the baselines the engine will refuse on
+    /// the next start (#88). Compared the way the baseline records them
+    /// (<see cref="LineRegion.WindowKey"/>), so the message and the refusal agree.
+    /// </summary>
+    internal static List<string> BaselinesInvalidatedBy(LeakMonitorSettings settings, IReadOnlyList<RatioDefinition> next)
+    {
+        var names = new List<string>();
+        var run = settings.FindGoldenRun(settings.ActiveGoldenRun);
+        if (run is null) return names;
+        foreach (var d in next)
+        {
+            var before = settings.Ratios.FirstOrDefault(r => r.Key == d.Key);
+            if (before is null || run.Find(d.Key) is not { Mean: > 0 }) continue;
+            bool absolute = d.MonitorMode == MonitorMode.AbsoluteIntensity;
+            if (before.Numerator.WindowKey != d.Numerator.WindowKey ||
+                (!absolute && before.Denominator.WindowKey != d.Denominator.WindowKey))
+                names.Add(d.DisplayName);
+        }
+        return names;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

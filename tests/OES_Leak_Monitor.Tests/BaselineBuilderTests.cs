@@ -104,6 +104,18 @@ public class BaselineBuilderTests
         Assert.Equal(2, result.Run.Source.Files.Count);
     }
 
+    [Fact]
+    public void A_built_baseline_records_the_line_windows_it_was_measured_with()
+    {
+        // #88: an offline-built Golden Run must carry the same record as a live capture, or it
+        // would be treated as a pre-#88 baseline and kept through any window change.
+        var picks = new[] { (Fake("a.csv", Flat(100, 2000)), new SteadyWindow(0, 99)) };
+        var result = BaselineBuilder.Build(picks, new BaselineBuildOptions { RunName = "w", MinFrames = 60 });
+        var b = Assert.Single(result.Run.Baselines);
+        Assert.Equal(RawAbsolute().Numerator.WindowKey, b.NumeratorWindows);
+        Assert.Null(b.DenominatorWindows);   // absolute mode: the reference takes no part
+    }
+
     /// <summary>
     /// The short-process case: no single run holds enough frames, several together do. Frames and
     /// not seconds, because that is what σ's reliability actually follows.

@@ -257,6 +257,17 @@ public sealed class GoldenRunRatioBaseline
     /// <see cref="LineExtractMode.RawMean"/> readings are unaffected and keep their baselines.
     /// </summary>
     public int ExtractionRevision { get; set; }
+
+    /// <summary>
+    /// <see cref="LineRegion.WindowKey"/> of the numerator / denominator the baseline was
+    /// measured with (#88). A baseline only applies while the ratio still reads the same lines
+    /// through the same windows — a wider signal window is a different number, and before this
+    /// existed a window edit kept the old baseline with nothing to say so. Null for a baseline
+    /// captured before the field existed, which is accepted as before rather than invalidating
+    /// every Golden Run on upgrade. The denominator is null for an absolute-intensity baseline.
+    /// </summary>
+    public string? NumeratorWindows { get; set; }
+    public string? DenominatorWindows { get; set; }
 }
 
 /// <summary>

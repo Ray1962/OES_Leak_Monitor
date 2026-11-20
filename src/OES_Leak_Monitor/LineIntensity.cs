@@ -103,6 +103,17 @@ public sealed class LineRegion
     [System.Text.Json.Serialization.JsonIgnore]
     public string MeasurementKey => FormattableString.Invariant(
         $"{Label}|{Mode}|{CenterNm:R}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}");
+
+    /// <summary>
+    /// What a Golden Run baseline records of the region it was measured with (#88): the line (by
+    /// label), the extraction mode and the four windows — everything <see cref="MeasurementKey"/>
+    /// holds <em>except the centre</em>. The centre is left out on purpose: the engine measures
+    /// wavelength-corrected clones, so a correction change moves it, and recalibrating the
+    /// wavelength axis must not cost a Golden Run. A different line changes the label.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string WindowKey => FormattableString.Invariant(
+        $"{Label}|{Mode}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}");
 }
 
 /// <summary>

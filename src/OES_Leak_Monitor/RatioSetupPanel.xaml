@@ -235,11 +235,36 @@
                                                       ToolTip="PeakHeight for narrow atomic lines; Integral for molecular band heads; RawMean for a wavelength with no peak — the raw intensity, with no continuum subtraction and no peak search."/>
                                         </StackPanel>
                                     </Grid>
+                                    <!-- Line windows (#88): where the signal and the two baseline windows sit. -->
+                                    <TextBlock Text="Line windows (nm)" Style="{StaticResource FieldLabel}" Margin="0,8,0,2"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/><ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/><ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/><ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Signal ±" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="1" Style="{StaticResource ThreshBox}" Text="{Binding SignalHalfWidthNm}"
+                                                 ToolTip="Half-width of the signal window: centre ± this. For RawMean it is the averaging width (0 = the value at the centre)."/>
+                                        <TextBlock Grid.Column="3" Text="Baseline gap" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="4" Style="{StaticResource ThreshBox}" Text="{Binding SignalBaselineGapNm}"
+                                                 ToolTip="Distance from each edge of the signal window to its baseline window. Widen it when a neighbouring band falls in the baseline window."/>
+                                        <TextBlock Grid.Column="6" Text="Baseline width" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="7" Style="{StaticResource ThreshBox}" Text="{Binding SignalBaselineWidthNm}"
+                                                 ToolTip="Width of each of the two baseline windows (one either side)."/>
+                                        <TextBlock Grid.Column="9" Text="Peak search ±" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="10" Style="{StaticResource ThreshBox}" Text="{Binding SignalPeakSearchNm}"
+                                                 IsEnabled="{Binding SignalPeakSearchEditable}"
+                                                 ToolTip="Re-centre the windows on the strongest point within centre ± this (absorbs drift). 0 pins them to the centre. Always 0 for RawMean."/>
+                                    </Grid>
+                                    <TextBlock FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="Picking another line resets these to that extraction's defaults; changing only the extraction keeps them. Changing them makes the active Golden Run's baseline for this ratio inapplicable — capture a new one."/>
                                     <TextBlock FontSize="11" Foreground="#B36B00" TextWrapping="Wrap" Margin="0,6,0,0"
                                                Text="Raw: no continuum subtraction and no peak search — unbiased where there is no peak to find, but the reading carries the continuum pedestal, so it also follows window fogging and exposure changes. Re-capture the Golden Run whenever those change."
                                                Visibility="{Binding SignalIsRaw, Converter={StaticResource BoolToVis}}"/>
                                     <TextBlock FontSize="11" Foreground="#7A5A00" TextWrapping="Wrap" Margin="0,4,0,0"
-                                               Text="Because of that pedestal the Warn/Alarm factors below are ignored (σ thresholds only), the trend is plotted as a σ-score on the same 100/120/150 scale, and Min SNR no longer applies to the monitored line, which has no noise estimate to gate. This holds in ratio mode too — dividing by the reference line scales the pedestal rather than removing it — where Min SNR still gates the reference line."
+                                               Text="Because of that pedestal the Warn/Alarm factors below are ignored (σ thresholds only), the trend is plotted as a σ-score (+20 on the % vs reference axis = one warn-σ), and Min SNR no longer applies to the monitored line, which has no noise estimate to gate. This holds in ratio mode too — dividing by the reference line scales the pedestal rather than removing it — where Min SNR still gates the reference line."
                                                Visibility="{Binding ValueHasPedestal, Converter={StaticResource BoolToVis}}"/>
                                 </StackPanel>
                             </Border>
@@ -297,6 +322,31 @@
                                                       ToolTip="Peak height for narrow atomic lines; Integral for molecular band heads."/>
                                         </StackPanel>
                                     </Grid>
+                                    <!-- Line windows (#88): where the signal and the two baseline windows sit. -->
+                                    <TextBlock Text="Line windows (nm)" Style="{StaticResource FieldLabel}" Margin="0,8,0,2"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/><ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/><ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/><ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="60"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Signal ±" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="1" Style="{StaticResource ThreshBox}" Text="{Binding ReferenceHalfWidthNm}"
+                                                 ToolTip="Half-width of the signal window: centre ± this. For RawMean it is the averaging width (0 = the value at the centre)."/>
+                                        <TextBlock Grid.Column="3" Text="Baseline gap" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="4" Style="{StaticResource ThreshBox}" Text="{Binding ReferenceBaselineGapNm}"
+                                                 ToolTip="Distance from each edge of the signal window to its baseline window. Widen it when a neighbouring band falls in the baseline window."/>
+                                        <TextBlock Grid.Column="6" Text="Baseline width" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="7" Style="{StaticResource ThreshBox}" Text="{Binding ReferenceBaselineWidthNm}"
+                                                 ToolTip="Width of each of the two baseline windows (one either side)."/>
+                                        <TextBlock Grid.Column="9" Text="Peak search ±" Style="{StaticResource ThreshLabel}"/>
+                                        <TextBox Grid.Column="10" Style="{StaticResource ThreshBox}" Text="{Binding ReferencePeakSearchNm}"
+                                                 IsEnabled="{Binding ReferencePeakSearchEditable}"
+                                                 ToolTip="Re-centre the windows on the strongest point within centre ± this (absorbs drift). 0 pins them to the centre. Always 0 for RawMean."/>
+                                    </Grid>
+                                    <TextBlock FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="Picking another line resets these to that extraction's defaults; changing only the extraction keeps them. Changing them makes the active Golden Run's baseline for this ratio inapplicable — capture a new one."/>
                                 </StackPanel>
                             </Border>
 
