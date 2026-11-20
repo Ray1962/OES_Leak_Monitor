@@ -121,6 +121,9 @@ What the script works around, so you do not rediscover it:
 - **List and grid rows are named after their view-model type**, so `rows`/`row`/`tick` match
   on the cells' text instead.
 - **Text boxes have no name.** `edits` lists the on-screen ones with the index `edit` takes.
+- **The Leak Monitor rows have no UIA pattern** — they react to the mouse only. `click|OES|<text>`
+  is a real mouse click on the centre of the matching text (selects a row, #104), and
+  `key|OES|{ESC}` sends keys to the window.
 - **`buttons|TS` lists what `press` can find** — Test_SECS's profile actions (PM3 Chamber
   Process Start, …) included. Cheaper than reading the profile's source for their labels.
 

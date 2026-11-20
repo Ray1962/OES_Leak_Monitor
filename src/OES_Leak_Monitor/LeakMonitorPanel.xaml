@@ -1,7 +1,8 @@
 <UserControl x:Class="OES_Leak_Monitor.LeakMonitorPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:oxy="http://oxyplot.org/wpf">
+             xmlns:oxy="http://oxyplot.org/wpf"
+             Focusable="True" KeyDown="Panel_KeyDown">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </UserControl.Resources>
@@ -77,8 +78,21 @@
             <ItemsControl ItemsSource="{Binding Ratios}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
+                        <!-- Click selects the row: the trend chart then draws its own Warn /
+                             Alarm lines (#104). Click again or Esc clears it. -->
                         <Border BorderBrush="#EEE" BorderThickness="0,0,0,1" Padding="12,7"
-                                ToolTip="{Binding DetailText}">
+                                ToolTip="{Binding DetailText}" Cursor="Hand"
+                                MouseLeftButtonUp="Row_MouseLeftButtonUp">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter Property="Background" Value="#E3EDF9"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="28"/>

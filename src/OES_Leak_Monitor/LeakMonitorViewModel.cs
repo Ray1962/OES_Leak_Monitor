@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -34,7 +35,20 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     private readonly LeakMonitorEngine _engine;
     private readonly SystemLogger? _systemLogger;
     private readonly Dictionary<string, RatioViewModel> _ratioByKey = new();
-    private readonly Dictionary<string, LineSeries> _seriesByKey = new();
+    private readonly Dictionary<string, List<(TrendSeriesKind Kind, LineSeries Series)>> _seriesByKey = new();
+    private readonly Dictionary<string, RatioDefinition> _defByKey = new();
+    private readonly Dictionary<LineSeries, OxyColor> _baseColor = new();
+    private readonly List<LineAnnotation> _thresholdAnnotations = new();
+    private readonly List<RectangleAnnotation> _warmupAnnotations = new();
+    private readonly WarmupBands _warmup = new();
+    /// <summary>Two unlabelled, markerless points that stretch the auto-scaled Y axis over the
+    /// selected ratio's thresholds — OxyPlot sizes an axis from series, never annotations.</summary>
+    private ScatterSeries _rangeAnchor = null!;
+    /// <summary>Holds the reference line (0) and the whole retained time span on the axes even
+    /// while no line has a point yet — during step warm-up the chart would otherwise have no
+    /// extent at all, and the warm-up band that explains the gap would not show (#105).</summary>
+    private ScatterSeries _zeroAnchor = null!;
+    private IEnumerable<LineSeries> AllSeries => _seriesByKey.Values.SelectMany(l => l.Select(t => t.Series));
     private DateTimeAxis _timeAxis = null!;
     private bool _timeAxisZoomed;
 
@@ -85,10 +99,10 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         foreach (var def in _engine.MonitoredRatios)
         {
             var rvm = new RatioViewModel(def.Key, def.DisplayName);
+            _defByKey[def.Key] = def;
             _ratioByKey[def.Key] = rvm;
             Ratios.Add(rvm);
             AddSeries(def, idx++);
-            _seriesByKey[def.Key].IsVisible = def.Enabled;
         }
     }
 
@@ -98,8 +112,12 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     {
         Ratios.Clear();
         _ratioByKey.Clear();
-        foreach (var s in _seriesByKey.Values) PlotModel.Series.Remove(s);
+        _defByKey.Clear();
+        foreach (var s in AllSeries) PlotModel.Series.Remove(s);
         _seriesByKey.Clear();
+        _baseColor.Clear();
+        _selectedKey = null;
+        ClearThresholdOverlay();
         BuildRatioRows();
         PlotModel.InvalidatePlot(true);
         StatusMessage = "Ratio configuration applied.";
@@ -514,16 +532,30 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         {
             if (_ratioByKey.TryGetValue(rs.Key, out var rvm)) rvm.Apply(rs);
             if (rs.State == RatioState.LowSignal) lowSignal.Add(rvm?.DisplayName ?? rs.Key);
-            if (_seriesByKey.TryGetValue(rs.Key, out var series) &&
-                !double.IsNaN(rs.PercentOfBaseline))
+            if (_seriesByKey.TryGetValue(rs.Key, out var lines))
             {
-                var pts = series.Points;
-                pts.Add(new DataPoint(x, rs.PercentOfBaseline));
-                int drop = 0;
-                while (drop < pts.Count && pts[drop].X < cutoff) drop++;
-                if (drop > 0) pts.RemoveRange(0, drop);
+                foreach (var (kind, series) in lines)
+                {
+                    double v = TrendProjection.Value(kind, rs);
+                    if (double.IsNaN(v)) continue;
+                    var pts = series.Points;
+                    pts.Add(new DataPoint(x, v));
+                    int drop = 0;
+                    while (drop < pts.Count && pts[drop].X < cutoff) drop++;
+                    if (drop > 0) pts.RemoveRange(0, drop);
+                }
             }
         }
+
+        var z = _zeroAnchor.Points;
+        if (z.Count == 0) { z.Add(new ScatterPoint(x, 0)); z.Add(new ScatterPoint(x, 0)); }
+        else
+        {
+            if (z[0].X < cutoff) z[0] = new ScatterPoint(cutoff, 0);
+            z[1] = new ScatterPoint(x, 0);
+        }
+        UpdateWarmupBands(snap, x, cutoff);
+        UpdateSelectionOverlay(snap, x);
 
         var warnings = new List<string>();
         if (lowSignal.Count > 0)
@@ -580,12 +612,12 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         if (!shorter) return;
 
         double newest = double.NegativeInfinity;
-        foreach (var s in _seriesByKey.Values)
+        foreach (var s in AllSeries)
             if (s.Points.Count > 0 && s.Points[^1].X > newest) newest = s.Points[^1].X;
         if (double.IsNegativeInfinity(newest)) return;
 
         double cutoff = newest - clamped.TotalDays;   // OxyPlot's time axis counts in days
-        foreach (var s in _seriesByKey.Values)
+        foreach (var s in AllSeries)
         {
             int drop = 0;
             while (drop < s.Points.Count && s.Points[drop].X < cutoff) drop++;
@@ -596,7 +628,11 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
 
     public void ResetTrend()
     {
-        foreach (var s in _seriesByKey.Values) s.Points.Clear();
+        foreach (var s in AllSeries) s.Points.Clear();
+        _rangeAnchor.Points.Clear();
+        _zeroAnchor.Points.Clear();
+        _warmup.Clear();
+        SyncWarmupAnnotations();
         PlotModel.ResetAllAxes();
         _timeAxisZoomed = false;
         PlotModel.InvalidatePlot(true);
@@ -639,7 +675,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     {
         PlotModel = new PlotModel
         {
-            Title = "Ratio trend (% of baseline)",
+            Title = "Ratio trend (" + TrendProjection.AxisTitle + ")",
             TitleFontSize = 13,
             Background = OxyColors.White,
             PlotAreaBorderColor = OxyColor.FromRgb(0xCC, 0xCC, 0xCC),
@@ -658,17 +694,21 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
         PlotModel.Axes.Add(new LinearAxis
         {
             Position = AxisPosition.Left,
-            Title = "% of baseline",
-            // Auto-scales to the data, but never shows a window narrower than 10
-            // percentage points, and never drops below 0 (% of baseline can't be negative).
-            AbsoluteMinimum = 0,
+            Title = TrendProjection.AxisTitle,
+            // Auto-scales to the data, but never shows a window narrower than 10 percentage
+            // points. 0 is the reference; a baseline drifting below its Golden Run, or a rise
+            // below the rolling reference, is negative and must stay visible (#102).
             MinimumRange = 10,
             MajorGridlineStyle = LineStyle.Solid,
             MajorGridlineColor = OxyColor.FromRgb(0xE8, 0xE8, 0xE8),
         });
-        AddThresholdLine(100, OxyColors.Gray,       "baseline");
-        AddThresholdLine(120, OxyColors.DarkOrange, "warn ~120%");
-        AddThresholdLine(150, OxyColors.Firebrick,  "alarm ~150%");
+        // Only the reference line: the old fixed ~120 / ~150 lines belonged to no ratio. A
+        // ratio's own thresholds are drawn when its row is selected (#104).
+        AddThresholdLine(0, OxyColors.Gray, "reference");
+        _rangeAnchor = new ScatterSeries { MarkerType = MarkerType.None, Title = null };
+        PlotModel.Series.Add(_rangeAnchor);
+        _zeroAnchor = new ScatterSeries { MarkerType = MarkerType.None, Title = null };
+        PlotModel.Series.Add(_zeroAnchor);
         PlotModel.Legends.Add(new Legend
         {
             LegendPosition = LegendPosition.LeftTop,
@@ -690,17 +730,140 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
             FontSize = 10,
         });
 
+    /// <summary>Adds the ratio's lines (one or two, <see cref="TrendProjection.SeriesFor(RatioDefinition)"/>)
+    /// in one colour; a Golden Run line beside a step line is dashed.</summary>
     private void AddSeries(RatioDefinition def, int index)
     {
-        var series = new LineSeries
+        var color = TrendPalette[index % TrendPalette.Length];
+        var lines = new List<(TrendSeriesKind, LineSeries)>(2);
+        foreach (var spec in TrendProjection.SeriesFor(def))
         {
-            Title = def.DisplayName,
-            Color = TrendPalette[index % TrendPalette.Length],
-            StrokeThickness = 1.5,
-            CanTrackerInterpolatePoints = false,
-        };
-        PlotModel.Series.Add(series);
-        _seriesByKey[def.Key] = series;
+            var series = new LineSeries
+            {
+                Title = spec.Title,
+                Color = color,
+                StrokeThickness = 1.5,
+                LineStyle = spec.Dashed ? LineStyle.Dash : LineStyle.Solid,
+                CanTrackerInterpolatePoints = false,
+                IsVisible = def.Enabled,
+            };
+            PlotModel.Series.Add(series);
+            _baseColor[series] = color;
+            lines.Add((spec.Kind, series));
+        }
+        _seriesByKey[def.Key] = lines;
+    }
+
+    // --- row selection: the selected ratio's own thresholds (#104) -------------
+
+    private string? _selectedKey;
+
+    /// <summary>Selects <paramref name="row"/>, or clears the selection when it is already the
+    /// selected one. A selected row draws its own Warn / Alarm lines and dims the other lines.</summary>
+    public void ToggleSelection(RatioViewModel row) =>
+        Select(_selectedKey == row.Key ? null : row.Key);
+
+    public void ClearSelection() => Select(null);
+
+    private void Select(string? key)
+    {
+        if (key == _selectedKey) return;
+        _selectedKey = key;
+        foreach (var r in Ratios) r.IsSelected = r.Key == key;
+        foreach (var (k, lines) in _seriesByKey)
+            foreach (var (_, series) in lines)
+            {
+                var c = _baseColor[series];
+                series.Color = key is null || k == key ? c : OxyColor.FromAColor(60, c);
+            }
+        ClearThresholdOverlay();
+        PlotModel.InvalidatePlot(false);
+    }
+
+    private void UpdateSelectionOverlay(LeakMonitorSnapshot snap, double x)
+    {
+        if (_selectedKey is null || !_defByKey.TryGetValue(_selectedKey, out var def)) return;
+        RatioSnapshot? found = null;
+        foreach (var rs in snap.Ratios) if (rs.Key == _selectedKey) { found = rs; break; }
+        if (found is not { } s) return;
+
+        var lines = TrendProjection.ThresholdsFor(def, s);
+        bool same = _thresholdAnnotations.Count == lines.Count;
+        for (int i = 0; same && i < lines.Count; i++)
+            same = Math.Abs(_thresholdAnnotations[i].Y - lines[i].Value) < 0.05;
+        if (!same)
+        {
+            ClearThresholdOverlay();
+            foreach (var l in lines)
+            {
+                var color = l.IsAlarm ? OxyColors.Firebrick : OxyColors.DarkOrange;
+                var a = new LineAnnotation
+                {
+                    Type = LineAnnotationType.Horizontal, Y = l.Value, Color = color,
+                    LineStyle = l.Kind == TrendSeriesKind.GoldenRunDeviation ? LineStyle.Dot : LineStyle.Dash,
+                    Text = l.Label, TextColor = color, FontSize = 10,
+                };
+                _thresholdAnnotations.Add(a);
+                PlotModel.Annotations.Add(a);
+            }
+        }
+        _rangeAnchor.Points.Clear();
+        if (TrendProjection.RequiredRange(lines) is { } range)
+        {
+            _rangeAnchor.Points.Add(new ScatterPoint(x, range.Min));
+            _rangeAnchor.Points.Add(new ScatterPoint(x, range.Max));
+        }
+    }
+
+    private void ClearThresholdOverlay()
+    {
+        foreach (var a in _thresholdAnnotations) PlotModel?.Annotations.Remove(a);
+        _thresholdAnnotations.Clear();
+        _rangeAnchor?.Points.Clear();
+    }
+
+    // --- step warm-up band (#105) ---------------------------------------------
+
+    private void UpdateWarmupBands(LeakMonitorSnapshot snap, double x, double cutoff)
+    {
+        bool anyStep = false, warming = false;
+        foreach (var rs in snap.Ratios)
+        {
+            if (!rs.EnabledPaths.HasFlag(JudgingPaths.Step)) continue;
+            anyStep = true;
+            if (rs.StepWarmupSecondsRemaining > 0) warming = true;
+        }
+        if (!anyStep && _warmup.Bands.Count == 0) return;
+        _warmup.Observe(x, warming);
+        _warmup.DropBefore(cutoff);
+        SyncWarmupAnnotations();
+    }
+
+    private void SyncWarmupAnnotations()
+    {
+        var bands = _warmup.Bands;
+        while (_warmupAnnotations.Count > bands.Count)
+        {
+            PlotModel.Annotations.Remove(_warmupAnnotations[^1]);
+            _warmupAnnotations.RemoveAt(_warmupAnnotations.Count - 1);
+        }
+        while (_warmupAnnotations.Count < bands.Count)
+        {
+            var a = new RectangleAnnotation
+            {
+                Fill = OxyColor.FromAColor(40, OxyColors.Gray),
+                Text = "warming up", TextColor = OxyColors.DimGray, FontSize = 10,
+                TextVerticalAlignment = OxyPlot.VerticalAlignment.Top,
+                Layer = AnnotationLayer.BelowSeries,
+            };
+            _warmupAnnotations.Add(a);
+            PlotModel.Annotations.Add(a);
+        }
+        for (int i = 0; i < bands.Count; i++)
+        {
+            _warmupAnnotations[i].MinimumX = bands[i].Start;
+            _warmupAnnotations[i].MaximumX = bands[i].End;
+        }
     }
 
     private void RefreshGoldenRunNames()
