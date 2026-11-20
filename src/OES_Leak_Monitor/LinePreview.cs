@@ -85,6 +85,11 @@ public static class LinePreview
             }
         }
 
+        // Below the minimum pixel counts of #125 — advisory, like every preview warning.
+        var pitch = LineWindowAdvice.PitchOf(wavelengths);
+        string narrow = LineWindowAdvice.WarningText(region, pitch);
+        if (narrow.Length > 0) warnings.Add(new(narrow));
+
         return new LinePreviewResult(layout, layout.Center - region.CenterNm, reading,
                                      lo - ViewMarginNm, hi + ViewMarginNm,
                                      region.CenterNm - search, region.CenterNm + search,

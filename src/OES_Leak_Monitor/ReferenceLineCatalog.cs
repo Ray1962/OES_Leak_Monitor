@@ -31,6 +31,8 @@ public sealed class ReferenceLinePreset
 /// N₂ 337.1; the others let the operator pick a reference better matched (in excitation
 /// threshold or wavelength proximity) to a given signal line.
 /// </summary>
+// Windows meet LineWindowAdvice's minimum pixel counts at the 0.6 nm pitch (#125); the
+// Integral signal windows keep their band-shaped ±1.0 nm.
 public static class ReferenceLineCatalog
 {
     public static IReadOnlyList<ReferenceLinePreset> All { get; } = new[]
@@ -40,35 +42,37 @@ public static class ReferenceLineCatalog
             () => new LineRegion
             {
                 Label = "N₂ 337.1", CenterNm = 337.1, HalfWidthNm = 1.0,
-                BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.Integral,
+                BaselineGapNm = 2.1, BaselineWidthNm = 1.8, PeakSearchHalfWidthNm = 1.2, Mode = LineExtractMode.Integral,
+                // Left gap clears Zn 334.5 even with the centre half a pixel off (#125).
+                RightBaselineGapNm = 1.2, RightBaselineWidthNm = 1.8,
             }),
         new ReferenceLinePreset("N₂ 662.4",
             "N₂ first-positive band (NIR) — pair with NIR signal lines for window-fogging immunity.",
             () => new LineRegion
             {
                 Label = "N₂ 662.4", CenterNm = 662.4, HalfWidthNm = 1.0,
-                BaselineGapNm = 1.2, BaselineWidthNm = 0.8, Mode = LineExtractMode.Integral,
+                BaselineGapNm = 1.2, BaselineWidthNm = 1.8, PeakSearchHalfWidthNm = 1.2, Mode = LineExtractMode.Integral,
             }),
         new ReferenceLinePreset("Hα 656.3",
             "Hydrogen Balmer-α — hydrogen-supply reference; note it drifts with SiH₄ flow.",
             () => new LineRegion
             {
-                Label = "Hα 656.3", CenterNm = 656.3, HalfWidthNm = 0.5,
-                BaselineGapNm = 0.8, BaselineWidthNm = 0.6, Mode = LineExtractMode.PeakHeight,
+                Label = "Hα 656.3", CenterNm = 656.3, HalfWidthNm = 1.5,
+                BaselineGapNm = 1.2, BaselineWidthNm = 1.8, PeakSearchHalfWidthNm = 1.2, Mode = LineExtractMode.PeakHeight,
             }),
         new ReferenceLinePreset("Ar 750.4",
             "Ar line — leak-borne actinometer; note it overlaps an N₂ band near 750.4 nm.",
             () => new LineRegion
             {
-                Label = "Ar 750.4", CenterNm = 750.4, HalfWidthNm = 0.5,
-                BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.PeakHeight,
+                Label = "Ar 750.4", CenterNm = 750.4, HalfWidthNm = 1.5,
+                BaselineGapNm = 1.2, BaselineWidthNm = 1.8, PeakSearchHalfWidthNm = 1.2, Mode = LineExtractMode.PeakHeight,
             }),
         new ReferenceLinePreset("Ar 811.5",
             "Ar 811.5 nm — classic actinometry line; present only when Ar is in the gas or leak.",
             () => new LineRegion
             {
-                Label = "Ar 811.5", CenterNm = 811.5, HalfWidthNm = 0.5,
-                BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.PeakHeight,
+                Label = "Ar 811.5", CenterNm = 811.5, HalfWidthNm = 1.5,
+                BaselineGapNm = 1.2, BaselineWidthNm = 1.8, PeakSearchHalfWidthNm = 1.2, Mode = LineExtractMode.PeakHeight,
             }),
     };
 

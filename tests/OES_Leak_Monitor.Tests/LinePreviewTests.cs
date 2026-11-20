@@ -88,7 +88,7 @@ public class LinePreviewTests
         var (wl, y) = Spectrum();
         var lines = new[] { new SpectralLine("OH", 308.9), new SpectralLine("OH", 306.8), new SpectralLine("uX", 312.0) };
         var p = LinePreview.Compute(wl, y, Oh(), lines);
-        Assert.Equal(new[] { "Left baseline window overlaps OH 306.8 nm." }, p.Warnings.Select(w => w.Text));
+        Assert.Equal(new[] { "Left baseline window overlaps OH 306.8 nm." }, p.Warnings.Select(w => w.Text).Where(t => t.Contains("overlaps")));
 
         var r = Oh(); r.RightBaselineGapNm = 2.5;      // right window now 311.8–312.8
         Assert.Contains(LinePreview.Compute(wl, y, r, lines).Warnings, w => w.Text == "Right baseline window overlaps uX 312.0 nm.");

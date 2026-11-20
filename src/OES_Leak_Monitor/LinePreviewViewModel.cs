@@ -92,6 +92,22 @@ public sealed class LinePreviewViewModel : INotifyPropertyChanged
     /// reference; drawing happens on <see cref="Tick"/>.</summary>
     public void OnLiveSpectrum(SpectrumSample sample) => _live = sample;
 
+    private double? _pitchNm;
+    /// <summary>Pixel pitch of the spectrum shown (or the newest live one), nm; null before
+    /// any spectrum. Ratio Setup sizes new windows and counts pixels with it (#125).</summary>
+    public double? PitchNm => _pitchNm ?? LineWindowAdvice.PitchOf(_live?.Wavelengths);
+
+    /// <summary>Raised when the shown spectrum's pitch changes.</summary>
+    public event EventHandler? PitchChanged;
+
+    private void UpdatePitch()
+    {
+        var p = LineWindowAdvice.PitchOf(_wl);
+        if (p is null || p == _pitchNm) return;
+        _pitchNm = p;
+        PitchChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Once a second from the view: draws the newest live frame unless frozen or a
     /// recording is shown.</summary>
     public void Tick()
@@ -207,6 +223,7 @@ public sealed class LinePreviewViewModel : INotifyPropertyChanged
 
     private void Redraw()
     {
+        UpdatePitch();
         var lookup = WavelengthCalibration.Build(_corrections());
         var num = _row is null ? null : WavelengthCalibration.Correct(_row.SignalRegionPreview, lookup);
         var den = _row?.ReferenceRegionPreview is { } d ? WavelengthCalibration.Correct(d, lookup) : null;

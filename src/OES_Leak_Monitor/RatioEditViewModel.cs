@@ -78,9 +78,16 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     private readonly IReadOnlyList<SpectralLineOption> _lines;
 
-    public RatioEditViewModel(RatioDefinition def, IReadOnlyList<SpectralLineOption> lines)
+    // Pixel pitch of the spectrum Ratio Setup is looking at (live or the preview's recording);
+    // null when none, and LineWindowAdvice falls back to 0.6 nm (#125).
+    private readonly Func<double?> _pitch;
+
+    public RatioEditViewModel(RatioDefinition def, IReadOnlyList<SpectralLineOption> lines,
+                              Func<double?>? pitchNm = null)
     {
         _lines = lines;
+        _pitch = pitchNm ?? (() => null);
+        ApplySuggestedWidthsCommand = new RelayCommand(ApplySuggestedWidths, () => HasNarrowWindows);
         Key = string.IsNullOrWhiteSpace(def.Key) ? GenerateKey() : def.Key;
         _numRegion = def.Numerator.Clone();
         _denRegion = def.Denominator.Clone();
@@ -200,7 +207,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
             if (value is null) return;   // a picker clearing itself while its list is rebuilt
             bool newLine = !SameLine(_signalLine, value);
             if (!Set(ref _signalLine, value)) return;
-            if (newLine) { _numRegion = BuildRegion(value.Line, _signalMode); RaiseSignalWindows(); }
+            if (newLine) { _numRegion = LineWindowAdvice.Defaults(value.Line, _signalMode, _pitch()); RaiseSignalWindows(); }
             RenameIfAuto();
         }
     }
@@ -212,7 +219,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         set
         {
             if (!Set(ref _signalMode, value)) return;
-            _numRegion = WithMode(_numRegion, value);
+            _numRegion = WithMode(_numRegion, value, _pitch());
             RaiseSignalWindows();
             OnPropertyChanged(nameof(SignalIsRaw));
             OnPropertyChanged(nameof(ValueHasPedestal));
@@ -244,7 +251,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
             if (value is null) return;
             bool newLine = !SameLine(_referenceLine, value);
             if (!Set(ref _referenceLine, value)) return;
-            if (newLine) { _denRegion = BuildRegion(value.Line, _referenceMode); RaiseReferenceWindows(); }
+            if (newLine) { _denRegion = LineWindowAdvice.Defaults(value.Line, _referenceMode, _pitch()); RaiseReferenceWindows(); }
             RenameIfAuto();
         }
     }
@@ -256,7 +263,7 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         set
         {
             if (!Set(ref _referenceMode, value)) return;
-            _denRegion = WithMode(_denRegion, value);
+            _denRegion = WithMode(_denRegion, value, _pitch());
             RaiseReferenceWindows();
         }
     }
@@ -331,6 +338,46 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         return null;
     }
 
+    // --- pixel coverage (#125) --------------------------------------------------
+    // Shown beside the window fields; a window under its minimum pixel count warns but never
+    // blocks Save, and existing ratios are never widened unless Apply is pressed.
+
+    public string SignalCoverageText => LineWindowAdvice.CoverageText(_numRegion, _pitch());
+    public string SignalCoverageWarning => LineWindowAdvice.WarningText(_numRegion, _pitch());
+    public string ReferenceCoverageText => IsRatioMode ? LineWindowAdvice.CoverageText(_denRegion, _pitch()) : "";
+    public string ReferenceCoverageWarning => IsRatioMode ? LineWindowAdvice.WarningText(_denRegion, _pitch()) : "";
+
+    public bool HasNarrowWindows =>
+        LineWindowAdvice.IsBelowMinimum(_numRegion, _pitch()) ||
+        (IsRatioMode && LineWindowAdvice.IsBelowMinimum(_denRegion, _pitch()));
+
+    /// <summary>Raises every too-narrow window of this row to its suggestion. Goes through the
+    /// working regions like a hand edit, so the changed WindowKey invalidates the Golden Run
+    /// by the existing rules when the row is saved.</summary>
+    public RelayCommand ApplySuggestedWidthsCommand { get; }
+
+    public void ApplySuggestedWidths()
+    {
+        double? p = _pitch();
+        _numRegion = LineWindowAdvice.ApplySuggested(_numRegion, p);
+        if (IsRatioMode) _denRegion = LineWindowAdvice.ApplySuggested(_denRegion, p);
+        RaiseSignalWindows();
+        RaiseReferenceWindows();
+    }
+
+    /// <summary>Re-evaluates the coverage text after the pitch source changed.</summary>
+    public void RefreshCoverage() => RaiseCoverage();
+
+    private void RaiseCoverage()
+    {
+        OnPropertyChanged(nameof(SignalCoverageText));
+        OnPropertyChanged(nameof(SignalCoverageWarning));
+        OnPropertyChanged(nameof(ReferenceCoverageText));
+        OnPropertyChanged(nameof(ReferenceCoverageWarning));
+        OnPropertyChanged(nameof(HasNarrowWindows));
+        ApplySuggestedWidthsCommand?.RaiseCanExecuteChanged();
+    }
+
     private void RaiseSignalWindows()
     {
         OnPropertyChanged(nameof(SignalHalfWidthNm));
@@ -360,14 +407,14 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
 
     /// <summary>A mode change keeps where the windows are — a tuned baseline position does not
     /// depend on how the signal window is read — and sets only what the mode dictates: the
-    /// peak search (none for a raw reading; the factory 1 nm when leaving raw).</summary>
-    private static LineRegion WithMode(LineRegion r, LineExtractMode mode)
+    /// peak search (none for a raw reading; the suggested search when leaving raw, #125).</summary>
+    private static LineRegion WithMode(LineRegion r, LineExtractMode mode, double? pitchNm)
     {
         var c = r.Clone();
         bool wasRaw = c.Mode == LineExtractMode.RawMean;
         c.Mode = mode;
         if (mode == LineExtractMode.RawMean) c.PeakSearchHalfWidthNm = 0;
-        else if (wasRaw) c.PeakSearchHalfWidthNm = 1.0;
+        else if (wasRaw) c.PeakSearchHalfWidthNm = LineWindowAdvice.PeakSearchNm(mode, pitchNm);
         return c;
     }
 
@@ -553,21 +600,6 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         _signalLine.Species == _referenceLine.Species &&
         Math.Abs(_signalLine.WavelengthNm - _referenceLine.WavelengthNm) < 1e-6;
 
-    // A peak-height line is a narrow atomic transition; an integral line is a broader
-    // molecular band head, so it gets a wider signal window. A raw reading averages a narrow
-    // window (a few pixels — enough to damp pixel noise without pulling in a neighbour) and
-    // pins the window: peak-searching a position with no peak is what it exists to avoid.
-    private static LineRegion BuildRegion(SpectralLine line, LineExtractMode mode) => new()
-    {
-        Label = $"{line.Species} {line.WavelengthNm:0.###}",
-        CenterNm = line.WavelengthNm,
-        Mode = mode,
-        HalfWidthNm = mode == LineExtractMode.Integral ? 1.0 : 0.5,
-        BaselineGapNm = 1.0,
-        BaselineWidthNm = 1.0,
-        PeakSearchHalfWidthNm = mode == LineExtractMode.RawMean ? 0.0 : 1.0,
-    };
-
     // The region's label carries the species it was built from, so prefer the nearest line of
     // that species: several species share a wavelength (Ar and N2 both list 750.4 nm), and a
     // wavelength-only match would silently re-label the region — and pick up the wrong line's
@@ -594,8 +626,21 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     private static string GenerateKey() => "R_" + Guid.NewGuid().ToString("N").Substring(0, 8);
 
     public event PropertyChangedEventHandler? PropertyChanged;
-    private void OnPropertyChanged([CallerMemberName] string? n = null) =>
+    private void OnPropertyChanged([CallerMemberName] string? n = null)
+    {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+        if (n is not null && CoverageInputs.Contains(n)) RaiseCoverage();
+    }
+
+    // Any change to these can change a window's pixel coverage.
+    private static readonly HashSet<string> CoverageInputs = new()
+    {
+        nameof(SignalHalfWidthNm), nameof(SignalBaselineGapNm), nameof(SignalBaselineWidthNm), nameof(SignalPeakSearchNm),
+        nameof(SignalSeparateRight), nameof(SignalRightGapNm), nameof(SignalRightWidthNm), nameof(SignalMode),
+        nameof(ReferenceHalfWidthNm), nameof(ReferenceBaselineGapNm), nameof(ReferenceBaselineWidthNm), nameof(ReferencePeakSearchNm),
+        nameof(ReferenceSeparateRight), nameof(ReferenceRightGapNm), nameof(ReferenceRightWidthNm), nameof(ReferenceMode),
+        nameof(IsRatioMode),
+    };
     private bool Set<T>(ref T field, T value, [CallerMemberName] string? n = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return false;

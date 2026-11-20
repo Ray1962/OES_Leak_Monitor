@@ -41,6 +41,7 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
         _persistSettings = persistSettings ?? throw new ArgumentNullException(nameof(persistSettings));
         _log = log;
         Preview = new LinePreviewViewModel(() => _engine.Settings.WavelengthCorrections);
+        Preview.PitchChanged += (_, _) => { foreach (var r in Ratios!) r.RefreshCoverage(); };   // raised only after construction
 
         // One shared, species-grouped view of the line catalog feeds every line picker;
         // IsSynchronizedWithCurrentItem="False" on the combos keeps their selections
@@ -204,7 +205,7 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
         Ratios.Clear();
         foreach (var def in _engine.Settings.Ratios)
         {
-            var row = new RatioEditViewModel(def.Clone(), _lineOptions);
+            var row = new RatioEditViewModel(def.Clone(), _lineOptions, () => Preview.PitchNm);
             row.PropertyChanged += OnRatioEdited;
             Ratios.Add(row);
         }
@@ -227,7 +228,7 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
             Numerator   = new LineRegion { CenterNm = 777.2, Mode = LineExtractMode.PeakHeight },
             Denominator = new LineRegion { CenterNm = 337.1, Mode = LineExtractMode.Integral },
         };
-        var row = new RatioEditViewModel(template, _lineOptions);
+        var row = new RatioEditViewModel(template, _lineOptions, () => Preview.PitchNm);
         row.PropertyChanged += OnRatioEdited;
         Ratios.Add(row);
         SelectedRatio = row;

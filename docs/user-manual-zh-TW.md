@@ -756,6 +756,29 @@ Ratio Setup 下方的預覽區把**選中的比值**的分子與分母各畫一�
   - `… window covers N pixels` — 視窗裡不到 2 個像素，讀值會跳。
   - `… is outside the spectrum` — 視窗超出光譜儀的波長範圍。
   - `… baseline window overlaps X nn.n nm` — 基準視窗壓到譜線清單（含使用者自訂譜線）裡的另一條線。有時找不到乾淨的連續光，壓到一條弱線反而是最好的選擇，所以只提醒。
+  - `Too narrow: …` — 某個視窗的像素數低於下一節的最少像素數。
+
+#### 6.4.4 視窗涵蓋幾個像素、Apply suggested widths
+
+光譜儀的波長軸每 **0.6 nm** 一個像素（200.0、200.6、201.2…）。以前的預設 `Signal ± 0.5` 只涵蓋 1 個像素，峰頂有沒有落在窗內要靠運氣，基準與雜訊估計也只靠一兩個像素。
+
+![圖 5b　舊設定的 `N₂ 337 / Ar 750`：`Signal ± 1` 的 RawMean 只涵蓋 3 個像素，下方黃字 `Too narrow: Signal 3 px (needs ≥5)`，旁邊是 **Apply suggested widths**。](images/manual-ratio-setup-pixel-windows.png)
+
+- **每個 Line windows 下方一行灰字**列出各視窗**一定涵蓋**的像素數，例如 `Signal 5 px · Peak search 2 px · Gap 2 px · Baseline 3 px (at 0.6 nm/px)`。像素間距取自目前的光譜（即時，或 Line preview 載入的錄檔）；還沒有光譜時用 0.6 nm。
+- **最少像素數**：
+
+  | 視窗 | 最少 | 0.6 nm 時 |
+  |---|---|---|
+  | 訊號視窗（PeakHeight／RawMean） | 5 | ± 1.5 nm |
+  | 訊號視窗（Integral） | **不限** | 新選的線從 ± 1.0 nm 開始 |
+  | 基準視窗寬度 | 3 | 1.8 nm |
+  | 基準間距 | 2 | 1.2 nm |
+  | 峰值搜尋 | 2（**0 = 刻意固定位置，不檢查**） | ± 1.2 nm |
+
+  Integral 不設下限，是因為分子帶要框多寬看帶的形狀：11/19 的錄檔上，把調好的 NO 235.6、OH 308.8 視窗加寬到 7 個像素，DV=300 的 step SNR 掉了 25–35 %——多框進來的像素不隨漏氣變化。
+- **新選一條線**時，欄位直接帶入上表的寬度。
+- **既有的比值不會被自動改動**。低於最少像素數時，該行下方出現黃字 `Too narrow: …`，並出現 **Apply suggested widths**：只把太窄的視窗拉到建議寬度，已經夠寬的、Integral 的訊號視窗、固定位置（搜尋 0）與 **Separate right side** 的設定都保留。按下後和手動改視窗一樣，要 **Save**，而且這個比值的 Golden Run 基準會失效，要重錄。
+- 出廠比值與參考譜線預設已經符合上表；`N₂ 337.1` 參考線用不對稱基準窗避開 Zn 334.5。11/19 錄檔上，新舊寬度的雜訊與 step SNR 都在 2 % 內（Ar 750.4 從 1 個像素加寬到 5 個，OH/Ar 的 step SNR 由 12.7 升到 13.0）。
 
 ---
 

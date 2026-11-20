@@ -275,6 +275,16 @@
                                                      ToolTip="Width of the right baseline window. Baseline width above is then the left side."/>
                                         </StackPanel>
                                     </StackPanel>
+                                    <!-- Pixel coverage (#125): how many spectrometer pixels each window covers. -->
+                                    <TextBlock FontSize="11" Foreground="#374151" TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="{Binding SignalCoverageText}"
+                                               ToolTip="Pixels each window is sure to cover at the current spectrum's pixel pitch (0.6 nm when no spectrum is available). Minimums: signal 5 (none for Integral — fit it to the band), gap 2, baseline 3, peak search 2 (0 = pinned, not checked)."/>
+                                    <TextBlock FontSize="11" Foreground="#B36B00" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="{Binding SignalCoverageWarning}"/>
+                                    <Button Content="Apply suggested widths" HorizontalAlignment="Left" Padding="10,3" Margin="0,4,0,0"
+                                            Command="{Binding ApplySuggestedWidthsCommand}"
+                                            Visibility="{Binding HasNarrowWindows, Converter={StaticResource BoolToVis}}"
+                                            ToolTip="Raise every window of this ratio (both lines) that is below its minimum pixel count to the suggested width. Windows already wide enough are kept. Like any window change, it makes the active Golden Run's baseline for this ratio inapplicable."/>
                                     <TextBlock FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,4,0,0"
                                                Text="Picking another line resets these to that extraction's defaults; changing only the extraction keeps them. Changing them makes the active Golden Run's baseline for this ratio inapplicable — capture a new one."/>
                                     <TextBlock FontSize="11" Foreground="#B36B00" TextWrapping="Wrap" Margin="0,6,0,0"
@@ -377,6 +387,12 @@
                                                      ToolTip="Width of the right baseline window. Baseline width above is then the left side."/>
                                         </StackPanel>
                                     </StackPanel>
+                                    <!-- Pixel coverage (#125): how many spectrometer pixels each window covers. -->
+                                    <TextBlock FontSize="11" Foreground="#374151" TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="{Binding ReferenceCoverageText}"
+                                               ToolTip="Pixels each window is sure to cover at the current spectrum's pixel pitch (0.6 nm when no spectrum is available). Minimums: signal 5 (none for Integral — fit it to the band), gap 2, baseline 3, peak search 2 (0 = pinned, not checked)."/>
+                                    <TextBlock FontSize="11" Foreground="#B36B00" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="{Binding ReferenceCoverageWarning}"/>
                                     <TextBlock FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,4,0,0"
                                                Text="Picking another line resets these to that extraction's defaults; changing only the extraction keeps them. Changing them makes the active Golden Run's baseline for this ratio inapplicable — capture a new one."/>
                                 </StackPanel>
