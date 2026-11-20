@@ -534,6 +534,9 @@ public static class BaselineBuilder
                 Mode = def?.MonitorMode ?? MonitorMode.Ratio,
                 ReferenceLabel = def is null || def.MonitorMode == MonitorMode.AbsoluteIntensity
                     ? "" : def.Denominator.Label,
+                NumeratorWindows = def?.Numerator.WindowKey,
+                DenominatorWindows = def is null || def.MonitorMode == MonitorMode.AbsoluteIntensity
+                    ? null : def.Denominator.WindowKey,
             });
             if (def is not null && def.MonitorMode != MonitorMode.AbsoluteIntensity)
             {

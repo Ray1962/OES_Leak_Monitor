@@ -65,10 +65,13 @@ public sealed class SpectralLineOption : INotifyPropertyChanged
 /// </summary>
 public sealed class RatioEditViewModel : INotifyPropertyChanged
 {
-    // Original regions, kept so an untouched line round-trips with its exact label and
-    // window tuning — editing one ratio then never invalidates another ratio's baseline.
-    private readonly LineRegion _origNumerator;
-    private readonly LineRegion _origDenominator;
+    // Working regions, one per side. They start as verbatim copies of the loaded regions and
+    // change only when the operator changes that side's line, mode or windows — so Save writes
+    // an untouched side back exactly as it was (#88). They used to be rebuilt on every Save
+    // unless the picked catalog wavelength equalled the region's centre, which reset every
+    // tuned region whose centre is not a catalog line (NO 235.6, OH 308.8), edited or not.
+    private LineRegion _numRegion;
+    private LineRegion _denRegion;
 
     private readonly IReadOnlyList<SpectralLineOption> _lines;
 
@@ -76,8 +79,8 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     {
         _lines = lines;
         Key = string.IsNullOrWhiteSpace(def.Key) ? GenerateKey() : def.Key;
-        _origNumerator   = def.Numerator.Clone();
-        _origDenominator = def.Denominator.Clone();
+        _numRegion = def.Numerator.Clone();
+        _denRegion = def.Denominator.Clone();
 
         _signalLine     = MatchLine(def.Numerator);
         _signalMode     = def.Numerator.Mode;
@@ -189,7 +192,14 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     public SpectralLineOption SignalLine
     {
         get => _signalLine;
-        set { if (Set(ref _signalLine, value)) RenameIfAuto(); }
+        set
+        {
+            if (value is null) return;   // a picker clearing itself while its list is rebuilt
+            bool newLine = !SameLine(_signalLine, value);
+            if (!Set(ref _signalLine, value)) return;
+            if (newLine) { _numRegion = BuildRegion(value.Line, _signalMode); RaiseSignalWindows(); }
+            RenameIfAuto();
+        }
     }
 
     private LineExtractMode _signalMode;
@@ -199,6 +209,8 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         set
         {
             if (!Set(ref _signalMode, value)) return;
+            _numRegion = WithMode(_numRegion, value);
+            RaiseSignalWindows();
             OnPropertyChanged(nameof(SignalIsRaw));
             OnPropertyChanged(nameof(ValueHasPedestal));
             OnPropertyChanged(nameof(StepAvailable));
@@ -224,11 +236,100 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     public SpectralLineOption ReferenceLine
     {
         get => _referenceLine;
-        set { if (Set(ref _referenceLine, value)) RenameIfAuto(); }
+        set
+        {
+            if (value is null) return;
+            bool newLine = !SameLine(_referenceLine, value);
+            if (!Set(ref _referenceLine, value)) return;
+            if (newLine) { _denRegion = BuildRegion(value.Line, _referenceMode); RaiseReferenceWindows(); }
+            RenameIfAuto();
+        }
     }
 
     private LineExtractMode _referenceMode;
-    public LineExtractMode ReferenceMode { get => _referenceMode; set => Set(ref _referenceMode, value); }
+    public LineExtractMode ReferenceMode
+    {
+        get => _referenceMode;
+        set
+        {
+            if (!Set(ref _referenceMode, value)) return;
+            _denRegion = WithMode(_denRegion, value);
+            RaiseReferenceWindows();
+        }
+    }
+
+    // --- line windows (#88) ----------------------------------------------------
+    // The four extraction-window parameters of each side, edited in place on the working
+    // region. Validation is at Save (WindowError), like the judging check, so a half-typed
+    // value is not rejected mid-edit.
+
+    public double SignalHalfWidthNm      { get => _numRegion.HalfWidthNm;           set { if (_numRegion.HalfWidthNm != value)           { _numRegion.HalfWidthNm = value;           OnPropertyChanged(); } } }
+    public double SignalBaselineGapNm    { get => _numRegion.BaselineGapNm;         set { if (_numRegion.BaselineGapNm != value)         { _numRegion.BaselineGapNm = value;         OnPropertyChanged(); } } }
+    public double SignalBaselineWidthNm  { get => _numRegion.BaselineWidthNm;       set { if (_numRegion.BaselineWidthNm != value)       { _numRegion.BaselineWidthNm = value;       OnPropertyChanged(); } } }
+    public double SignalPeakSearchNm     { get => _numRegion.PeakSearchHalfWidthNm; set { if (_numRegion.PeakSearchHalfWidthNm != value) { _numRegion.PeakSearchHalfWidthNm = value; OnPropertyChanged(); } } }
+    public double ReferenceHalfWidthNm     { get => _denRegion.HalfWidthNm;           set { if (_denRegion.HalfWidthNm != value)           { _denRegion.HalfWidthNm = value;           OnPropertyChanged(); } } }
+    public double ReferenceBaselineGapNm   { get => _denRegion.BaselineGapNm;         set { if (_denRegion.BaselineGapNm != value)         { _denRegion.BaselineGapNm = value;         OnPropertyChanged(); } } }
+    public double ReferenceBaselineWidthNm { get => _denRegion.BaselineWidthNm;       set { if (_denRegion.BaselineWidthNm != value)       { _denRegion.BaselineWidthNm = value;       OnPropertyChanged(); } } }
+    public double ReferencePeakSearchNm    { get => _denRegion.PeakSearchHalfWidthNm; set { if (_denRegion.PeakSearchHalfWidthNm != value) { _denRegion.PeakSearchHalfWidthNm = value; OnPropertyChanged(); } } }
+
+    /// <summary>A raw reading never peak-searches (see <see cref="LineRegion.PeakSearchHalfWidthNm"/>),
+    /// so its search field is fixed at 0 and greyed.</summary>
+    public bool SignalPeakSearchEditable    => _signalMode != LineExtractMode.RawMean;
+    public bool ReferencePeakSearchEditable => _referenceMode != LineExtractMode.RawMean;
+
+    /// <summary>Upper bound on every window parameter, nm — wide enough for a molecular band
+    /// (OH needed a 6.7 nm gap on the lab machine), narrow enough to catch a typo.</summary>
+    public const double MaxWindowNm = 20.0;
+
+    /// <summary>Why this row's windows cannot be saved, or null when they can. Names the side
+    /// and the field, since Save shows only the first error.</summary>
+    public string? WindowError =>
+        RegionError("signal", _numRegion) ?? (IsRatioMode ? RegionError("reference", _denRegion) : null);
+
+    private static string? RegionError(string side, LineRegion r)
+    {
+        static bool Bad(double v) => double.IsNaN(v) || v < 0 || v > MaxWindowNm;
+        if (Bad(r.HalfWidthNm) || (r.Mode != LineExtractMode.RawMean && r.HalfWidthNm == 0))
+            return $"{side} half-width must be {(r.Mode == LineExtractMode.RawMean ? "0" : "above 0")}–{MaxWindowNm:0} nm.";
+        if (Bad(r.BaselineGapNm)) return $"{side} baseline gap must be 0–{MaxWindowNm:0} nm.";
+        if (Bad(r.BaselineWidthNm) || r.BaselineWidthNm == 0) return $"{side} baseline width must be above 0 and at most {MaxWindowNm:0} nm.";
+        if (Bad(r.PeakSearchHalfWidthNm)) return $"{side} peak search must be 0–{MaxWindowNm:0} nm.";
+        return null;
+    }
+
+    private void RaiseSignalWindows()
+    {
+        OnPropertyChanged(nameof(SignalHalfWidthNm));
+        OnPropertyChanged(nameof(SignalBaselineGapNm));
+        OnPropertyChanged(nameof(SignalBaselineWidthNm));
+        OnPropertyChanged(nameof(SignalPeakSearchNm));
+        OnPropertyChanged(nameof(SignalPeakSearchEditable));
+    }
+
+    private void RaiseReferenceWindows()
+    {
+        OnPropertyChanged(nameof(ReferenceHalfWidthNm));
+        OnPropertyChanged(nameof(ReferenceBaselineGapNm));
+        OnPropertyChanged(nameof(ReferenceBaselineWidthNm));
+        OnPropertyChanged(nameof(ReferencePeakSearchNm));
+        OnPropertyChanged(nameof(ReferencePeakSearchEditable));
+    }
+
+    private static bool SameLine(SpectralLineOption? a, SpectralLineOption b) =>
+        a is not null && a.Species == b.Species && Math.Abs(a.WavelengthNm - b.WavelengthNm) < 1e-9;
+
+    /// <summary>A mode change keeps where the windows are — a tuned baseline position does not
+    /// depend on how the signal window is read — and sets only what the mode dictates: the
+    /// peak search (none for a raw reading; the factory 1 nm when leaving raw).</summary>
+    private static LineRegion WithMode(LineRegion r, LineExtractMode mode)
+    {
+        var c = r.Clone();
+        bool wasRaw = c.Mode == LineExtractMode.RawMean;
+        c.Mode = mode;
+        if (mode == LineExtractMode.RawMean) c.PeakSearchHalfWidthNm = 0;
+        else if (wasRaw) c.PeakSearchHalfWidthNm = 1.0;
+        return c;
+    }
 
     // --- thresholds ----------------------------------------------------------
 
@@ -390,8 +491,8 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         ProcessClass = ProcessClass,
         Role = Role,
         MonitorMode = MonitorMode,
-        Numerator = RegionFor(SignalLine.Line, SignalMode, _origNumerator),
-        Denominator = RegionFor(ReferenceLine.Line, ReferenceMode, _origDenominator),
+        Numerator = _numRegion.Clone(),
+        Denominator = _denRegion.Clone(),
         WarnFactor = WarnFactor,
         AlarmFactor = AlarmFactor,
         SigmaWarn = SigmaWarn,
@@ -411,16 +512,6 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         IsRatioMode &&
         _signalLine.Species == _referenceLine.Species &&
         Math.Abs(_signalLine.WavelengthNm - _referenceLine.WavelengthNm) < 1e-6;
-
-    // Reuses the original region (exact label + tuned windows preserved) when the line and
-    // mode are unchanged; otherwise builds a fresh region for the newly picked line.
-    private static LineRegion RegionFor(SpectralLine line, LineExtractMode mode, LineRegion orig)
-    {
-        bool unchanged = !string.IsNullOrEmpty(orig.Label)
-                       && orig.Mode == mode
-                       && Math.Abs(orig.CenterNm - line.WavelengthNm) < 1e-6;
-        return unchanged ? orig.Clone() : BuildRegion(line, mode);
-    }
 
     // A peak-height line is a narrow atomic transition; an integral line is a broader
     // molecular band head, so it gets a wider signal window. A raw reading averages a narrow
