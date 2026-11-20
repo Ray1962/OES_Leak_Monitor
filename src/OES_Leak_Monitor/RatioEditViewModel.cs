@@ -45,6 +45,9 @@ public sealed class SpectralLineOption : INotifyPropertyChanged
 
     public bool HasCorrection => _offsetNm != 0.0;
 
+    /// <summary>What UI Automation (and a screen reader) calls the entry.</summary>
+    public override string ToString() => Display;
+
     /// <summary>Offset and the resulting effective center, e.g. "+0.20 nm → 777.4 nm". Empty
     /// when the line is uncorrected.</summary>
     public string CorrectionText => HasCorrection
@@ -272,6 +275,32 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
     public double ReferenceBaselineWidthNm { get => _denRegion.BaselineWidthNm;       set { if (_denRegion.BaselineWidthNm != value)       { _denRegion.BaselineWidthNm = value;       OnPropertyChanged(); } } }
     public double ReferencePeakSearchNm    { get => _denRegion.PeakSearchHalfWidthNm; set { if (_denRegion.PeakSearchHalfWidthNm != value) { _denRegion.PeakSearchHalfWidthNm = value; OnPropertyChanged(); } } }
 
+    // --- separate right side (#112) ---------------------------------------------
+    // Unticked, the right window mirrors the left and the region stores null for it, so a
+    // symmetric line keeps the WindowKey its Golden Run recorded. Ticking seeds the right
+    // side from the left; unticking clears it back to null.
+
+    public bool SignalSeparateRight { get => _numRegion.HasSeparateRightSide; set => SetSeparate(_numRegion, value, RaiseSignalWindows); }
+    public bool ReferenceSeparateRight { get => _denRegion.HasSeparateRightSide; set => SetSeparate(_denRegion, value, RaiseReferenceWindows); }
+
+    public double SignalRightGapNm      { get => _numRegion.EffectiveRightGapNm;   set { if (_numRegion.HasSeparateRightSide && _numRegion.RightBaselineGapNm != value)   { _numRegion.RightBaselineGapNm = value;   OnPropertyChanged(); } } }
+    public double SignalRightWidthNm    { get => _numRegion.EffectiveRightWidthNm; set { if (_numRegion.HasSeparateRightSide && _numRegion.RightBaselineWidthNm != value) { _numRegion.RightBaselineWidthNm = value; OnPropertyChanged(); } } }
+    public double ReferenceRightGapNm   { get => _denRegion.EffectiveRightGapNm;   set { if (_denRegion.HasSeparateRightSide && _denRegion.RightBaselineGapNm != value)   { _denRegion.RightBaselineGapNm = value;   OnPropertyChanged(); } } }
+    public double ReferenceRightWidthNm { get => _denRegion.EffectiveRightWidthNm; set { if (_denRegion.HasSeparateRightSide && _denRegion.RightBaselineWidthNm != value) { _denRegion.RightBaselineWidthNm = value; OnPropertyChanged(); } } }
+
+    private static void SetSeparate(LineRegion r, bool on, Action raise)
+    {
+        if (on == r.HasSeparateRightSide) return;
+        if (on) { r.RightBaselineGapNm = r.BaselineGapNm; r.RightBaselineWidthNm = r.BaselineWidthNm; }
+        else { r.RightBaselineGapNm = null; r.RightBaselineWidthNm = null; }
+        raise();
+    }
+
+    /// <summary>The working regions as they stand, unsaved edits included — what the line
+    /// preview draws.</summary>
+    public LineRegion SignalRegionPreview => _numRegion.Clone();
+    public LineRegion? ReferenceRegionPreview => IsRatioMode ? _denRegion.Clone() : null;
+
     /// <summary>A raw reading never peak-searches (see <see cref="LineRegion.PeakSearchHalfWidthNm"/>),
     /// so its search field is fixed at 0 and greyed.</summary>
     public bool SignalPeakSearchEditable    => _signalMode != LineExtractMode.RawMean;
@@ -293,6 +322,11 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
             return $"{side} half-width must be {(r.Mode == LineExtractMode.RawMean ? "0" : "above 0")}–{MaxWindowNm:0} nm.";
         if (Bad(r.BaselineGapNm)) return $"{side} baseline gap must be 0–{MaxWindowNm:0} nm.";
         if (Bad(r.BaselineWidthNm) || r.BaselineWidthNm == 0) return $"{side} baseline width must be above 0 and at most {MaxWindowNm:0} nm.";
+        if (r.HasSeparateRightSide)
+        {
+            if (Bad(r.EffectiveRightGapNm)) return $"{side} right gap must be 0–{MaxWindowNm:0} nm.";
+            if (Bad(r.EffectiveRightWidthNm) || r.EffectiveRightWidthNm == 0) return $"{side} right width must be above 0 and at most {MaxWindowNm:0} nm.";
+        }
         if (Bad(r.PeakSearchHalfWidthNm)) return $"{side} peak search must be 0–{MaxWindowNm:0} nm.";
         return null;
     }
@@ -304,6 +338,9 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SignalBaselineWidthNm));
         OnPropertyChanged(nameof(SignalPeakSearchNm));
         OnPropertyChanged(nameof(SignalPeakSearchEditable));
+        OnPropertyChanged(nameof(SignalSeparateRight));
+        OnPropertyChanged(nameof(SignalRightGapNm));
+        OnPropertyChanged(nameof(SignalRightWidthNm));
     }
 
     private void RaiseReferenceWindows()
@@ -313,6 +350,9 @@ public sealed class RatioEditViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ReferenceBaselineWidthNm));
         OnPropertyChanged(nameof(ReferencePeakSearchNm));
         OnPropertyChanged(nameof(ReferencePeakSearchEditable));
+        OnPropertyChanged(nameof(ReferenceSeparateRight));
+        OnPropertyChanged(nameof(ReferenceRightGapNm));
+        OnPropertyChanged(nameof(ReferenceRightWidthNm));
     }
 
     private static bool SameLine(SpectralLineOption? a, SpectralLineOption b) =>

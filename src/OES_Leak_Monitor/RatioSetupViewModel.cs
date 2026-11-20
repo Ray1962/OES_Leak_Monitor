@@ -40,6 +40,7 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _persistSettings = persistSettings ?? throw new ArgumentNullException(nameof(persistSettings));
         _log = log;
+        Preview = new LinePreviewViewModel(() => _engine.Settings.WavelengthCorrections);
 
         // One shared, species-grouped view of the line catalog feeds every line picker;
         // IsSynchronizedWithCurrentItem="False" on the combos keeps their selections
@@ -128,6 +129,9 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
     /// itself moves, so its key does not change and the Golden Run baseline, calibration and any
     /// latched alarm keyed on it carry over; deleting and re-adding the ratio would lose all three.
     /// </summary>
+    /// <summary>The line preview of the selected ratio (#112).</summary>
+    public LinePreviewViewModel Preview { get; }
+
     public RelayCommand MoveUpCommand      { get; }
     public RelayCommand MoveDownCommand    { get; }
 
@@ -135,7 +139,7 @@ public sealed class RatioSetupViewModel : INotifyPropertyChanged
     public RatioEditViewModel? SelectedRatio
     {
         get => _selectedRatio;
-        set { if (Set(ref _selectedRatio, value)) RaiseRowCommands(); }
+        set { if (Set(ref _selectedRatio, value)) { RaiseRowCommands(); Preview.SetRow(value); } }
     }
 
     private bool _isDirty;

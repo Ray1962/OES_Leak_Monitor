@@ -55,6 +55,31 @@ public sealed class LineRegion
     /// <summary>Width of each side baseline window, nm.</summary>
     public double BaselineWidthNm { get; set; } = 1.0;
 
+    /// <summary>Gap of the <em>right</em> baseline window when it differs from the left (#112);
+    /// null means "same as <see cref="BaselineGapNm"/>". <see cref="BaselineGapNm"/> and
+    /// <see cref="BaselineWidthNm"/> are then the left side. Null keeps a symmetric region's
+    /// <see cref="WindowKey"/> exactly as it was, so Golden Runs recorded before asymmetric
+    /// windows existed still apply.</summary>
+    public double? RightBaselineGapNm { get; set; }
+
+    /// <summary>Width of the right baseline window; null means "same as <see cref="BaselineWidthNm"/>".</summary>
+    public double? RightBaselineWidthNm { get; set; }
+
+    /// <summary>True when either right-side value is set.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasSeparateRightSide => RightBaselineGapNm is not null || RightBaselineWidthNm is not null;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double EffectiveRightGapNm => RightBaselineGapNm ?? BaselineGapNm;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double EffectiveRightWidthNm => RightBaselineWidthNm ?? BaselineWidthNm;
+
+    /// <summary>The key suffix the right side adds — empty for a symmetric region.</summary>
+    private string RightKey => HasSeparateRightSide
+        ? FormattableString.Invariant($"|R{EffectiveRightGapNm:R}|{EffectiveRightWidthNm:R}")
+        : "";
+
     public LineExtractMode Mode { get; set; } = LineExtractMode.PeakHeight;
 
     /// <summary>
@@ -86,6 +111,8 @@ public sealed class LineRegion
         HalfWidthNm == other.HalfWidthNm &&
         BaselineGapNm == other.BaselineGapNm &&
         BaselineWidthNm == other.BaselineWidthNm &&
+        RightBaselineGapNm == other.RightBaselineGapNm &&
+        RightBaselineWidthNm == other.RightBaselineWidthNm &&
         PeakSearchHalfWidthNm == other.PeakSearchHalfWidthNm;
 
     /// <summary>
@@ -102,7 +129,7 @@ public sealed class LineRegion
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string MeasurementKey => FormattableString.Invariant(
-        $"{Label}|{Mode}|{CenterNm:R}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}");
+        $"{Label}|{Mode}|{CenterNm:R}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}") + RightKey;
 
     /// <summary>
     /// What a Golden Run baseline records of the region it was measured with (#88): the line (by
@@ -113,7 +140,7 @@ public sealed class LineRegion
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string WindowKey => FormattableString.Invariant(
-        $"{Label}|{Mode}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}");
+        $"{Label}|{Mode}|{HalfWidthNm:R}|{BaselineGapNm:R}|{BaselineWidthNm:R}|{PeakSearchHalfWidthNm:R}") + RightKey;
 }
 
 /// <summary>
@@ -139,6 +166,11 @@ public readonly record struct LineMeasurement(double Value, double Noise)
     public double Snr => HasValue && Noise > 0 ? Value / Noise : double.NaN;
 }
 
+/// <summary>The windows of a line region as placed on one frame (see
+/// <see cref="LineIntensityExtractor.Layout(float[], float[], LineRegion)"/>), nm.</summary>
+public readonly record struct LineWindowLayout(double Center, double SignalLo, double SignalHi,
+                                               double LeftLo, double LeftHi, double RightLo, double RightHi);
+
 /// <summary>
 /// Extracts a baseline-subtracted line intensity from a spectrum frame. Assumes the
 /// wavelength array is ascending (standard for the OES SDK).
@@ -160,23 +192,14 @@ public static class LineIntensityExtractor
         if (region.Mode == LineExtractMode.RawMean)
             return ExtractRaw(wavelengths, intensities, n, region);
 
-        // Re-center on the actual peak so a shifted line or a mis-calibrated wavelength
-        // axis is still measured correctly (see LineRegion.PeakSearchHalfWidthNm).
-        double center = region.PeakSearchHalfWidthNm > 0
-            ? FindPeakWavelength(wavelengths, intensities, n,
-                                 region.CenterNm, region.PeakSearchHalfWidthNm)
-            : region.CenterNm;
-
-        double sigLo = center - region.HalfWidthNm;
-        double sigHi = center + region.HalfWidthNm;
+        var layout = Layout(wavelengths, intensities, n, region);
+        double sigLo = layout.SignalLo, sigHi = layout.SignalHi;
         int s0 = LowerBound(wavelengths, n, sigLo);
         int s1 = UpperBound(wavelengths, n, sigHi) - 1;
         if (s0 >= n || s1 < s0) return LineMeasurement.Invalid;
 
-        double leftHi  = sigLo - region.BaselineGapNm;
-        double leftLo  = leftHi - region.BaselineWidthNm;
-        double rightLo = sigHi + region.BaselineGapNm;
-        double rightHi = rightLo + region.BaselineWidthNm;
+        double leftLo = layout.LeftLo, leftHi = layout.LeftHi;
+        double rightLo = layout.RightLo, rightHi = layout.RightHi;
 
         var left  = WindowStats(wavelengths, intensities, n, leftLo,  leftHi);
         var right = WindowStats(wavelengths, intensities, n, rightLo, rightHi);
@@ -232,6 +255,31 @@ public static class LineIntensityExtractor
         }
         double integralNoise = double.IsNaN(pixelNoise) ? double.NaN : pixelNoise * Math.Sqrt(sumW2);
         return new LineMeasurement(sum, integralNoise);
+    }
+
+    /// <summary>
+    /// Where the windows of <paramref name="region"/> actually fall on this frame: the centre
+    /// after peak-search re-centring, the signal window and both baseline windows. The one
+    /// definition the extractor and the Ratio Setup line preview (#112) share, so the preview
+    /// draws exactly the windows that are measured. RawMean has no peak search and no baseline;
+    /// its baseline intervals are still reported (unused by the reading).
+    /// </summary>
+    public static LineWindowLayout Layout(float[] wavelengths, float[] intensities, LineRegion region) =>
+        Layout(wavelengths, intensities, Math.Min(wavelengths.Length, intensities.Length), region);
+
+    private static LineWindowLayout Layout(float[] wavelengths, float[] intensities, int n, LineRegion region)
+    {
+        // Re-center on the actual peak so a shifted line or a mis-calibrated wavelength
+        // axis is still measured correctly (see LineRegion.PeakSearchHalfWidthNm).
+        double center = region.Mode != LineExtractMode.RawMean && region.PeakSearchHalfWidthNm > 0 && n >= 2
+            ? FindPeakWavelength(wavelengths, intensities, n, region.CenterNm, region.PeakSearchHalfWidthNm)
+            : region.CenterNm;
+        double sigLo = center - region.HalfWidthNm, sigHi = center + region.HalfWidthNm;
+        double leftHi = sigLo - region.BaselineGapNm;
+        double rightLo = sigHi + region.EffectiveRightGapNm;
+        return new LineWindowLayout(center, sigLo, sigHi,
+                                    leftHi - region.BaselineWidthNm, leftHi,
+                                    rightLo, rightLo + region.EffectiveRightWidthNm);
     }
 
     /// <summary>
