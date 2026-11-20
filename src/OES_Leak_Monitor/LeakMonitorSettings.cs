@@ -716,7 +716,7 @@ public sealed class LeakMonitorSettings
                 // is largely divided out by the reference.
                 Numerator = new LineRegion
                 {
-                    Label = "N₂ 337.1", CenterNm = 337.1, HalfWidthNm = 1.0,
+                    Label = "N₂ 337.1", CenterNm = 337.1, HalfWidthNm = 1.5,
                     BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.RawMean,
                 },
                 Denominator = DefaultArReference(),
@@ -738,8 +738,8 @@ public sealed class LeakMonitorSettings
                 Key = "R_N2357Ar", DisplayName = "N₂ 358 / Ar 750",
                 Numerator = new LineRegion
                 {
-                    Label = "N₂ 357.7", CenterNm = 357.7, HalfWidthNm = 0.5,
-                    BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.PeakHeight,
+                    Label = "N₂ 357.7", CenterNm = 357.7, HalfWidthNm = 1.5,
+                    BaselineGapNm = 1.2, BaselineWidthNm = 1.8, PeakSearchHalfWidthNm = 1.2, Mode = LineExtractMode.PeakHeight,
                 },
                 Denominator = DefaultArReference(),
                 WarnFactor = 1.05, AlarmFactor = 1.12,
@@ -759,7 +759,7 @@ public sealed class LeakMonitorSettings
                 MonitorMode = MonitorMode.AbsoluteIntensity,
                 Numerator = new LineRegion
                 {
-                    Label = "N₂ 357.7", CenterNm = 357.7, HalfWidthNm = 1.0,
+                    Label = "N₂ 357.7", CenterNm = 357.7, HalfWidthNm = 1.5,
                     BaselineGapNm = 1.0, BaselineWidthNm = 1.0, Mode = LineExtractMode.RawMean,
                 },
                 Denominator = DefaultArReference(),

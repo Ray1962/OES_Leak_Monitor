@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -137,5 +138,97 @@ public class LabLeakTest20261119Tests
         var want = DateTime.ParseExact("2026-11-19 " + expected, "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
         // Within one frame (≈ 0.7 s at 100 ms × 5).
         Assert.InRange((alarmAt!.Value - want).TotalSeconds, -1.0, 1.0);
+    }
+
+    // --- #125: old vs pixel-based windows ------------------------------------------------
+
+    /// <summary>Frame-to-frame noise of a ratio series, relative to its mean: std of first
+    /// differences / √2, so the afternoon's slow drift does not count as noise.</summary>
+    private static double RelativeNoise(IReadOnlyList<double> r)
+    {
+        var d = Enumerable.Range(1, r.Count - 1).Select(i => r[i] - r[i - 1]).ToList();
+        double m = d.Average();
+        double sd = Math.Sqrt(d.Sum(x => (x - m) * (x - m)) / (d.Count - 1)) / Math.Sqrt(2);
+        return sd / r.Average();
+    }
+
+    /// <summary>Leak step of a DV run: highest 10-frame mean over the median of the first
+    /// fifth of the plasma frames (before the valve opens), relative.</summary>
+    private static double RelativeStep(IReadOnlyList<double> r)
+    {
+        var head = r.Take(Math.Max(10, r.Count / 5)).OrderBy(x => x).ToList();
+        double base0 = head[head.Count / 2];
+        double peak = Enumerable.Range(0, r.Count - 9).Max(i => r.Skip(i).Take(10).Average());
+        return (peak - base0) / base0;
+    }
+
+    private static List<double> RatioSeries(string path, LineRegion num, LineRegion den)
+    {
+        var run = RecordedRun.Load(path);
+        var list = new List<double>();
+        for (int i = 0; i < run.FrameCount; i++)
+        {
+            var y = run.Frame(i, DateTime.MinValue).Intensities;
+            if (y.Max() < 1000) continue;   // plasma off
+            var n = LineIntensityExtractor.Extract(run.Wavelengths, y, num);
+            var d = LineIntensityExtractor.Extract(run.Wavelengths, y, den);
+            if (n.HasValue && d.HasValue && d.Value > 0) list.Add(n.Value / d.Value);
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// The windows of #125 against the ones they replace, on the DV=0 Golden Run recording
+    /// (noise) and the first DV=300 run (step). Pass: neither noise nor step SNR worse by more than 2 %.
+    /// Each "new" region is the old one through <see cref="LineWindowAdvice.ApplySuggested"/>
+    /// — what Apply suggested widths would do on the tool — and the factory ratios are the old
+    /// and new <see cref="LeakMonitorSettings.CreateDefault"/> numerators over Ar 750.4.
+    /// </summary>
+    [SkippableFact]
+    public void Pixel_based_windows_lower_noise_without_losing_the_leak_step()
+    {
+        const string quiet = "P_OES1_1119151003_1.csv", leak = "P_OES1_1119152128.csv";
+        var folder = Folder();
+        Skip.If(folder is null || !File.Exists(Path.Combine(folder, quiet)) || !File.Exists(Path.Combine(folder, leak)),
+            $"recordings of 2026-11-19 not found — set {FolderVariable} to a folder holding {quiet} and {leak}");
+
+        var lab = LabConfiguration();
+        var arShift = -0.1;   // the lab's Ar 750.4 wavelength correction
+        LineRegion Shift(LineRegion r) { var c = r.Clone(); if (c.Label.StartsWith("Ar")) c.CenterNm += arShift; return c; }
+
+        var oldArPeak = new LineRegion { Label = "Ar 750.4", CenterNm = 750.4, HalfWidthNm = 0.5, BaselineGapNm = 1, BaselineWidthNm = 1, Mode = LineExtractMode.PeakHeight };
+        var cases = new List<(string Name, LineRegion OldNum, LineRegion OldDen, LineRegion NewNum, LineRegion NewDen)>();
+        foreach (var r in lab.Ratios)
+            cases.Add((r.DisplayName, r.Numerator, r.Denominator,
+                       LineWindowAdvice.ApplySuggested(r.Numerator, 0.6), LineWindowAdvice.ApplySuggested(r.Denominator, 0.6)));
+        foreach (var r in lab.Ratios)
+        {
+            cases.Add((r.DisplayName + " [num only]", r.Numerator, r.Denominator, LineWindowAdvice.ApplySuggested(r.Numerator, 0.6), r.Denominator));
+            cases.Add((r.DisplayName + " [Ar only]", r.Numerator, r.Denominator, r.Numerator, LineWindowAdvice.ApplySuggested(r.Denominator, 0.6)));
+        }
+        var factory = LeakMonitorSettings.CreateDefault().Ratios.Where(r => r.MonitorMode == MonitorMode.Ratio).ToList();
+        var oldNums = new Dictionary<string, LineRegion>
+        {
+            ["R_N2Ar"] = new() { Label = "N₂ 337.1", CenterNm = 337.1, HalfWidthNm = 1.0, BaselineGapNm = 1, BaselineWidthNm = 1, Mode = LineExtractMode.RawMean },
+            ["R_NOAr"] = new() { Label = "NO 237", CenterNm = 237.0, HalfWidthNm = 1.5, BaselineGapNm = 1, BaselineWidthNm = 1, Mode = LineExtractMode.RawMean },
+            ["R_N2357Ar"] = new() { Label = "N₂ 357.7", CenterNm = 357.7, HalfWidthNm = 0.5, BaselineGapNm = 1, BaselineWidthNm = 1, Mode = LineExtractMode.PeakHeight },
+        };
+        foreach (var r in factory)
+            cases.Add(("factory " + r.DisplayName, oldNums[r.Key], oldArPeak, r.Numerator, r.Denominator));
+
+        var worse = new List<string>();
+        _out.WriteLine("ratio | noise old → new | step old → new | step SNR old → new");
+        foreach (var c in cases)
+        {
+            double nOld = RelativeNoise(RatioSeries(Path.Combine(folder!, quiet), Shift(c.OldNum), Shift(c.OldDen)));
+            double nNew = RelativeNoise(RatioSeries(Path.Combine(folder!, quiet), Shift(c.NewNum), Shift(c.NewDen)));
+            double sOld = RelativeStep(RatioSeries(Path.Combine(folder!, leak), Shift(c.OldNum), Shift(c.OldDen)));
+            double sNew = RelativeStep(RatioSeries(Path.Combine(folder!, leak), Shift(c.NewNum), Shift(c.NewDen)));
+            double snrOld = sOld / nOld, snrNew = sNew / nNew;
+            _out.WriteLine($"{c.Name} | {nOld:P2} → {nNew:P2} | {sOld:P1} → {sNew:P1} | {snrOld:0.0} → {snrNew:0.0}");
+            // 2 % slack: a window one pixel wider moves both numbers by about that much at random.
+            if (nNew > nOld * 1.02 || snrNew < snrOld * 0.98) worse.Add(c.Name);
+        }
+        Assert.True(worse.Count == 0, "worse with the new windows: " + string.Join(", ", worse));
     }
 }

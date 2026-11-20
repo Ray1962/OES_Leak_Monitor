@@ -94,10 +94,11 @@ public class LineWindowTests
         var (_, vm, _) = Tab();
         var oh = Row(vm, "R_OH");
         oh.SignalLine = vm.LineCatalog.Cast<SpectralLineOption>().First(o => o.Species == "Ar" && Math.Abs(o.WavelengthNm - 811.5) < 0.1);
-        Assert.Equal(1.0, oh.SignalHalfWidthNm);       // Integral default
-        Assert.Equal(1.0, oh.SignalBaselineGapNm);
-        Assert.Equal(1.0, oh.SignalBaselineWidthNm);
-        Assert.Equal(1.0, oh.SignalPeakSearchNm);
+        // Integral defaults at the 0.6 nm fallback pitch (#125): band-shaped ±1.0, then 2 / 3 / 2 pixels.
+        Assert.Equal(1.0, oh.SignalHalfWidthNm, 6);
+        Assert.Equal(1.2, oh.SignalBaselineGapNm, 6);
+        Assert.Equal(1.8, oh.SignalBaselineWidthNm, 6);
+        Assert.Equal(1.2, oh.SignalPeakSearchNm, 6);
         Assert.StartsWith("Ar 811", oh.ToDefinition().Numerator.Label);
     }
 
@@ -116,7 +117,7 @@ public class LineWindowTests
         Assert.Equal(0, oh.SignalPeakSearchNm);
         Assert.False(oh.SignalPeakSearchEditable);
         oh.SignalMode = LineExtractMode.Integral;
-        Assert.Equal(1.0, oh.SignalPeakSearchNm);
+        Assert.Equal(1.2, oh.SignalPeakSearchNm, 6);   // suggested search, 2 px at 0.6 nm (#125)
         Assert.True(oh.SignalPeakSearchEditable);
     }
 
