@@ -572,6 +572,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _intensityLogger.ProcessSample(slot, sample);
         _leakMonitorEngine.ProcessSample(sample);
         WavelengthTrend.OnSpectrum(sample);
+        RatioSetup?.Preview.OnLiveSpectrum(sample);
     }
 
     public AccessControlService AccessControl { get; }

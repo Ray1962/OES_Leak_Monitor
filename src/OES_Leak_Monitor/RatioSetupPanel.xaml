@@ -1,6 +1,7 @@
 <UserControl x:Class="OES_Leak_Monitor.RatioSetupPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:oxy="http://oxyplot.org/wpf"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
@@ -44,6 +45,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -483,8 +485,61 @@
             </Border>
         </Grid>
 
+        <!-- Line preview (#112): the selected ratio's windows on a spectrum, unsaved edits
+             included. Read-only, so outside the gated editor. -->
+        <Border Grid.Row="3" Background="White" BorderBrush="#DDD" BorderThickness="1"
+                CornerRadius="4" Padding="10,6" Margin="0,8,0,0" DataContext="{Binding Preview}">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                    <TextBlock Text="Line preview" FontWeight="SemiBold" Foreground="#1F3A66"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Button Content="{Binding FreezeText}" Command="{Binding FreezeCommand}"
+                            Padding="10,2" MinWidth="70" Margin="0,0,4,0"
+                            ToolTip="Hold the current live frame while you tune the windows."/>
+                    <Button Content="Load recording…" Command="{Binding LoadRecordingCommand}"
+                            Padding="10,2" Margin="0,0,4,0"
+                            ToolTip="Preview on a frame of a recorded P_OES1 spectrum CSV, or one inside a zipped day folder."/>
+                    <Button Content="Live" Command="{Binding UseLiveCommand}"
+                            Padding="10,2" MinWidth="50" Margin="0,0,8,0"
+                            ToolTip="Back to the live spectrum."/>
+                    <ComboBox ItemsSource="{Binding RecordingChoices}" SelectedItem="{Binding SelectedRecording}"
+                              DisplayMemberPath="FileName" MinWidth="190" Margin="0,0,8,0"
+                              Visibility="{Binding HasRecording, Converter={StaticResource BoolToVis}}"
+                              ToolTip="The recordings in the chosen file."/>
+                    <TextBlock Text="{Binding SourceText}" Foreground="#666" VerticalAlignment="Center"
+                               FontFamily="Consolas, monospace" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+                <Slider DockPanel.Dock="Top" Minimum="0" Maximum="{Binding MaxFrameIndex}" Value="{Binding FrameIndex}"
+                        IsSnapToTickEnabled="True" TickFrequency="1" SmallChange="1" LargeChange="10" Margin="0,0,0,4"
+                        Visibility="{Binding HasRecording, Converter={StaticResource BoolToVis}}"
+                        AutomationProperties.Name="Frame"
+                        ToolTip="Pick the recorded frame to preview."/>
+                <Grid Height="230">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding NumeratorWarnings}" Foreground="#B36B00"
+                                   FontSize="11" TextWrapping="Wrap"/>
+                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding NumeratorCaption}" Foreground="#444"
+                                   FontSize="11" FontFamily="Consolas, monospace"/>
+                        <oxy:PlotView Model="{Binding NumeratorPlot}" Background="White"/>
+                    </DockPanel>
+                    <DockPanel Grid.Column="2" Visibility="{Binding ShowDenominator, Converter={StaticResource BoolToVis}}">
+                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding DenominatorWarnings}" Foreground="#B36B00"
+                                   FontSize="11" TextWrapping="Wrap"/>
+                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding DenominatorCaption}" Foreground="#444"
+                                   FontSize="11" FontFamily="Consolas, monospace"/>
+                        <oxy:PlotView Model="{Binding DenominatorPlot}" Background="White"/>
+                    </DockPanel>
+                </Grid>
+            </DockPanel>
+        </Border>
+
         <!-- Bottom bar -->
-        <Border Grid.Row="3" Background="#EEF2F7" BorderBrush="#CCC" BorderThickness="1"
+        <Border Grid.Row="4" Background="#EEF2F7" BorderBrush="#CCC" BorderThickness="1"
                 CornerRadius="4" Padding="10,8" Margin="0,8,0,0">
             <DockPanel LastChildFill="True">
                 <Button DockPanel.Dock="Left" Content="Save"

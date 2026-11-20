@@ -45,6 +45,9 @@ public sealed class SpectralLineOption : INotifyPropertyChanged
 
     public bool HasCorrection => _offsetNm != 0.0;
 
+    /// <summary>What UI Automation (and a screen reader) calls the entry.</summary>
+    public override string ToString() => Display;
+
     /// <summary>Offset and the resulting effective center, e.g. "+0.20 nm → 777.4 nm". Empty
     /// when the line is uncorrected.</summary>
     public string CorrectionText => HasCorrection
