@@ -8,7 +8,7 @@
     ps                  launch|OES        kill|OES          login           sleep|5
     tab|OES|Replay      press|OES|Play    toggle|OES|Raise leak*
     edits|OES           edit|OES|3|330    texts|OES|ALARM   buttons|TS
-    rows|OES            row|OES|*13:49*   tick|OES|SIMP_OES1_*   click|OES|OH 308.8*   key|OES|{ESC}
+    rows|OES            row|OES|*13:49*   tick|OES|SIMP_OES1_*   click|OES|OH 308.8*   key|OES|{ESC}   combo|OES|NO 235*
     dlg-text            dlg-edit|Name     dlg-toggle|I confirm*     dlg-press|Start Capture
     shot|name           shot-dlg|name
     radio|TS|Equipment simulator (passive)                          profile|TS|EapForwarder
@@ -172,6 +172,19 @@ foreach ($step in ($Steps -split ';')) {
         [StepWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [StepWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
         Write-Host "clicked $($t.Current.Name)"
       }
+    }
+    # The first on-screen ComboBox that lists an item like the pattern; selects that item.
+    'combo'  {
+      $hit = $false
+      foreach ($cb in (All (Root $a) $CT::ComboBox)) {
+        if ($cb.Current.IsOffscreen) { continue }
+        $ec = $cb.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+        $ec.Expand(); Start-Sleep -Milliseconds 400
+        $item = Find $cb $CT::ListItem $b
+        if ($item) { $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); $ec.Collapse(); Write-Host "$a combo $($item.Current.Name)"; $hit = $true; break }
+        $ec.Collapse()
+      }
+      if (-not $hit) { Write-Host "!! no combo item like $b" }
     }
     'key'    { [StepWin]::SetForegroundWindow((Proc $a).MainWindowHandle) | Out-Null; Start-Sleep -Milliseconds 300; [System.Windows.Forms.SendKeys]::SendWait($b); Write-Host "$a key $b" }
     'dlg-text'   { $d = Dialog; if ($d) { Write-Host "DIALOG: $($d.Current.Name)"; foreach ($x in (All $d $CT::Text)) { Write-Host "  $($x.Current.Name)" } } }
