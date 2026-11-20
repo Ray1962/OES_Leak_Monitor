@@ -555,6 +555,7 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
             z[1] = new ScatterPoint(x, 0);
         }
         UpdateWarmupBands(snap, x, cutoff);
+        _lastSnap = snap; _lastX = x;
         UpdateSelectionOverlay(snap, x);
 
         var warnings = new List<string>();
@@ -757,6 +758,10 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
     // --- row selection: the selected ratio's own thresholds (#104) -------------
 
     private string? _selectedKey;
+    /// <summary>The newest frame, so a selection made while no frames arrive (replay finished,
+    /// acquisition stopped) still draws its lines at once instead of on a frame that never comes.</summary>
+    private LeakMonitorSnapshot? _lastSnap;
+    private double _lastX;
 
     /// <summary>Selects <paramref name="row"/>, or clears the selection when it is already the
     /// selected one. A selected row draws its own Warn / Alarm lines and dims the other lines.</summary>
@@ -777,7 +782,8 @@ public sealed class LeakMonitorViewModel : INotifyPropertyChanged, IDisposable
                 series.Color = key is null || k == key ? c : OxyColor.FromAColor(60, c);
             }
         ClearThresholdOverlay();
-        PlotModel.InvalidatePlot(false);
+        if (_lastSnap is { } last) UpdateSelectionOverlay(last, _lastX);
+        PlotModel.InvalidatePlot(true);
     }
 
     private void UpdateSelectionOverlay(LeakMonitorSnapshot snap, double x)

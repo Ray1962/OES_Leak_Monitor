@@ -122,6 +122,13 @@ The seconds after the smoothing restarts (plasma on, a reset) during which the r
 baseline has too little history to judge. The step path says nothing then; it is not the
 same as having no baseline.
 
+**% vs reference**:
+The single axis both ratio trend charts plot on: 0 is the reference. A step-judged ratio
+plots its rise (×100); a Golden-Run-judged ratio plots its percent of Golden Run minus 100.
+The chart plots what is judged, so the curve and the alarm cannot disagree. It is a display
+quantity only — the row's % column, the ratio CSV and the SECS value stay percent of
+Golden Run (100 = baseline).
+
 **Composite level**:
 The single Normal / Warning / Alarm verdict for the whole tool, formed from the
 individual entries' states. Entries that are unreadable take no part in it.
