@@ -27,8 +27,8 @@ public enum RatioReviewMode { PercentOfBaseline, RawRatio, LeakRate }
 /// <summary>
 /// Backs the Ratio Review tab. Scans the logger's base directory for the
 /// <c>{prefix}_Ratio_*.csv</c> files written by <see cref="RatioCsvLogger"/>, lists them,
-/// and plots the selected file's per-ratio trend — either % of baseline (with the
-/// 100 / 120 / 150 % threshold lines) or the raw ratio — with the composite leak state
+/// and plots the selected file's per-ratio trend — "% vs reference" (the same lines as the
+/// live Leak Monitor chart, #106), the raw ratio, or the leak rate — with the composite leak state
 /// drawn as translucent Warning / Alarm bands behind the series.
 /// </summary>
 public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
@@ -46,6 +46,10 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
 
     private readonly List<Recording> _allFiles = new();
     private RatioTrendData? _data;
+    /// <summary>The run's ratio definitions from its config snapshot (#107); null when there is none.</summary>
+    private IReadOnlyDictionary<string, RatioDefinition>? _defs;
+    private string? _defsSource;
+    private const string NoRatio = "(none)";
     private CancellationTokenSource? _loadCts;
 
     public RatioReviewViewModel(LoggerViewModel logger, DualIntensityLogger intensityLogger,
@@ -116,6 +120,23 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
     public bool IsPercentMode  => _mode == RatioReviewMode.PercentOfBaseline;
     public bool IsRawMode      => _mode == RatioReviewMode.RawRatio;
     public bool IsLeakRateMode => _mode == RatioReviewMode.LeakRate;
+
+    /// <summary>"(none)" plus each ratio of the loaded file; the chosen one draws its own
+    /// Warn / Alarm lines in "% vs reference" mode (#107).</summary>
+    public ObservableCollection<string> RatioChoices { get; } = new() { NoRatio };
+
+    private string _selectedRatioChoice = NoRatio;
+    public string SelectedRatioChoice
+    {
+        get => _selectedRatioChoice;
+        set
+        {
+            // Clearing RatioChoices on a new file makes the ComboBox push null; keep "(none)"
+            // and re-announce it once the list is refilled, or the box shows blank.
+            if (value is null) { _dispatcher.BeginInvoke(() => OnPropertyChanged(nameof(SelectedRatioChoice))); return; }
+            if (Set(ref _selectedRatioChoice, value)) RebuildPlot();
+        }
+    }
 
     private string _searchText = "";
     /// <summary>Substring filter applied to the file date / time / name.</summary>
@@ -234,6 +255,8 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         if (_selectedFile is null)
         {
             _data = null;
+            _defs = null; _defsSource = null;
+            ResetRatioChoices();
             RebuildPlot();
             StatusText = "No ratio file selected.";
             RaiseExportCanExec();
@@ -245,13 +268,18 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         try
         {
             // OpenText hides where the CSV lives: a loose file or an entry inside DD.zip.
-            var data = await Task.Run(() =>
+            var (data, defs, source) = await Task.Run(() =>
             {
-                using var reader = file.OpenText();
-                return RatioCsvReader.Read(reader, token);
+                RatioTrendData d;
+                using (var reader = file.OpenText()) d = RatioCsvReader.Read(reader, token);
+                string? src = null;
+                var defs = d.RowCount > 0 ? RecordedJudging.TryLoad(file, d.Timestamps[^1], out src) : null;
+                return (d, defs, src);
             }, token).ConfigureAwait(true);
             if (token.IsCancellationRequested) return;
             _data = data;
+            _defs = defs; _defsSource = source;
+            ResetRatioChoices();
             RebuildPlot();
             StatusText = (data.RowCount > 0
                 ? $"Loaded {data.RowCount} row(s), {data.RatioKeys.Count} ratio(s)."
@@ -265,6 +293,8 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             _data = null;
+            _defs = null; _defsSource = null;
+            ResetRatioChoices();
             RebuildPlot();
             StatusText = "Load error: " + ex.Message;
         }
@@ -304,13 +334,13 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         var yAxis = new LinearAxis
         {
             Position = AxisPosition.Left,
-            Title = leak ? "leak rate (mbar·L/s)" : pct ? "% of baseline" : "raw ratio",
+            Title = leak ? "leak rate (mbar·L/s)" : pct ? TrendProjection.AxisTitle : "raw ratio",
             MajorGridlineStyle = LineStyle.Solid,
             MajorGridlineColor = OxyColor.FromRgb(0xE8, 0xE8, 0xE8),
         };
         if (pct)
         {
-            yAxis.AbsoluteMinimum = 0;
+            // 0 is the reference; negative values (drift below it) stay visible (#106).
             yAxis.MinimumRange = 10;
         }
         else if (leak)
@@ -327,12 +357,7 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
             LegendBackground = OxyColor.FromAColor(0xC0, OxyColors.White),
         });
 
-        if (pct)
-        {
-            AddThreshold(model, 100, OxyColors.Gray,       "baseline");
-            AddThreshold(model, 120, OxyColors.DarkOrange, "warn ~120%");
-            AddThreshold(model, 150, OxyColors.Firebrick,  "alarm ~150%");
-        }
+        if (pct) AddThreshold(model, 0, OxyColors.Gray, "reference");
 
         if (_data is { RowCount: > 0 } d)
         {
@@ -342,22 +367,23 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
             {
                 AddLeakRateSeries(model, d);
             }
+            else if (pct)
+            {
+                AddReferenceSeries(model, d);
+            }
             else
             {
                 int idx = 0;
                 foreach (var key in d.RatioKeys)
                 {
-                    // A σ-score series shares the 100/120/150 scale but is not a percentage of
-                    // the baseline — say so in the legend rather than let the two look alike.
-                    bool sigmaScore = pct && d.PctIsSigmaScore.TryGetValue(key, out var s) && s;
                     var series = new LineSeries
                     {
-                        Title = sigmaScore ? FriendlyName(d, key) + " (σ-score)" : FriendlyName(d, key),
+                        Title = FriendlyName(d, key),
                         Color = Palette[idx % Palette.Length],
                         StrokeThickness = 1.5,
                         CanTrackerInterpolatePoints = false,
                     };
-                    var values = pct ? d.Pct[key] : d.Raw[key];
+                    var values = d.Raw[key];
                     for (int i = 0; i < d.RowCount; i++)
                     {
                         double v = values[i];
@@ -377,6 +403,97 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
 
         PlotModel = model;
     }
+
+    private void ResetRatioChoices()
+    {
+        RatioChoices.Clear();
+        RatioChoices.Add(NoRatio);
+        if (_data is { } d) foreach (var key in d.RatioKeys) RatioChoices.Add(FriendlyName(d, key));
+        _selectedRatioChoice = NoRatio;
+        OnPropertyChanged(nameof(SelectedRatioChoice));
+    }
+
+    private string? SelectedKey(RatioTrendData d) =>
+        _selectedRatioChoice == NoRatio ? null
+            : d.RatioKeys.FirstOrDefault(k => FriendlyName(d, k) == _selectedRatioChoice);
+
+    /// <summary>
+    /// "% vs reference": the same lines the live chart draws (<see cref="RecordedTrendProjection"/>),
+    /// the step warm-up bands, and — for the ratio chosen in the picker — its own thresholds as
+    /// the run's config snapshot recorded them, with the other lines dimmed.
+    /// </summary>
+    private void AddReferenceSeries(PlotModel model, RatioTrendData d)
+    {
+        var trend = RecordedTrendProjection.Project(d, _defs, k => FriendlyName(d, k));
+        string? selected = SelectedKey(d);
+
+        foreach (var (startRow, endRow) in trend.WarmupRows)
+            model.Annotations.Add(new RectangleAnnotation
+            {
+                MinimumX = DateTimeAxis.ToDouble(d.Timestamps[startRow]),
+                MaximumX = DateTimeAxis.ToDouble(d.Timestamps[endRow]),
+                Fill = OxyColor.FromAColor(40, OxyColors.Gray),
+                Text = "warming up", TextColor = OxyColors.DimGray, FontSize = 10,
+                Layer = AnnotationLayer.BelowSeries,
+            });
+
+        var colorByKey = new Dictionary<string, OxyColor>();
+        foreach (var key in d.RatioKeys) colorByKey[key] = Palette[colorByKey.Count % Palette.Length];
+        foreach (var line in trend.Series)
+        {
+            var c = colorByKey[line.Spec.RatioKey];
+            if (selected is not null && line.Spec.RatioKey != selected) c = OxyColor.FromAColor(60, c);
+            var series = new LineSeries
+            {
+                Title = line.Spec.Title,
+                Color = c,
+                StrokeThickness = 1.5,
+                LineStyle = line.Spec.Dashed ? LineStyle.Dash : LineStyle.Solid,
+                CanTrackerInterpolatePoints = false,
+            };
+            for (int i = 0; i < d.RowCount; i++)
+            {
+                double v = line.Values[i];
+                if (double.IsNaN(v)) continue;
+                series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(d.Timestamps[i]), v));
+            }
+            model.Series.Add(series);
+        }
+
+        // Keep 0 and the selected ratio's thresholds on the auto-scaled axis.
+        var anchor = new ScatterSeries { MarkerType = MarkerType.None };
+        double x0 = DateTimeAxis.ToDouble(d.Timestamps[0]);
+        anchor.Points.Add(new ScatterPoint(x0, 0));
+        if (selected is not null && _defs is not null && _defs.TryGetValue(selected, out var def))
+        {
+            var lines = TrendProjection.ThresholdsFor(def, RecordedGoldenRunLevels(def));
+            foreach (var l in lines)
+            {
+                var color = l.IsAlarm ? OxyColors.Firebrick : OxyColors.DarkOrange;
+                model.Annotations.Add(new LineAnnotation
+                {
+                    Type = LineAnnotationType.Horizontal, Y = l.Value, Color = color,
+                    LineStyle = l.Kind == TrendSeriesKind.GoldenRunDeviation ? LineStyle.Dot : LineStyle.Dash,
+                    Text = l.Label, TextColor = color, FontSize = 10,
+                });
+            }
+            if (TrendProjection.RequiredRange(lines) is { } range)
+            {
+                anchor.Points.Add(new ScatterPoint(x0, range.Min));
+                anchor.Points.Add(new ScatterPoint(x0, range.Max));
+            }
+        }
+        model.Series.Add(anchor);
+    }
+
+    /// <summary>
+    /// The Golden Run levels a recorded run can still state. The engine's live levels take the
+    /// larger of the factor and the σ form, and the σ the run saw is not recorded — so a plain
+    /// ratio's lines are its factor form (a floor under what judged); a σ-score ratio's lines
+    /// are exact, since its plotted value is already scaled by σ.
+    /// </summary>
+    private static GoldenRunLevels RecordedGoldenRunLevels(RatioDefinition def) =>
+        new(def.ValueHasPedestal, 1.0, def.WarnFactor, def.AlarmFactor, def.SigmaWarn, def.SigmaAlarm);
 
     private static void AddThreshold(PlotModel model, double y, OxyColor color, string text) =>
         model.Annotations.Add(new LineAnnotation
@@ -486,9 +603,25 @@ public sealed class RatioReviewViewModel : INotifyPropertyChanged, IDisposable
         }
 
         bool pct = _mode == RatioReviewMode.PercentOfBaseline;
+        if (pct)
+        {
+            sb.Append("   ·   ").Append(_defsSource is null
+                ? "no config snapshot — judging paths guessed from the columns, no threshold lines"
+                : $"judging from {_defsSource}");
+            foreach (var line in RecordedTrendProjection.Project(d, _defs, k => FriendlyName(d, k)).Series)
+            {
+                var vals = line.Values.Where(v => !double.IsNaN(v)).ToList();
+                sb.Append("   ·   ").Append(line.Spec.Title).Append(": ");
+                sb.Append(vals.Count == 0
+                    ? "(no data)"
+                    : $"min {vals.Min():+0.0;-0.0} / max {vals.Max():+0.0;-0.0} / last {vals[vals.Count - 1]:+0.0;-0.0} %");
+            }
+            MetaText = sb.ToString();
+            return;
+        }
         foreach (var key in d.RatioKeys)
         {
-            var src = pct ? d.Pct[key] : d.Raw[key];
+            var src = d.Raw[key];
             var vals = src.Where(v => !double.IsNaN(v)).ToList();
             sb.Append("   ·   ").Append(FriendlyName(d, key)).Append(": ");
             sb.Append(vals.Count == 0

@@ -122,6 +122,71 @@ public static class TrendProjection
     }
 }
 
+/// <summary>One projected line of a recorded run.</summary>
+public sealed record RecordedTrendSeries(TrendSeriesSpec Spec, double[] Values);
+
+/// <summary>A recorded ratio CSV projected the way the live chart draws it (#106).</summary>
+public sealed record RecordedTrend(IReadOnlyList<RecordedTrendSeries> Series,
+                                   IReadOnlyList<(int StartRow, int EndRow)> WarmupRows);
+
+public static class RecordedTrendProjection
+{
+    /// <summary>
+    /// Projects a recorded run. With the run's definitions (<paramref name="defs"/>, from its
+    /// config snapshot) each ratio draws exactly what the live chart drew. Without them a ratio
+    /// that recorded a <c>_stepRise</c> column was step-judged, and draws its rise plus its
+    /// Golden Run deviation dashed — whether that path judged is unknown, so both are shown;
+    /// any other ratio draws its Golden Run deviation. A σ-score series keeps its label.
+    /// Warm-up is where a step-judged ratio's rise is empty.
+    /// </summary>
+    public static RecordedTrend Project(RatioTrendData d, IReadOnlyDictionary<string, RatioDefinition>? defs,
+                                       Func<string, string> displayName)
+    {
+        var series = new List<RecordedTrendSeries>();
+        var stepKeys = new List<string>();
+        foreach (var key in d.RatioKeys)
+        {
+            bool hasStep = d.StepRise.ContainsKey(key);
+            bool gr, step;
+            if (defs is not null && defs.TryGetValue(key, out var def))
+            {
+                gr = def.GoldenRunJudging;
+                step = def.StepJudgingActive && hasStep;
+            }
+            else { gr = true; step = hasStep; }
+            if (step) stepKeys.Add(key);
+
+            bool sigma = d.PctIsSigmaScore.TryGetValue(key, out var sg) && sg;
+            foreach (var spec in TrendProjection.SeriesFor(key, displayName(key), gr, step))
+            {
+                var values = new double[d.RowCount];
+                double[]? pct = d.Pct.TryGetValue(key, out var p) ? p : null;
+                double[]? rise = d.StepRise.TryGetValue(key, out var r) ? r : null;
+                for (int i = 0; i < d.RowCount; i++)
+                    values[i] = TrendProjection.Value(spec.Kind, pct?[i] ?? double.NaN, rise?[i] ?? double.NaN);
+                var s = sigma && spec.Kind == TrendSeriesKind.GoldenRunDeviation
+                    ? spec with { Title = spec.Title + " (σ-score)" }
+                    : spec;
+                series.Add(new RecordedTrendSeries(s, values));
+            }
+        }
+
+        var warm = new List<(int, int)>();
+        if (stepKeys.Count > 0)
+        {
+            var xs = new double[d.RowCount];
+            var warming = new bool[d.RowCount];
+            for (int i = 0; i < d.RowCount; i++)
+            {
+                xs[i] = i;
+                foreach (var k in stepKeys) if (double.IsNaN(d.StepRise[k][i])) { warming[i] = true; break; }
+            }
+            foreach (var (a, b) in WarmupBands.From(xs, warming)) warm.Add(((int)a, (int)b));
+        }
+        return new RecordedTrend(series, warm);
+    }
+}
+
 /// <summary>
 /// The step warm-up intervals on a trend chart's time axis (#105): one band per stretch in
 /// which a step-judged ratio has no rolling baseline yet, so an empty stretch reads as expected

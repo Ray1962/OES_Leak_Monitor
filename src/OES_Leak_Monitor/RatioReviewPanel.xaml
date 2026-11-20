@@ -9,6 +9,7 @@
              Background="#F4F6FA">
 
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Padding" Value="10,4"/>
             <Setter Property="Margin"  Value="0,0,4,0"/>
@@ -75,9 +76,9 @@
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <Button Content="% of baseline" Style="{StaticResource ModeButton}"
+                        <Button Content="% vs reference" Style="{StaticResource ModeButton}"
                                 Command="{Binding ShowPercentCommand}"
-                                ToolTip="Plot each ratio as a percentage of its Golden Run baseline."/>
+                                ToolTip="Plot what was judged: a step-judged ratio's rise against its rolling baseline, a Golden-Run-judged ratio's deviation from its Golden Run (dashed when both). 0 is the reference."/>
                     </Border>
                     <Border>
                         <Border.Style>
@@ -107,6 +108,13 @@
                                 Command="{Binding ShowLeakRateCommand}"
                                 ToolTip="Plot the calibrated leak-rate estimate Q̂ (mbar·L/s) with its ±1σ band."/>
                     </Border>
+
+                    <TextBlock Text="Thresholds:" VerticalAlignment="Center" Margin="8,0,4,0" Foreground="#444"
+                               Visibility="{Binding IsPercentMode, Converter={StaticResource BoolToVis}}"/>
+                    <ComboBox ItemsSource="{Binding RatioChoices}" SelectedItem="{Binding SelectedRatioChoice}"
+                              MinWidth="150" VerticalAlignment="Center" Margin="0,0,4,0"
+                              Visibility="{Binding IsPercentMode, Converter={StaticResource BoolToVis}}"
+                              ToolTip="Draw this ratio's Warn / Alarm lines as the run's config snapshot recorded them, and dim the other lines."/>
 
                     <Rectangle Width="1" Margin="6,2" Fill="#CCC"/>
                     <Button Content="Zoom All" Style="{StaticResource ToolbarButton}"
