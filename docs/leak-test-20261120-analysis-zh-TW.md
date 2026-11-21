@@ -4,6 +4,7 @@
 - 資料：
   - `C:\DualOES\202611\20`
   - 診斷包 `C:\DualOES\202611\diag_DESKTOP-5UJUQI6_20261120_153127.zip`，內含 settings、log、`_config_*.json`
+- DV 是洩漏閥的數位位置，各點位的流量見[洩漏閥點位與漏氣流量](dosing-valve-reference-zh-TW.md)。
 - 分析範圍：只看有 `.notes.txt` 的 4 段錄檔（14:32–14:52）。14:52 之後那段 42 分鐘的錄檔沒有 note，不在本次範圍內。
 
 ## 結論
