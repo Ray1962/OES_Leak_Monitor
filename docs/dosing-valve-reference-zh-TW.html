@@ -117,6 +117,7 @@ figcaption{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.6;}
 <a class="l2" href="#本-repo-測試用到的點位">本 repo 測試用到的點位</a>
 <a class="l2" href="#內插公式">內插公式</a>
 <a class="l2" href="#壓差修正">壓差修正</a>
+<a class="l3" href="#範例10-l-腔體3-torr">範例：10 L 腔體、3 Torr</a>
 <a class="l2" href="#泵開著時要看漏氣佔總流量的比例">泵開著時：要看漏氣佔總流量的比例</a>
 <a class="l2" href="#泵隔離時升壓率-ror">泵隔離時：升壓率 ROR</a>
 </nav>
@@ -181,7 +182,19 @@ figcaption{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.6;}
 <tr><td>5 Torr</td><td>755 Torr = 1.0066 bar</td><td>≈ 1.007</td></tr>
 <tr><td>21 Torr（11/19 測試）</td><td>739 Torr = 0.9853 bar</td><td>≈ 0.985</td></tr>
 </tbody></table></div>
-<p>這裡用的是簡化的線性修正，差異都在 ±1.5% 以內，直接用 Q_graph 就可以。</p>
+<p>這裡用的是簡化的線性修正，差異都在 ±1.5% 以內，直接用 Q_graph 就可以。而且在這麼大的壓力比下，閥口流量本來就幾乎不隨下游壓力改變。</p>
+<h3 id="範例10-l-腔體3-torr">範例：10 L 腔體、3 Torr</h3>
+<p>壓差 = 760 − 3 = 757 Torr = 1.0093 bar，修正係數約 ×1.009。以 sccm 計的漏氣量<strong>與腔體體積無關</strong>，體積只影響泵隔離時的 ROR（= 750.062 × Q / 10 L）。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>DV</th><th>曲線 Q（mbar·L/s）</th><th>3 Torr 修正後 Q</th><th>漏氣量（sccm）</th><th>泵隔離時 ROR</th></tr></thead>
+<tbody>
+<tr><td>100</td><td>3.0×10⁻⁴</td><td>3.03×10⁻⁴</td><td>≈ 0.018</td><td>≈ 0.023 mTorr/s</td></tr>
+<tr><td>200</td><td>1.0×10⁻²</td><td>1.01×10⁻²</td><td>≈ 0.60</td><td>≈ 0.76 mTorr/s</td></tr>
+<tr><td>300</td><td>0.20</td><td>0.202</td><td>≈ 12</td><td>≈ 15 mTorr/s</td></tr>
+<tr><td>400</td><td>≈ 1.81（內插）</td><td>≈ 1.83</td><td>≈ 108</td><td>≈ 137 mTorr/s</td></tr>
+<tr><td>500</td><td>10</td><td>10.1</td><td>≈ 600</td><td>≈ 0.76 Torr/s</td></tr>
+</tbody></table></div>
+<p>只有 DV=300 是曲線上的標示點，其他是讀圖值，DV=400 是內插值，請當作量級看。泵開著時要看漏氣佔總進氣的比例：例如總進氣 1,550 sccm 時，DV=300 約佔 0.8%，DV=500 約佔 28%。</p>
 <h2 id="泵開著時要看漏氣佔總流量的比例">泵開著時：要看漏氣佔總流量的比例</h2>
 <p>漏氣測試時泵一直在抽，所以腔體壓力不會一直上升。OES 看到的是空氣在進氣中的<strong>比例</strong>，大約是 Q_leak / (Q_leak + 製程氣體總流量)。例如 DV=300 約 12 sccm。製程氣流量越大，同樣的 DV 被稀釋得越多。例如生產配方約 30 slm 時，DV=300 只佔約 0.04%。</p>
 <h2 id="泵隔離時升壓率-ror">泵隔離時：升壓率 ROR</h2>
