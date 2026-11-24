@@ -9,6 +9,9 @@
 
 > ⚠️ 全程**不按** `Save as active baseline`。
 
+> 畫面截圖是在開發機上拍的:比值清單不是 §5.2 那一組,分類器也沒有開,所以 **State 欄沒有 class、
+> 結果面板的比值名稱跟本文不同**。截圖只用來看按鈕和欄位的位置,數字以本文的表為準。
+
 ---
 
 ## 0. 開始前確認(Engineer 已完成)
@@ -26,6 +29,8 @@
 1. 進 **Baseline Builder** 分頁。
 2. **From** 設成 `2026-11-23`,**To** 設成 `2026-11-23` → 按 **Refresh**。
    → 狀態列:`{n} recording(s) in …`
+
+![圖 1　剛進 Baseline Builder 分頁:左上是 From / to 日期與 Refresh,左邊是錄檔清單(Use 勾選欄、Window、State),右邊是曲線圖,最下面是 Golden Run name、Build 與 Save as active baseline(Guest 時旁邊有橘字,不能存)。](images/remeasure-1-list.png)
 3. 在 **Use** 欄勾選下列 8 筆(其他不勾):
 
 | 錄檔 | 預期 class | 選取視窗(s) |
@@ -46,13 +51,17 @@
    - `P1_Ar · 約 80 frames, 約 89 s`
    - `P2_NoAr · 約 40 frames, 約 43 s`
    - 若出現 `Unknown ·`,或 class 跟上表不同:**停**,通知 Engineer(分類器設定有問題)。
+   - 若 State 只有 `82 frames, 89.2 s`、**前面沒有 class**:分類器沒開。**停**,通知 Engineer。
+   - **Window** 欄此時是整檔範圍(例如 `0–89.2 s`),下一步要改掉。
+
+![圖 2　Scan ticked 完成:8 筆的 State 欄顯示幀數與秒數(這張截圖的分類器沒開,所以沒有 class),Window 欄是整檔範圍;狀態列 `Scanned 8 of 8 recording(s).`。右圖是點選那一筆的曲線,最後約 10 s 往下掉的是碳源關掉的過渡段,視窗不能包含它。](images/remeasure-2-scanned.png)
 
 ### A3. 選視窗
 
 5. 逐筆點選 → 在 **Baseline window:** 兩格輸入上表的秒數(按 Tab 離開欄位才生效)。
-   → 該列 **Window** 欄出現數字。
+   → 該列 **Window** 欄變成輸入的範圍,圖上的藍色底色跟著移動。
    - 不要用 `Whole file`:每段結尾都有幾秒是碳源已經關掉的過渡段。
-6. 確認 8 筆的 **Window** 欄都有數字。
+6. 確認 8 筆的 **Window** 欄**都不是**整檔範圍(`0–` 開頭)。
 
 ### A4. Build(只算,不存)
 
@@ -89,15 +98,25 @@
     - 若比值 1、2 顯示幀數不足(少於 60 幀):把視窗起點改成 5.0 s 再 Build。
     - 單筆短段只有約 25 幀,不夠 60 幀,比值 6–9 會被拒:正常。
 
+![圖 3　A6 的畫面:只勾 `15:55:36` 那一筆,視窗 6.7–74.9 s(藍色底色),Build 後狀態列 `Built 3 baseline(s) from 1 recording(s).`。下方結果面板依序是 `Baselines (n):`(每條比值的 mean ± σ、mean/σ、幀數;這一筆視窗內有 62 幀)、`<< only just clears the floor` 標記、`No baseline for:`、`How steady each chosen window is`。結果面板可捲動,複製時要全選。](images/remeasure-3-window-build.png)
+
+**如果結果面板第一行是 `Refused: Every selected recording was set aside by the consistency check.`**:
+兩種製程被混在一起比對了,幾乎都是分類器沒開。**停**,通知 Engineer。
+
+![圖 4　分類器沒開時勾 8 筆 Build 的結果:8 筆都被列在 `Set aside by the consistency check`(清單中變成橘底),沒有任何基準。看到這個畫面就停。](images/remeasure-4-refused-no-classifier.png)
+
 ---
 
 ## B. Replay(Engineer,選用)
 
 > ⚠️ 只在**機台不跑製程、光譜儀已斷線**時做。有接光譜儀時 Play 按不下去。
 
-1. 斷開光譜儀,App 進入測試模式。
-2. 進 **Replay** 分頁 → **Choose CSV…** → 選 `C:\DualOES\202611\23\P_OES1_1123155536.csv`。
+1. 斷開光譜儀 → **Monitor** 分頁按 **Connect** → **Start**,App 以測試模式擷取。
+2. 進 **Replay** 分頁(要 Engineer 登入) → **Choose CSV…** → 選 `C:\DualOES\202611\23\P_OES1_1123155536.csv`。
 3. 速度選 `20×` → **Play**,等到狀態變成 Finished。
+   - `Raise leak alarms during replay` 不要改。
+
+![圖 5　Replay 分頁:最上面 Choose CSV…,下一列是狀態(`NO FILE`)、Play / Pause / Restart / Stop、Speed;灰字提醒要先在 Monitor 分頁 Connect → Start(測試模式)。](images/remeasure-5-replay.png)
 4. 依序再播 `P_OES1_1123155443.csv`(短段)。
    → 今天的日資料夾會多出 `SIMP_OES1_*.csv`、`SIMP_Ratio_*.csv`。
 5. 用 **Ratio Review** 開 `SIMP_Ratio_*.csv`。
