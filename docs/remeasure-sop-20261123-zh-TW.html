@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上機前比值重量 SOP(11/23 兩段製程)</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#0-開始前確認engineer-已完成">0. 開始前確認(Engineer 已完成)</a>
+<a class="l2" href="#a-baseline-builder">A. Baseline Builder</a>
+<a class="l3" href="#a1-列出錄檔">A1. 列出錄檔</a>
+<a class="l3" href="#a2-掃描">A2. 掃描</a>
+<a class="l3" href="#a3-選視窗">A3. 選視窗</a>
+<a class="l3" href="#a4-build只算不存">A4. Build(只算,不存)</a>
+<a class="l3" href="#a5-讀結果">A5. 讀結果</a>
+<a class="l3" href="#a6-單筆再量一次只量比值-12">A6. 單筆再量一次(只量比值 1、2)</a>
+<a class="l2" href="#b-replayengineer選用">B. Replay(Engineer,選用)</a>
+<a class="l2" href="#c-紀錄">C. 紀錄</a>
+<a class="l2" href="#d-判定">D. 判定</a>
+</nav>
+<main>
+<h1 id="上機前比值重量-sop1123-兩段製程">上機前比值重量 SOP(11/23 兩段製程)</h1>
+<p>目的:用 App 本身的譜線抽取,重量 <code>production-20261123-leak-strategy-zh-TW.md</code> §4 的比值,確認與離線數字一致。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>方法</th><th>誰</th><th>何時</th></tr></thead>
+<tbody>
+<tr><td><strong>A. Baseline Builder</strong>(主要)</td><td>Operator 可做</td><td>隨時;不影響量測</td></tr>
+<tr><td><strong>B. Replay</strong>(選用)</td><td>Engineer</td><td>只在<strong>不量測時</strong>(要斷開光譜儀)</td></tr>
+</tbody></table></div>
+<blockquote><p>⚠️ 全程<strong>不按</strong> <code>Save as active baseline</code>。</p></blockquote>
+<hr>
+<h2 id="0-開始前確認engineer-已完成">0. 開始前確認(Engineer 已完成)</h2>
+<ul>
+<li>[ ] Ratio Setup 已有策略文件 §5.2 的 9 組比值
+</li>
+<li>[ ] Process Classifier 已啟用:<code>Ar 750.4 / O 777.2 &gt; 0.5 → P1_Ar</code>,其餘 <code>P2_NoAr</code>
+</li>
+<li>[ ] 做完本 SOP 之前,不改 Ratio Setup、Wavelength Calibration、Logger 觸發門檻
+</li>
+</ul>
+<hr>
+<h2 id="a-baseline-builder">A. Baseline Builder</h2>
+<h3 id="a1-列出錄檔">A1. 列出錄檔</h3>
+<ol>
+<li>進 <strong>Baseline Builder</strong> 分頁。
+</li>
+<li><strong>From</strong> 設成 <code>2026-11-23</code>,<strong>To</strong> 設成 <code>2026-11-23</code> → 按 <strong>Refresh</strong>。 → 狀態列:<code>{n} recording(s) in …</code>
+</li>
+<li>在 <strong>Use</strong> 欄勾選下列 8 筆(其他不勾):
+</li>
+</ol>
+<div class="tablewrap"><table>
+<thead><tr><th>錄檔</th><th>預期 class</th><th>選取視窗(s)</th></tr></thead>
+<tbody>
+<tr><td><code>P_OES1_1123154507</code></td><td><code>P2_NoAr</code></td><td>5.5 – 33.0</td></tr>
+<tr><td><code>P_OES1_1123154602</code></td><td><code>P1_Ar</code></td><td>5.6 – 74.9</td></tr>
+<tr><td><code>P_OES1_1123154822</code></td><td><code>P2_NoAr</code></td><td>5.5 – 31.9</td></tr>
+<tr><td><code>P_OES1_1123154917</code></td><td><code>P1_Ar</code></td><td>5.5 – 74.8</td></tr>
+<tr><td><code>P_OES1_1123155141</code></td><td><code>P2_NoAr</code></td><td>5.6 – 31.9</td></tr>
+<tr><td><code>P_OES1_1123155236</code></td><td><code>P1_Ar</code></td><td>5.6 – 74.8</td></tr>
+<tr><td><code>P_OES1_1123155443</code></td><td><code>P2_NoAr</code></td><td>6.3 – 32.6</td></tr>
+<tr><td><code>P_OES1_1123155536</code></td><td><code>P1_Ar</code></td><td>6.7 – 74.9</td></tr>
+</tbody></table></div>
+<h3 id="a2-掃描">A2. 掃描</h3>
+<ol>
+<li>按 <strong>Scan ticked</strong>,等按鈕恢復可按。 → <strong>State</strong> 欄,每筆應為:
+<ul>
+<li><code>P1_Ar · 約 80 frames, 約 89 s</code></li>
+<li><code>P2_NoAr · 約 40 frames, 約 43 s</code></li>
+<li>若出現 <code>Unknown ·</code>,或 class 跟上表不同:<strong>停</strong>,通知 Engineer(分類器設定有問題)。</li>
+</ul>
+</li>
+</ol>
+<h3 id="a3-選視窗">A3. 選視窗</h3>
+<ol>
+<li>逐筆點選 → 在 <strong>Baseline window:</strong> 兩格輸入上表的秒數(按 Tab 離開欄位才生效)。 → 該列 <strong>Window</strong> 欄出現數字。
+<ul>
+<li>不要用 <code>Whole file</code>:每段結尾都有幾秒是碳源已經關掉的過渡段。</li>
+</ul>
+</li>
+<li>確認 8 筆的 <strong>Window</strong> 欄都有數字。
+</li>
+</ol>
+<h3 id="a4-build只算不存">A4. Build(只算,不存)</h3>
+<ol>
+<li><strong>Golden Run name</strong> 填 <code>remeasure-20261123</code> → 按 <strong>Build</strong>。 → 畫面最下方的結果面板出現文字。
+</li>
+</ol>
+<h3 id="a5-讀結果">A5. 讀結果</h3>
+<ol>
+<li>看 <code>Baselines (n):</code> 與 <code>No baseline for:</code>,對照下表:
+</li>
+</ol>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>比值</th><th>class</th><th>預期 mean</th><th>預期結果</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>N₂ 337.1 / Ar 750.4</td><td>P1_Ar</td><td>約 0.0060</td><td><strong>預期被拒</strong>(<code>mean/σ</code> 約 7.7 &lt; 10)</td></tr>
+<tr><td>2</td><td>CN 388.3 / Ar 750.4</td><td>P1_Ar</td><td>約 0.021</td><td><strong>預期被拒或剛好過</strong>(約 9.6)</td></tr>
+<tr><td>3</td><td>NO 237 / Ar 750.4</td><td>P1_Ar</td><td>約 0.0093</td><td>預期被拒(約 3.7)</td></tr>
+<tr><td>4</td><td>N₂ 380.5 / Ar 750.4</td><td>P1_Ar</td><td>約 0.0042</td><td>剛好過(約 10.4),行尾 <code>&lt;&lt; only just clears the floor</code></td></tr>
+<tr><td>5</td><td>O 777.2 / Ar 750.4</td><td>P1_Ar</td><td>約 0.83</td><td>通過(約 100)</td></tr>
+<tr><td>6</td><td>N₂ 337.1 / O 777.2</td><td>P2_NoAr</td><td>約 0.0016</td><td>預期被拒(約 7.6)</td></tr>
+<tr><td>7</td><td>CN 388.3 / O 777.2</td><td>P2_NoAr</td><td>約 0.0024</td><td>預期被拒(約 8.7)</td></tr>
+<tr><td>8</td><td>NO 237 / O 777.2</td><td>P2_NoAr</td><td>約 0.0040</td><td>預期被拒(約 7.4)</td></tr>
+<tr><td>9</td><td>O 844.6 / O 777.2</td><td>P2_NoAr</td><td>約 0.17</td><td>通過(約 140)</td></tr>
+</tbody></table></div>
+<ul>
+<li>第 4 組若設成 N₂ 357.7(只用右側窗):預期 mean 約 0.015,預期被拒(約 5.9)。
+</li>
+<li>「預期被拒」是<strong>正常結果</strong>:4 次 run 的含氮指標一路在降,合併後的 σ 被拉大。
+</li>
+<li>被拒的比值,看 <code>How far the recordings disagree with each other</code> 那一段 → 應顯示 run 間差距是檔內散度的數倍。
+</li>
+</ul>
+<ol>
+<li>看 <code>How steady each chosen window is</code>: → 每筆 <code>σ/mean</code> 應在 10 % 以內。超過 → 視窗可能沒對準,回 A3 重設。
+</li>
+</ol>
+<h3 id="a6-單筆再量一次只量比值-12">A6. 單筆再量一次(只量比值 1、2)</h3>
+<ol>
+<li>取消勾選其他錄檔,只留 <code>P_OES1_1123155536</code>(最後一次長段) → <strong>Build</strong>。 → 預期比值 1 的 <code>mean/σ</code> 約 14,比值 2 約 26,兩者都通過。
+<ul>
+<li>若比值 1、2 顯示幀數不足(少於 60 幀):把視窗起點改成 5.0 s 再 Build。</li>
+<li>單筆短段只有約 25 幀,不夠 60 幀,比值 6–9 會被拒:正常。</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="b-replayengineer選用">B. Replay(Engineer,選用)</h2>
+<blockquote><p>⚠️ 只在<strong>機台不跑製程、光譜儀已斷線</strong>時做。有接光譜儀時 Play 按不下去。</p></blockquote>
+<ol>
+<li>斷開光譜儀,App 進入測試模式。
+</li>
+<li>進 <strong>Replay</strong> 分頁 → <strong>Choose CSV…</strong> → 選 <code>C:\DualOES\202611\23\P_OES1_1123155536.csv</code>。
+</li>
+<li>速度選 <code>20×</code> → <strong>Play</strong>,等到狀態變成 Finished。
+</li>
+<li>依序再播 <code>P_OES1_1123155443.csv</code>(短段)。 → 今天的日資料夾會多出 <code>SIMP_OES1_*.csv</code>、<code>SIMP_Ratio_*.csv</code>。
+</li>
+<li>用 <strong>Ratio Review</strong> 開 <code>SIMP_Ratio_*.csv</code>。 → 各比值的原始值應接近 A5 表的「預期 mean」;沒有 Golden Run 的比值不會有 % 值。
+</li>
+<li>收尾:
+<ul>
+<li>刪除今天日資料夾裡的 <code>SIMP_*</code> 檔。</li>
+<li><code>C:\DualOES\_batches.csv</code> 會多出 Replay 的批次列,把它們刪掉。</li>
+<li>重新連上光譜儀,確認 Monitor 分頁回到即時量測。</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="c-紀錄">C. 紀錄</h2>
+<ol>
+<li>A5、A6 每次 Build 完,把結果面板全文複製出來,存成: <code>C:\DualOES\202611\23\_remeasure_20261123_{今天 yyyyMMdd}.txt</code> (檔名要用底線開頭,才不會被列進錄檔清單)
+</li>
+<li>在同一個檔案最後補上:
+<ul>
+<li>做的人、日期</li>
+<li>A2 每筆的 class</li>
+<li>與 A5 表不同的地方</li>
+</ul>
+</li>
+<li>交給 Engineer。
+</li>
+</ol>
+<hr>
+<h2 id="d-判定">D. 判定</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>結果</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>class 全對,各比值的 <code>mean</code> 與預期差 ≤ 30 %,被拒和通過的情形與 A5 表一致</td><td><strong>一致</strong>,可以上機</td></tr>
+<tr><td><code>mean</code> 與預期差 &gt; 30 %</td><td>通知 Engineer:App 的視窗設定與策略文件不同</td></tr>
+<tr><td>比值 1 或 2 在 A6 單筆也被拒</td><td>通知 Engineer:主判比值在這台機的 App 上不穩</td></tr>
+<tr><td>合併後比值 1、2 <strong>反而通過</strong></td><td>通知 Engineer:比預期穩定,門檻可以重新評估</td></tr>
+</tbody></table></div>
+</main>
+</div>
+</body>
+</html>

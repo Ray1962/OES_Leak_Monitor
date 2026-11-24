@@ -293,9 +293,16 @@ td code{white-space:nowrap;}
 <ol>
 <li>先<strong>不要</strong>現在就抓一個長期使用的 GR。含氮指標還在下降(§4.3)。用現在的 GR,之後讀值會一路低於基準, 要漏到把這段差距補回來才會報警,靈敏度會打折。
 </li>
-<li>腔體穩定前,先用 <strong>Baseline Builder</strong> 從最近的錄檔建一個臨時 GR(<code>baseline-builder-sop-zh-TW.md</code>), 兩類各一個。好讓 Alarm 路徑有東西可比,也讓 % 顯示有意義。
+<li><strong>腔體穩定前,用單筆最新的長段 run 建臨時 GR</strong>(Baseline Builder,流程 A 單檔, <code>baseline-builder-sop-zh-TW.md</code> §7)。好讓 Alarm 路徑有東西可比,也讓 % 顯示有意義。
+<ul>
+<li><strong>不能跨檔合併。</strong> Baseline Builder 會拒收 <code>mean/σ</code> 低於 10 的比值。4 次 run 合併後, N₂ 337 / Ar 750 只有 7.7、CN 388 / Ar 750 只有 9.6,兩個 Alarm 比值都會被拒; 原因是含氮指標在 run 之間一路下降,把合併後的 σ 拉大了。 單筆最新 run(<code>P_OES1_1123155536</code>)則是約 14 與 26,都能通過。</li>
+<li><strong>視窗</strong>:點火後約 5 s 到結束前約 14 s(避開最後碳源關掉的過渡段)。 一筆長段約 63 幀,剛好過 60 幀的門檻,不要再縮短。</li>
+<li><strong>只建 <code>P1_Ar</code>。</strong> 短段一筆只有約 25 幀,不夠 60 幀;<code>P2_NoAr</code> 的比值全是 TrendOnly, 沒有基準不影響警報(結果面板列在 <code>No baseline for:</code> 是正常的)。</li>
+<li><strong>單筆 GR 的 σ 只有幀間雜訊,比 run 間差異窄。</strong> 能擋住 run 間差異造成誤報的是 §5.2 的倍率門檻 1.20 / 1.30,<strong>不要因為 σ 很小就把倍率調緊</strong>。</li>
+<li>量測步驟與預期結果見 <code>remeasure-sop-20261123-zh-TW.md</code> A6。</li>
+</ul>
 </li>
-<li>用 <strong>Batch Trend</strong> 追 NO / Ar、N₂ / Ar 的批次值。<strong>連續 5 批以上不再下降(批次間差 &lt; 5 %)</strong>, 再用最新幾批<strong>重建 GR</strong>,並依實際 run 間 CV 重定 §5.2 的門檻。
+<li>用 <strong>Batch Trend</strong> 追 NO / Ar、N₂ / Ar 的批次值。<strong>連續 5 批以上不再下降(批次間差 &lt; 5 %)</strong>, 就可以改用跨檔合併<strong>重建 GR</strong>(合併後兩個 Alarm 比值都要過 <code>mean/σ</code> 10), 並依實際 run 間 CV 重定 §5.2 的門檻。在那之前,每週用當時最新的單筆 run 重建一次臨時 GR。
 </li>
 <li>之後每次 PM 或破真空回機,都重複 2–3。
 </li>
@@ -341,7 +348,7 @@ td code{white-space:nowrap;}
 </li>
 <li><strong>沒有改任何設定檔。</strong> 本機的 <code>settings.json</code> 是 SECS 驗收用的設定。
 </li>
-<li><strong>離線抽取 ≠ 引擎抽取。</strong> 上機前要用引擎的抽取器(Baseline Builder 或 Replay)重量一次。
+<li><strong>離線抽取 ≠ 引擎抽取。</strong> 上機前要用引擎的抽取器(Baseline Builder 或 Replay)重量一次。 操作步驟:<a href="remeasure-sop-20261123-zh-TW.md"><code>remeasure-sop-20261123-zh-TW.md</code></a>。
 </li>
 <li>只用了 15:45:07 以後的 8 筆。更早的 15:15–15:42 錄檔沒有納入。
 </li>
