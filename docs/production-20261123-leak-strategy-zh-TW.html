@@ -116,6 +116,7 @@ td code{white-space:nowrap;}
 <a class="l3" href="#51-製程分類processclassifier">5.1 製程分類(ProcessClassifier)</a>
 <a class="l3" href="#52-ratio-組">5.2 Ratio 組</a>
 <a class="l3" href="#53-step-判定滾動基準的全域參數">5.3 Step 判定(滾動基準)的全域參數</a>
+<a class="l3" href="#54-app-實測修正2026-11-24">5.4 App 實測修正(2026-11-24)</a>
 <a class="l2" href="#6-判定策略golden-run-為主step-為輔">6. 判定策略:Golden Run 為主,step 為輔</a>
 <a class="l3" href="#61-為什麼不能只靠-step-判定">6.1 為什麼不能只靠 step 判定</a>
 <a class="l3" href="#62-golden-run-怎麼抓">6.2 Golden Run 怎麼抓</a>
@@ -278,6 +279,16 @@ td code{white-space:nowrap;}
 <tr><td><code>StepWarnRise</code> / <code>StepAlarmRise</code></td><td>0.10 / 0.15</td><td>維持</td><td>1、2 的段內 3σ_EMA 是 9.0 % 與 6.5 %,0.10 剛好在雜訊外</td></tr>
 </tbody></table></div>
 <p>這三個是<strong>所有 Ratio 共用</strong>的全域值。</p>
+<h3 id="54-app-實測修正2026-11-24">5.4 App 實測修正(2026-11-24)</h3>
+<p>用上表設定在 App 的 Baseline Builder 實際跑過(<code>remeasure-sop-20261123-zh-TW.md</code>),有三組在引擎的 SNR 門檻 (<code>MinSnr</code> 5)下拿不到值,與 §4 的離線估計不同:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>比值</th><th>App 實測</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>4</td><td>N₂ 380.5 / Ar 750.4</td><td>8 筆合併只有 18 幀、單筆只有 9 幀過 SNR 門檻</td><td>實際上會常駐 LowSignal</td></tr>
+<tr><td>6</td><td>N₂ 337.1 / O 777.2</td><td>沒有任何一幀過 SNR 門檻</td><td>實際上會常駐 LowSignal,趨勢記錄不到</td></tr>
+<tr><td>7</td><td>CN 388.3 / O 777.2</td><td>同上</td><td>同上</td></tr>
+</tbody></table></div>
+<p>兩個 Alarm 比值(1、2)與 Guard(5、9)不受影響。製程 2 實際可用的含氮趨勢只剩 NO 237 / O 777(合併 mean/σ 18.4)。 這三組要不要保留、換線或降低 <code>MinSnr</code>,等 §8 的 DV 加量再決定。</p>
 <hr>
 <h2 id="6-判定策略golden-run-為主step-為輔">6. 判定策略:Golden Run 為主,step 為輔</h2>
 <h3 id="61-為什麼不能只靠-step-判定">6.1 為什麼不能只靠 step 判定</h3>
@@ -295,7 +306,7 @@ td code{white-space:nowrap;}
 </li>
 <li><strong>腔體穩定前,用單筆最新的長段 run 建臨時 GR</strong>(Baseline Builder,流程 A 單檔, <code>baseline-builder-sop-zh-TW.md</code> §7)。好讓 Alarm 路徑有東西可比,也讓 % 顯示有意義。
 <ul>
-<li><strong>不能跨檔合併。</strong> Baseline Builder 會拒收 <code>mean/σ</code> 低於 10 的比值。4 次 run 合併後, N₂ 337 / Ar 750 只有 7.7、CN 388 / Ar 750 只有 9.6,兩個 Alarm 比值都會被拒; 原因是含氮指標在 run 之間一路下降,把合併後的 σ 拉大了。 單筆最新 run(<code>P_OES1_1123155536</code>)則是約 14 與 26,都能通過。</li>
+<li><strong>不能跨檔合併。</strong> Baseline Builder 會拒收 <code>mean/σ</code> 低於 10 的比值。App 實測(2026-11-24): 4 次長段合併時,一致性檢查先擱置了 2 筆(含最新的 <code>P_OES1_1123155536</code>),剩下 2 筆裡 N₂ 337 / Ar 750 仍然被拒(0.0063 ± 0.00069),CN 388 / Ar 750 只以 14.3 勉強通過。 原因是含氮指標在 run 之間一路下降,把合併後的 σ 拉大了。 單筆最新 run 則是 N₂ 337 / Ar 750 <strong>18.1</strong>、CN 388 / Ar 750 <strong>27.2</strong>(各 62 幀),都能通過。</li>
 <li><strong>視窗</strong>:點火後約 5 s 到結束前約 14 s(避開最後碳源關掉的過渡段)。 一筆長段約 63 幀,剛好過 60 幀的門檻,不要再縮短。</li>
 <li><strong>只建 <code>P1_Ar</code>。</strong> 短段一筆只有約 25 幀,不夠 60 幀;<code>P2_NoAr</code> 的比值全是 TrendOnly, 沒有基準不影響警報(結果面板列在 <code>No baseline for:</code> 是正常的)。</li>
 <li><strong>單筆 GR 的 σ 只有幀間雜訊,比 run 間差異窄。</strong> 能擋住 run 間差異造成誤報的是 §5.2 的倍率門檻 1.20 / 1.30,<strong>不要因為 σ 很小就把倍率調緊</strong>。</li>
