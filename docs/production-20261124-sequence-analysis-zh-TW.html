@@ -139,6 +139,7 @@ td code{white-space:nowrap;}
 <tr><td>同一個 diag 包的系統日誌、<code>settings.json</code>、SECS/EAP 日誌</td><td>11/18–11/24</td><td>工具設定與連線狀態(§7)</td></tr>
 </tbody></table></div>
 <p>機台與 11/23 相同(<code>production-20261123-leak-strategy-zh-TW.md</code>)。</p>
+<blockquote><p><strong>2026-11-25 更正:客戶的氣體清單不適用於本文的資料。</strong> 客戶先前提供的「SiH₄、C₂H₂、N₂O」屬於另一台生產機台,11/23 與 11/24 的錄檔<strong>都不是</strong>那台機台的資料。 這台機台實際通入哪些氣體,<strong>目前不明</strong>,只能以光譜看到的為準 (Ar、He、大量 O、碳、Si 與 H;D 段有很亮的 N₂)。本文的光譜與比值分析不受影響。</p></blockquote>
 <blockquote><p><strong>結論</strong></p>
 <ol>
 <li>11/23 看到的「含氮指標一次比一次低」<strong>不是腔體還沒穩定</strong>,是製程序列本身的規律。 每批開頭的無 Ar 沉積段帶進氮和矽,後面的 Ar step 一步一步把它清掉。 NO / Ar 每一步大約乘上 0.71–0.81,9 步之後只剩 1/8。
@@ -173,7 +174,7 @@ td code{white-space:nowrap;}
 <tr><td><strong>E</strong> 無 Ar 短沉積</td><td>約 22 s</td><td>無</td><td>Hα / O 0.148–0.172、Si / O 0.050–0.101、O 844 / O 777 0.32</td><td>只有 04:05–04:26,連續 14 次</td></tr>
 </tbody></table></div>
 <p>另外引擎的讀值裡,11:39–11:45 有 3 個約 33 s 的 Ar step(下稱 <strong>S</strong>),那段時間沒有錄檔,看不到光譜。</p>
-<p>B step 有 He,<strong>客戶的氣體清單沒有列 He</strong>(Ar 也沒列,見 11/23 §2)。 PlasmaSpectrumHistory 報告 <code>P_OES1_1124003115</code> 也判 Helium「確認存在」(83 幀裡 82 幀)。</p>
+<p>B step 有 He。(客戶先前的氣體清單是另一台機台的,這台的氣體不明,見文首更正。) PlasmaSpectrumHistory 報告 <code>P_OES1_1124003115</code> 也判 Helium「確認存在」(83 幀裡 82 幀)。</p>
 <h3 id="12-批次的組成依引擎讀值--前面跑過完整的-d">1.2 批次的組成(依引擎讀值,<code>*</code> = 前面跑過完整的 D)</h3>
 <p>序列 = 相鄰 Ar step 間隔超過 240 s 就切開(與 <code>Batch.BatchGapSeconds</code> 相同)。</p>
 <div class="tablewrap"><table>
@@ -377,7 +378,7 @@ td code{white-space:nowrap;}
 <hr>
 <h2 id="9-回問客戶加在-1123-7-之後">9. 回問客戶(加在 11/23 §7 之後)</h2>
 <ol>
-<li><strong>B step 有 He</strong>(He 667.8 很明顯),清單沒有列。流量多少?
+<li><strong>B step 有 He</strong>(He 667.8 很明顯)。流量多少?
 </li>
 <li><strong>D 段的氣體</strong>:N₂ 很亮,是 N₂O 還是 N₂?D 跑多久是固定的嗎?02:10 那一批的 D 只亮了 4 s,是中斷嗎?
 </li>
@@ -396,7 +397,7 @@ td code{white-space:nowrap;}
 </li>
 <li><code>…000236</code>(a 段,無 Ar):Argon 判「可能存在」(34 筆中 21 筆偵測到),但 Ar 750 只有約 29 counts(A 段約 53 000)。 Nitrogen 0/34 筆偵測到,卻也標「可能存在」。
 </li>
-<li><strong>TEOS「確認存在」只能當參考</strong>:依據的是 Si、SiO、CO、CH、H 這些線,沒有 TEOS 獨有的譜線;客戶說的是 SiH₄。
+<li><strong>TEOS「確認存在」只能當參考</strong>:依據的是 Si、SiO、CO、CH、H 這些線,沒有 TEOS 獨有的譜線。這台機台的前驅物目前不明。
 </li>
 </ul>
 </main>
