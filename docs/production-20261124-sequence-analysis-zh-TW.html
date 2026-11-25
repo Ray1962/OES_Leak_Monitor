@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11/24 生產錄檔序列分析</title>
+<style>
+:root{
+  --ink:#0F1E22; --ink-soft:#35494F; --muted:#5F747A; --faint:#8A9BA0;
+  --line:#D6E0E1; --line-soft:#E7EDED; --paper:#F2F5F5; --card:#FFFFFF;
+  --signal:#0E9AA8; --signal-deep:#0A6C76;
+  --warn-bg:#FFF6E0; --warn-line:#E8C870; --warn-ink:#7A5A10;
+  --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","Microsoft JhengHei",
+         "Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#E7EFF0; --ink-soft:#BCCBCE; --muted:#8FA3A8; --faint:#6F8388;
+    --line:#2C3B3F; --line-soft:#222E31; --paper:#101A1C; --card:#162225;
+    --signal:#38BECB; --signal-deep:#7FD8E1;
+    --warn-bg:#2C2413; --warn-line:#6B5620; --warn-ink:#E0C98A;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  line-height:1.75;-webkit-font-smoothing:antialiased;}
+.shell{max-width:1180px;margin:0 auto;padding:0 24px;
+  display:grid;grid-template-columns:246px minmax(0,1fr);gap:44px;align-items:start;}
+
+/* ---- sidebar ---- */
+.toc{position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  padding:40px 6px 40px 0;font-size:13px;}
+.toc .tt{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--signal-deep);font-weight:700;margin:0 0 12px;}
+.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0;
+  border-left:2px solid transparent;padding-left:10px;line-height:1.45;}
+.toc a:hover{color:var(--signal-deep);border-left-color:var(--signal);}
+.toc a.l3{padding-left:22px;font-size:12px;color:var(--faint);}
+
+/* ---- content ---- */
+main{min-width:0;padding:40px 0 96px;}
+h1{font-size:clamp(26px,4.2vw,36px);line-height:1.2;letter-spacing:-.01em;
+  font-weight:700;margin:0 0 6px;}
+h2{font-size:22px;font-weight:700;margin:52px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);scroll-margin-top:20px;}
+h3{font-size:17px;font-weight:650;margin:34px 0 10px;color:var(--ink);
+  scroll-margin-top:20px;}
+h4{font-size:15px;font-weight:650;margin:24px 0 8px;color:var(--ink-soft);}
+p{margin:12px 0;}
+a{color:var(--signal-deep);}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+ul,ol{margin:12px 0;padding-left:24px;}
+li{margin:5px 0;}
+li>ul,li>ol{margin:5px 0;}
+strong{font-weight:650;}
+code{font-family:var(--mono);font-size:.88em;background:var(--line-soft);
+  padding:.13em .4em;border-radius:4px;border:1px solid var(--line);
+  word-break:break-word;}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0;}
+pre code{background:none;border:0;padding:0;font-size:12.5px;line-height:1.6;}
+blockquote{margin:18px 0;padding:12px 16px;background:var(--warn-bg);
+  border:1px solid var(--warn-line);border-left-width:4px;border-radius:0 8px 8px 0;
+  color:var(--warn-ink);}
+blockquote p{margin:6px 0;}
+blockquote code{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12);}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th,td{padding:9px 13px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line-soft);}
+th{background:var(--line-soft);font-weight:650;color:var(--ink);
+  white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td code{white-space:nowrap;}
+
+/* ---- narrow ---- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;}
+  .toc{position:static;max-height:none;padding:28px 0 0;
+    border-bottom:1px solid var(--line);}
+  .toc a.l3{display:none;}
+  main{padding-top:24px;}
+}
+
+/* ---- print ---- */
+@media print{
+  :root{--paper:#fff;--card:#fff;}
+  body{background:#fff;color:#000;font-size:10.5pt;line-height:1.5;}
+  .shell{display:block;max-width:none;padding:0;}
+  .toc{display:none;}
+  main{padding:0;}
+  h2{page-break-after:avoid;margin-top:22pt;}
+  h3,h4{page-break-after:avoid;}
+  table,pre,blockquote{page-break-inside:avoid;}
+  .tablewrap{overflow:visible;}
+  a{color:#000;text-decoration:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc"><p class="tt">目錄</p>
+<a class="l2" href="#1-step-的種類與序列">1. step 的種類與序列</a>
+<a class="l3" href="#11-五種-step">1.1 五種 step</a>
+<a class="l3" href="#12-批次的組成依引擎讀值--前面跑過完整的-d">1.2 批次的組成(依引擎讀值, = 前面跑過完整的 D)</a>
+<a class="l2" href="#2-含氮指標隨位置下降">2. 含氮指標隨位置下降</a>
+<a class="l3" href="#21-離線配方-b0026-那一批7-個-b">2.1 離線:配方 B(00:26 那一批,7 個 B)</a>
+<a class="l3" href="#22-為什麼是前面的-d造成的">2.2 為什麼是「前面的 D」造成的</a>
+<a class="l2" href="#3-同一個位置可以重現">3. 同一個位置可以重現</a>
+<a class="l3" href="#31-引擎讀值00311701engine_positionspy">3.1 引擎讀值,00:31–17:01(engine_positions.py)</a>
+<a class="l3" href="#32-d-段本身也很穩離線6-批00260348">3.2 D 段本身也很穩(離線,6 批,00:26–03:48)</a>
+<a class="l3" href="#33-跨天1123-的配方-a-對-1124">3.3 跨天:11/23 的配方 A 對 11/24</a>
+<a class="l2" href="#4-n₂--ar-單獨跳高的-step">4. N₂ / Ar 單獨跳高的 step</a>
+<a class="l2" href="#5-對-1123-策略的影響">5. 對 11/23 策略的影響</a>
+<a class="l3" href="#51-臨時-golden-run-會一直誤報">5.1 臨時 Golden Run 會一直誤報</a>
+<a class="l3" href="#52-alarm-用哪兩個比值要等-dv-測試決定">5.2 Alarm 用哪兩個比值,要等 DV 測試決定</a>
+<a class="l3" href="#53-分類規則四條">5.3 分類規則:四條</a>
+<a class="l3" href="#54-依位置-gr-做出來之前能做的">5.4 依位置 GR 做出來之前能做的</a>
+<a class="l2" href="#6-需要的引擎功能依位置的-golden-run135">6. 需要的引擎功能:依位置的 Golden Run(#135)</a>
+<a class="l2" href="#7-工具上的設定與連線狀態diag-包2026-11-24-1730">7. 工具上的設定與連線狀態(diag 包,2026-11-24 17:30)</a>
+<a class="l2" href="#8-dv-加量測試建議">8. DV 加量測試建議</a>
+<a class="l2" href="#9-回問客戶加在-1123-7-之後">9. 回問客戶(加在 11/23 §7 之後)</a>
+<a class="l2" href="#附錄plasmaspectrumhistory-報告的注意事項">附錄:PlasmaSpectrumHistory 報告的注意事項</a>
+</nav>
+<main>
+<h1 id="生產機台-1124-錄檔分析含氮指標跟著-step-位置走dv0">生產機台 11/24 錄檔分析:含氮指標跟著 step 位置走(DV=0)</h1>
+<p>資料(全部是生產記錄,<strong>這一天沒有加漏氣,DV=0</strong>):</p>
+<div class="tablewrap"><table>
+<thead><tr><th>來源</th><th>涵蓋</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>C:\DualOES\202611\24</code> 的全譜錄檔 98 筆</td><td>00:00–04:44</td><td>離線抽線,能看 CN、He、Si、O 這些工具上沒設定的線</td></tr>
+<tr><td><code>P_Batch_1124002605.csv</code></td><td>00:26–16:48</td><td>工具上批次層的讀值</td></tr>
+<tr><td>diag 包 <code>diag_DESKTOP-4JD00UD_cc03_20261124_173001.zip</code> 的 <code>P_Ratio_1124000000.csv</code></td><td>00:00–17:30</td><td><strong>引擎自己算的逐幀比值</strong>(N₂ 337 / Ar、NO 237 / Ar、N₂ 357 / Ar),04:44 以後只有這份</td></tr>
+<tr><td>同一個 diag 包的系統日誌、<code>settings.json</code>、SECS/EAP 日誌</td><td>11/18–11/24</td><td>工具設定與連線狀態(§7)</td></tr>
+</tbody></table></div>
+<p>機台與 11/23 相同(<code>production-20261123-leak-strategy-zh-TW.md</code>)。</p>
+<blockquote><p><strong>結論</strong></p>
+<ol>
+<li>11/23 看到的「含氮指標一次比一次低」<strong>不是腔體還沒穩定</strong>,是製程序列本身的規律。 每批開頭的無 Ar 沉積段帶進氮和矽,後面的 Ar step 一步一步把它清掉。 NO / Ar 每一步大約乘上 0.71–0.81,9 步之後只剩 1/8。
+</li>
+<li><strong>同一個位置非常穩</strong>:引擎讀值在 00:31–17:01 的 16 批裡,NO / Ar 同位置的批間 CV 只有 <strong>0.5–2.4 %</strong>。
+</li>
+<li><strong>N₂ 337 / Ar 會單獨跳高</strong>:159 個 Ar step 裡有 17 個高出 +15 ～ +35 %,CN 也一起跳,NO 不動。 多半(10 個)是「一串同種 step 的最後一個」。這一天沒有漏氣,所以這就是 N₂、CN 的誤報底線。
+</li>
+<li>所以單一 Golden Run 不能套整個序列。照 11/23 §6.2 的臨時 GR 上機會一直誤報(§5)。 能用的是「同一個位置」的基準:分類器 + 依位置的 GR(#135)。
+</li>
+<li><strong>工具現在其實不會報警</strong>:GR 是 10/29 的「Recipe 2」,只有 NO / Ar 一個比值有基準, 又設了 <code>RequireTwoForAlarm</code>,整體狀態永遠到不了 Alarm(§7)。 <strong>SECS 從 11/23 15:13 起就沒有啟動成功</strong>,EAP 也從沒連上過。
+</li>
+</ol></blockquote>
+<p>分析程式在 <code>tools/analysis/20261124/</code>:</p>
+<ul>
+<li><code>sequence_stats.py</code>:錄檔離線抽線。抽線方式與 11/23 的 <code>ratio_stats.py</code> 相同,兩份文件的數字可以直接比。
+</li>
+<li><code>engine_positions.py</code>:引擎的 <code>P_Ratio</code>。
+</li>
+</ul>
+<p>離線 peak-height 不是引擎的 <code>LineIntensityExtractor</code>,絕對值不同(例如 NO / Ar:引擎是 RawMean,沒有扣連續光), 但同一套抽法之內的相對變化可以比。</p>
+<hr>
+<h2 id="1-step-的種類與序列">1. step 的種類與序列</h2>
+<h3 id="11-五種-step">1.1 五種 step</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>代號</th><th>電漿時間</th><th>Ar</th><th>特徵(離線,對 O 777.2)</th><th>出現在</th></tr></thead>
+<tbody>
+<tr><td><strong>D</strong> 沉積段</td><td>約 155 s</td><td>無</td><td>N₂ 337 / O 0.044–0.047、Si 251.6 / O <strong>0.326–0.330</strong>、Hα / O 0.277–0.280</td><td>大多數批次的第一個 step</td></tr>
+<tr><td><strong>B</strong> Ar + He</td><td>約 98 s</td><td>有</td><td>He 667.8 / O <strong>0.071–0.101</strong>(A 只有 0.011–0.015)</td><td></td></tr>
+<tr><td><strong>A</strong> Ar 長段</td><td>約 82 s</td><td>有</td><td>就是 11/23 文件的「製程 1」</td><td></td></tr>
+<tr><td><strong>a</strong> 無 Ar 短段</td><td>約 38 s</td><td>無</td><td>就是 11/23 的「製程 2」;每個 A 前面都有一個</td><td></td></tr>
+<tr><td><strong>E</strong> 無 Ar 短沉積</td><td>約 22 s</td><td>無</td><td>Hα / O 0.148–0.172、Si / O 0.050–0.101、O 844 / O 777 0.32</td><td>只有 04:05–04:26,連續 14 次</td></tr>
+</tbody></table></div>
+<p>另外引擎的讀值裡,11:39–11:45 有 3 個約 33 s 的 Ar step(下稱 <strong>S</strong>),那段時間沒有錄檔,看不到光譜。</p>
+<p>B step 有 He,<strong>客戶的氣體清單沒有列 He</strong>(Ar 也沒列,見 11/23 §2)。 PlasmaSpectrumHistory 報告 <code>P_OES1_1124003115</code> 也判 Helium「確認存在」(83 幀裡 82 幀)。</p>
+<h3 id="12-批次的組成依引擎讀值--前面跑過完整的-d">1.2 批次的組成(依引擎讀值,<code>*</code> = 前面跑過完整的 D)</h3>
+<p>序列 = 相鄰 Ar step 間隔超過 240 s 就切開(與 <code>Batch.BatchGapSeconds</code> 相同)。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>結構(只列 Ar step)</th><th>批數</th><th>開始時間</th></tr></thead>
+<tbody>
+<tr><td><code>D</code> + 9 個 A</td><td>7</td><td>03:12、06:54、07:34、10:22、13:32、16:20、17:01</td></tr>
+<tr><td><code>D</code> + 7 個 B</td><td>6</td><td>00:31、00:59、04:56、06:25、13:01、14:47</td></tr>
+<tr><td><code>D</code> + 6 個 A + 2 個 B</td><td>3</td><td>05:49、11:02、14:12</td></tr>
+<tr><td><code>D</code> + 8 個 A</td><td>1</td><td>12:25</td></tr>
+<tr><td><code>D</code> + 3 B + 5 A、<code>D</code> + 3 A + 5 B</td><td>各 1</td><td>02:35、09:04</td></tr>
+<tr><td>只跑 2–3 步就結束</td><td>4</td><td>01:26、03:52、08:14、09:37</td></tr>
+<tr><td><strong>沒有完整的 D</strong>(第一個 Ar step 的 NO / Ar 遠低於 0.04)</td><td>8</td><td>00:00、02:12(D 只亮了 4 幀)、04:30(前面是 E × 14)、08:34、09:53、10:06、11:52、15:46</td></tr>
+<tr><td>3 個 S</td><td>1</td><td>11:39</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="2-含氮指標隨位置下降">2. 含氮指標隨位置下降</h2>
+<h3 id="21-離線配方-b0026-那一批7-個-b">2.1 離線:配方 B(00:26 那一批,7 個 B)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>位置</th><th>錄檔</th><th>N₂ 337 / Ar</th><th>CN 388 / Ar</th><th>NO 237 / Ar</th><th>Si 251.6 / Ar</th><th>O 777 / Ar</th><th>He 667.8 / Ar</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>…003115</code></td><td>0.0173</td><td>0.0567</td><td>0.0513</td><td>0.1857</td><td>0.7969</td><td>0.0723</td></tr>
+<tr><td>2</td><td><code>…003344</code></td><td>0.0138</td><td>0.0499</td><td>0.0373</td><td>0.1240</td><td>0.7987</td><td>0.0703</td></tr>
+<tr><td>3</td><td><code>…003618</code></td><td>0.0108</td><td>0.0430</td><td>0.0261</td><td>0.0817</td><td>0.8028</td><td>0.0676</td></tr>
+<tr><td>4</td><td><code>…003851</code></td><td>0.0084</td><td>0.0370</td><td>0.0185</td><td>0.0539</td><td>0.8075</td><td>0.0647</td></tr>
+<tr><td>5</td><td><code>…004125</code></td><td>0.0066</td><td>0.0316</td><td>0.0132</td><td>0.0350</td><td>0.8152</td><td>0.0617</td></tr>
+<tr><td>6</td><td><code>…004359</code></td><td>0.0053</td><td>0.0274</td><td>0.0097</td><td>0.0240</td><td>0.8191</td><td>0.0591</td></tr>
+<tr><td>7</td><td><code>…004618</code></td><td>0.0057</td><td>0.0294</td><td>0.0069</td><td>0.0157</td><td>0.8336</td><td>0.0651</td></tr>
+<tr><td><strong>1→7</strong></td><td></td><td><strong>−67 %</strong></td><td><strong>−48 %</strong></td><td><strong>−87 %</strong></td><td><strong>−92 %</strong></td><td>+5 %</td><td>−10 %</td></tr>
+</tbody></table></div>
+<p>配方 A 一樣。03:08 那一批(D + 9 個 A),A 的 NO / Ar 從 0.0536 降到 0.0068(−87 %),Si / Ar −93 %。 同一批裡,a 段的 NO / O 777 −70 %,Si / O 777 −90 %。</p>
+<h3 id="22-為什麼是前面的-d造成的">2.2 為什麼是「前面的 D」造成的</h3>
+<ul>
+<li>含 N、含 Si 的指標一起掉,而且是幾何級數。不含 N、Si 的 O 777 / Ar 幾乎不動(+3–5 %)。
+</li>
+<li><strong>D 沒跑完,後面就低</strong>:02:10 那一批的 D 只亮了 4 幀。後面第一個 B 的 N₂ / Ar 只有 0.0112、NO / Ar 0.0280, 正常批次是 0.0173、0.051。
+</li>
+<li><strong>前面是 E 的也低</strong>:04:30 那一批前面跑了 14 次 E,沒有 D。第一個 A 的 NO / Ar 是 0.0212,正常約 0.054。
+</li>
+<li>同一個 step 裡也在掉:B 位置 1 的 N₂ 337、Si 251.6 從頭到尾都約 −28 %。
+</li>
+</ul>
+<p>看起來是 D 留在腔壁上的氮和矽,被後面的富氧電漿一點一點清掉。</p>
+<hr>
+<h2 id="3-同一個位置可以重現">3. 同一個位置可以重現</h2>
+<h3 id="31-引擎讀值00311701engine_positionspy">3.1 引擎讀值,00:31–17:01(<code>engine_positions.py</code>)</h3>
+<p><strong>D + 9 個 A,7 批:</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>位置</th><th>N₂ / Ar</th><th>批間 CV</th><th>NO / Ar</th><th>批間 CV</th><th>NO 對前一步</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>0.0219</td><td>1.1 %</td><td>0.04518</td><td>0.8 %</td><td>—</td></tr>
+<tr><td>2</td><td>0.0188</td><td>0.9 %</td><td>0.03453</td><td>1.0 %</td><td>×0.764</td></tr>
+<tr><td>3</td><td>0.0164</td><td>*10.8 %*</td><td>0.02591</td><td>2.4 %</td><td>×0.750</td></tr>
+<tr><td>4</td><td>0.0132</td><td>1.6 %</td><td>0.01926</td><td>2.0 %</td><td>×0.743</td></tr>
+<tr><td>5</td><td>0.0109</td><td>1.8 %</td><td>0.01457</td><td>1.9 %</td><td>×0.756</td></tr>
+<tr><td>6</td><td>0.0091</td><td>2.0 %</td><td>0.01119</td><td>1.8 %</td><td>×0.768</td></tr>
+<tr><td>7</td><td>0.0079</td><td>*13.0 %*</td><td>0.00883</td><td>1.6 %</td><td>×0.789</td></tr>
+<tr><td>8</td><td>0.0064</td><td>2.5 %</td><td>0.00718</td><td>1.6 %</td><td>×0.813</td></tr>
+<tr><td>9</td><td>0.0070</td><td>2.5 %</td><td>0.00584</td><td>1.2 %</td><td>×0.814</td></tr>
+</tbody></table></div>
+<p><strong>D + 7 個 B,6 批:</strong></p>
+<div class="tablewrap"><table>
+<thead><tr><th>位置</th><th>N₂ / Ar</th><th>批間 CV</th><th>NO / Ar</th><th>批間 CV</th><th>NO 對前一步</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>0.0193</td><td>1.0 %</td><td>0.04260</td><td>0.8 %</td><td>—</td></tr>
+<tr><td>2</td><td>0.0157</td><td>2.0 %</td><td>0.03075</td><td>0.8 %</td><td>×0.722</td></tr>
+<tr><td>3</td><td>0.0127</td><td>1.7 %</td><td>0.02178</td><td>1.6 %</td><td>×0.708</td></tr>
+<tr><td>4</td><td>0.0101</td><td>2.1 %</td><td>0.01546</td><td>1.8 %</td><td>×0.710</td></tr>
+<tr><td>5</td><td>0.0081</td><td>2.0 %</td><td>0.01119</td><td>1.9 %</td><td>×0.724</td></tr>
+<tr><td>6</td><td>0.0070</td><td>*12.4 %*</td><td>0.00824</td><td>1.8 %</td><td>×0.736</td></tr>
+<tr><td>7</td><td>0.0066</td><td>3.1 %</td><td>0.00618</td><td>1.7 %</td><td>×0.750</td></tr>
+</tbody></table></div>
+<p>N₂ / Ar 的 CV 有三格超過 10 %(斜體),都是 §4 那些單獨跳高的 step 造成的。扣掉它們,N₂ / Ar 同位置也在 1–3 %。</p>
+<h3 id="32-d-段本身也很穩離線6-批00260348">3.2 D 段本身也很穩(離線,6 批,00:26–03:48)</h3>
+<p>N₂ 337 / O 777 0.0442–0.0470、NO 237 / O 777 0.0122–0.0127、Si 251.6 / O 777 0.326–0.330。 D 永遠是一批的第一個 step,所以<strong>現有的單一 GR 就能對它成立</strong>。 缺點是 D 本身就有約 2 300 counts 的 N₂,漏進來的氮相對變化只有後段 Ar step 的 1/9 左右。</p>
+<h3 id="33-跨天1123-的配方-a-對-1124">3.3 跨天:11/23 的配方 A 對 11/24</h3>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>11/23 的 4 次 A</th><th>11/24 00:00 那一串的位置 3–6</th></tr></thead>
+<tbody>
+<tr><td>N₂ 337 / Ar</td><td>0.0068 0.0057 0.0053 <strong>0.0061</strong></td><td>0.0074 0.0061 0.0054 <strong>0.0060</strong></td></tr>
+<tr><td>CN 388 / Ar</td><td>0.0229 0.0205 0.0187 <strong>0.0226</strong></td><td>0.0246 0.0220 0.0195 <strong>0.0243</strong></td></tr>
+<tr><td>NO 237 / Ar</td><td>0.0127 0.0100 0.0080 0.0064</td><td>0.0133 0.0104 0.0083 0.0066</td></tr>
+</tbody></table></div>
+<p>兩天相差 1–9 %,連最後一步 N₂、CN 的回升都一樣。11/23 15:30–15:42 其實也跑過一批 D + 4 個 B, 那份文件只取 15:45:07 以後,所以沒看到。 <strong>11/23 文件 §4.3 第 1 點「腔體還在清殘氮、GR 只是暫定」的解讀,應該改成本文的說法。</strong></p>
+<hr>
+<h2 id="4-n₂--ar-單獨跳高的-step">4. N₂ / Ar 單獨跳高的 step</h2>
+<p>完整序列裡,和同種類、同位置的平均相比,N₂ / Ar 高出 15 % 以上的 Ar step:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>時間</th><th>序列結構</th><th>位置</th><th>種類</th><th>N₂ / Ar</th><th>NO / Ar</th><th>是這一串同種 step 的最後一個</th></tr></thead>
+<tbody>
+<tr><td>01:29</td><td>BB</td><td>2</td><td>B</td><td>+32 %</td><td>+1 %</td><td>是</td></tr>
+<tr><td>02:40</td><td>BBBAAAAA</td><td>3</td><td>B</td><td>+30 %</td><td>−2 %</td><td>是</td></tr>
+<tr><td>03:19</td><td>AAAAAAAAA</td><td>3</td><td>A</td><td>+24 %</td><td>+5 %</td><td>否</td></tr>
+<tr><td>03:52</td><td>AA</td><td>1</td><td>A</td><td>+23 %</td><td>+5 %</td><td>否</td></tr>
+<tr><td>03:55</td><td>AA</td><td>2</td><td>A</td><td>+35 %</td><td>+6 %</td><td>是</td></tr>
+<tr><td>06:05</td><td>AAAAAABB</td><td>6</td><td>A</td><td>+35 %</td><td>+0 %</td><td>是</td></tr>
+<tr><td>06:37</td><td>BBBBBBB</td><td>6</td><td>B</td><td>+15 %</td><td>−2 %</td><td>否</td></tr>
+<tr><td>08:20</td><td>AAA</td><td>3</td><td>A</td><td>+32 %</td><td>+4 %</td><td>是</td></tr>
+<tr><td>09:07</td><td>AAABBBBB</td><td>2</td><td>A</td><td>+30 %</td><td>+5 %</td><td>否</td></tr>
+<tr><td>09:11</td><td>AAABBBBB</td><td>3</td><td>A</td><td>+30 %</td><td>+4 %</td><td>是</td></tr>
+<tr><td>09:42</td><td>BBB</td><td>3</td><td>B</td><td>+35 %</td><td>+3 %</td><td>是</td></tr>
+<tr><td>10:42</td><td>AAAAAAAAA</td><td>7</td><td>A</td><td>+29 %</td><td>+0 %</td><td>否</td></tr>
+<tr><td>11:16</td><td>AAAAAABB</td><td>5</td><td>A</td><td>+26 %</td><td>−0 %</td><td>否</td></tr>
+<tr><td>11:19</td><td>AAAAAABB</td><td>6</td><td>A</td><td>+30 %</td><td>−0 %</td><td>是</td></tr>
+<tr><td>12:48</td><td>AAAAAAAA</td><td>8</td><td>A</td><td>+29 %</td><td>−2 %</td><td>是</td></tr>
+<tr><td>14:28</td><td>AAAAAABB</td><td>6</td><td>A</td><td>+29 %</td><td>−3 %</td><td>是</td></tr>
+<tr><td>15:00</td><td>BBBBBBB</td><td>6</td><td>B</td><td>+17 %</td><td>−1 %</td><td>否</td></tr>
+</tbody></table></div>
+<p>共 17 / 159 個 Ar step。另有 09:14、09:17 兩個 B(在 A 之後)N₂、NO 都高約 +20 %, 那是 A 後面接 B 的衰減曲線本來就不同,不算在內。</p>
+<p>有錄檔的三個(01:29、02:40、03:19)離線再看一次:</p>
+<ul>
+<li><strong>CN / Ar 一起跳 +29 ～ +37 %</strong>,B step 的 He / Ar 也 +16 ～ +17 %。
+</li>
+<li><strong>NO / Ar 在原本的曲線上</strong>,Si / Ar 也大致在曲線上(+0 ～ +6 %),O 777 / Ar 只動 +0.5 ～ +1.8 %。
+</li>
+</ul>
+<p>這表示有某一路含氮的氣體變了(He 也變),但不是從腔壁來的氮; 10 / 17 個是「這一串同種 step 的最後一個」,很像配方在換段前多了一個不同的步驟。 <strong>這一天沒有漏氣,所以這 17 個 step 就是 N₂、CN 的誤報底線</strong>:幅度 +15 ～ +35 %,大約每 9 個 Ar step 一次。</p>
+<hr>
+<h2 id="5-對-1123-策略的影響">5. 對 11/23 策略的影響</h2>
+<h3 id="51-臨時-golden-run-會一直誤報">5.1 臨時 Golden Run 會一直誤報</h3>
+<p>11/23 §6.2 建議用最新一筆 A(<code>P_OES1_1123155536</code>,一串的最後一步)建臨時 GR, Alarm 用 N₂ / Ar + CN / Ar、門檻 1.30、<code>RequireTwoForAlarm</code>。把 11/24 的離線值拿去比:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>step</th><th>N₂ 337 / Ar 對 GR</th><th>CN 388 / Ar 對 GR</th><th>結果</th></tr></thead>
+<tbody>
+<tr><td>A 位置 1(00:00 那一串)</td><td>×1.87</td><td>×1.37</td><td><strong>Alarm</strong></td></tr>
+<tr><td>A 位置 1(D 之後,03:12)</td><td>×3.3</td><td>×1.86</td><td><strong>Alarm</strong></td></tr>
+<tr><td>B 位置 1(若和 A 分在同一類)</td><td>×2.84</td><td>×2.51</td><td><strong>Alarm</strong></td></tr>
+<tr><td>B 位置 3</td><td>×1.77</td><td>×1.90</td><td><strong>Alarm</strong></td></tr>
+<tr><td>B 位置 5</td><td>×1.08</td><td>×1.40</td><td>只有 CN</td></tr>
+</tbody></table></div>
+<p>11/23 §5.1 的分類規則只有 <code>Ar 750.4 / O 777.2 &gt; 0.5</code>,會把 B 和 A 分在同一類。 照那份設定上機,<strong>每一批的前 3–5 個 Ar step 都會 Alarm</strong>。 反過來用位置 1 建 GR 就不會誤報,但到了位置 9,N₂ / Ar 要漲到 ×3 × 1.30 ≈ 4 倍才會 Alarm。</p>
+<h3 id="52-alarm-用哪兩個比值要等-dv-測試決定">5.2 Alarm 用哪兩個比值,要等 DV 測試決定</h3>
+<p>§4 那 17 個 step 是 N₂、CN 一起跳,NO 不動。所以:</p>
+<ul>
+<li>如果 Alarm 用 <strong>N₂ / Ar + CN / Ar</strong>(11/23 的建議),即使有依位置的基準,這 17 個 step 也會讓兩個同時超過 1.20, 每天會誤報好幾次。
+</li>
+<li>如果 Alarm 用 <strong>NO / Ar + N₂ / Ar</strong>,這 17 個 step 只有 N₂ 會超過,<code>RequireTwoForAlarm</code> 就擋掉了。 NO 同位置的批間 CV 只有 0.5–2.4 %,門檻可以訂得很緊。
+</li>
+</ul>
+<p>但這只有在<strong>漏進來的空氣會讓 NO 上升</strong>時才成立。在實驗機上 NO 對空氣漏很敏感(18.3 σ,<code>leak-engine.md</code>)。 這台機台的 NO 看起來主要跟著腔壁上的氮走,§4 的那一路氣體就沒有讓它動。漏進來的 N₂ 會不會讓它動,只有 DV 測試能回答(§8)。</p>
+<h3 id="53-分類規則四條">5.3 分類規則:四條</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>順序</th><th>規則</th><th>類別</th><th>11/24 離線實測</th><th>餘裕</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>He 667.8 / O 777.2 &gt; 0.03</code></td><td><code>B</code></td><td>B 0.071–0.101;A 0.011–0.015;無 Ar 段 ≤ 0.0011</td><td>2.0 倍 / 2.4 倍</td></tr>
+<tr><td>2</td><td><code>Ar 750.4 / O 777.2 &gt; 0.5</code></td><td><code>A</code></td><td>A 1.20–1.26;無 Ar 段 ≤ 0.0009</td><td>三個數量級</td></tr>
+<tr><td>3</td><td><code>Si 251.6 / O 777.2 &gt; 0.2</code></td><td><code>D</code></td><td>D 0.326–0.330;E ≤ 0.101;a ≤ 0.071</td><td>1.6 倍 / 2 倍</td></tr>
+<tr><td>4</td><td><code>Hα 656.3 / O 777.2 &gt; 0.1</code></td><td><code>E</code></td><td>E 0.148–0.172;a ≤ 0.040</td><td>1.5 倍 / 2.5 倍</td></tr>
+<tr><td>—</td><td><code>FallbackClass</code></td><td><code>a</code></td><td></td><td></td></tr>
+</tbody></table></div>
+<p>He 那條放第一,用 O 777 當分母。無 Ar 段的 He / O 很小,不會被誤抓;如果用 He / Ar,無 Ar 段的分母接近 0,比值會亂跳。 <code>Batch.BatchStartClass = D</code>、<code>BatchStartMinDurationSeconds = 120</code>。 S(11:39 那 3 個約 33 s 的 Ar step)沒有錄檔,不知道會被分到哪裡。 上機前要用 Replay 對 11/23、11/24 的錄檔跑一次,確認每一筆都分對。</p>
+<h3 id="54-依位置-gr-做出來之前能做的">5.4 依位置 GR 做出來之前能做的</h3>
+<ol>
+<li><strong>不要裝 11/23 §6.2 的臨時 GR</strong>。
+</li>
+<li><strong>D 類可以先建 GR</strong>:比值用 NO 237 / O 777.2、N₂ 337.1 / O 777.2、CN 388.3 / O 777.2(工具上要新增)。 D 永遠是位置 1,批間差異約 ±3 %。
+</li>
+<li><strong>Batch Trend 只能部分當作同位置比較</strong>:批次層取「每類第一個完整的 step」。 每批的第一個 Ar 類別(9 A 批的 A、7 B 批的 B)取到的都是位置 1。 但像 <code>D + 3 B + 5 A</code> 這種批次,它取到的 A 是位置 4,會在趨勢圖上變成離群點。
+</li>
+<li><strong>step 判定(滾動基準)</strong>照 11/23 §6.1 的說法,只能補抓 step 中途才開始的漏氣。 step 內本來就在往下掉,不會讓它誤報。
+</li>
+</ol>
+<hr>
+<h2 id="6-需要的引擎功能依位置的-golden-run135">6. 需要的引擎功能:依位置的 Golden Run(#135)</h2>
+<ul>
+<li>每個比值依「上一個 D 之後,第幾個同類 step」各存一組 mean/σ。序列邊界沿用批次層的定義。
+</li>
+<li><strong>序列不是從 D 開始的情況很常見</strong>(§1.2 有 7 批):D 沒跑完、前面是 E、錄檔從中間開始。 這時位置不能用。可行的備案是「對前一步」:NO / Ar 每一步乘上的倍數在全天都很固定 (A 0.74–0.81、B 0.71–0.75,隨位置緩慢變大),可以用上一步的值預測這一步。 但「對前一步」看不到一直存在的漏氣:漏氣在前一步也在,預測值已經包含它,能看到的只剩約 1/4。
+</li>
+<li>EAP 的製程事件如果有配方或步驟名稱,就能直接知道是哪一種 step、第幾步,不用從光譜猜。 可是 EAP 目前連不上(§7)。
+</li>
+</ul>
+<hr>
+<h2 id="7-工具上的設定與連線狀態diag-包2026-11-24-1730">7. 工具上的設定與連線狀態(diag 包,2026-11-24 17:30)</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>項目</th><th>狀態</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>Golden Run</td><td>「Recipe 2」,<strong>2026-10-29</strong> 擷取,只有 NO 237 / Ar750 一個比值有基準(mean 0.113,σ 0.0042)</td><td>其他比值都是 NoBaseline</td></tr>
+<tr><td><code>RequireTwoForAlarm</code></td><td>true</td><td>只有一個比值能判,<strong>整體狀態永遠到不了 Alarm</strong>。整天日誌只有 Idle ↔ Normal(各 324 次)</td></tr>
+<tr><td>NO / Ar 讀值</td><td>0.0017–0.054,σ-score 中位數 <strong>−57</strong></td><td>現在的基準和這台機台的讀值差很遠</td></tr>
+<tr><td>NO / Ar 的 σ-score 峰值</td><td>每批前 2–3 個 Ar step 的點火後約 20 s 達 +50 ～ +74</td><td>補上第二個基準之後,這些點火暫態會先觸發</td></tr>
+<tr><td>分類器</td><td>未啟用</td><td>批次檔的 Classes 欄全是 <code>?</code>。A 類批次的「第一個 step」是 a 段(Ar 很弱),所以 N₂ / Ar 讀到 3–622;B 類批次的第一個是 D(Ar 被擋掉),所以取到 B 位置 1,讀值正常</td></tr>
+<tr><td>SECS</td><td><strong>11/23 15:13 起 <code>Secs_Start_Failed</code></strong>:「在其上下文中,该请求的地址无效」</td><td>設定的本機位址 <code>10.2.81.83:5000</code> 不在這台 PC 上。主機最後一次 S1F3 輪詢是 11/23 14:16:05</td></tr>
+<tr><td>EAP(<code>10.2.3.120:20347</code>)</td><td>11/18–11/24 每次連線都逾時,從未連上</td><td>沒有製程事件可用</td></tr>
+<tr><td>資料夾</td><td><code>D:\OES_LEAK_DATA</code> 20.5–20.8 GB,超過 20 GB 上限</td><td>能壓縮的都已壓縮,要把封存檔搬離這台機器</td></tr>
+<tr><td><code>chamberCode</code></td><td>3</td><td>diag 包檔名因此帶 <code>cc03</code>。如果 OES 已經移到另一台機台(資料夾 <code>CXMT OES移机 data20261123</code>),chamber code、SECS 位址、EAP 端點都要跟著改</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="8-dv-加量測試建議">8. DV 加量測試建議</h2>
+<ol>
+<li><strong>先回答 §5.2 的問題:漏進來的空氣會不會讓 NO 上升。</strong> 在同一個位置加 DV,看 NO / Ar、N₂ / Ar、CN / Ar 各漲多少。
+</li>
+<li><strong>加在含氮背景最低的位置</strong>:B 的位置 5–7(N₂ / Ar 約 0.007)或 A 的位置 7–9。D 本身就有大量 N₂,不適合拿來測。
+</li>
+<li><strong>對照就用 11/24 的 DV=0 資料</strong>:同結構的批次、同一個位置,本文 §3.1 的表就是基準。
+</li>
+<li><strong>避開 §4 那些容易跳高的位置</strong>(一串同種 step 的最後一個),否則分不出是 DV 還是製程本身。
+</li>
+<li>劑量從 DV=300(約 12 sccm 空氣,<code>dosing-valve-reference-zh-TW.md</code>)開始。 NO / Ar 的位置雜訊約 2 %,要 +6 % 以上才算看得到;N₂ / Ar 要超過 §4 的 +35 % 才分得出來。
+</li>
+</ol>
+<hr>
+<h2 id="9-回問客戶加在-1123-7-之後">9. 回問客戶(加在 11/23 §7 之後)</h2>
+<ol>
+<li><strong>B step 有 He</strong>(He 667.8 很明顯),清單沒有列。流量多少?
+</li>
+<li><strong>D 段的氣體</strong>:N₂ 很亮,是 N₂O 還是 N₂?D 跑多久是固定的嗎?02:10 那一批的 D 只亮了 4 s,是中斷嗎?
+</li>
+<li><strong>E 段是什麼</strong>(04:05–04:26,約 22 s,連續 14 次)?S 段呢(11:39–11:45,約 33 s,有 Ar)?
+</li>
+<li><strong>一串同種 step 的最後一個有什麼不同</strong>?§4 表裡的那些時間點,N₂ 和 He 都多了 15–35 %。 是不是最後一片、空腔、或配方裡多一個步驟?
+</li>
+<li><strong>OES 是不是在 11/23 移到另一台機台了?</strong> 新機台的 chamber code、FDC 主機位址、EAP 位址是多少?
+</li>
+</ol>
+<hr>
+<h2 id="附錄plasmaspectrumhistory-報告的注意事項">附錄:PlasmaSpectrumHistory 報告的注意事項</h2>
+<p>三份報告(<code>P_OES1_1124000012</code>、<code>…000236</code>、<code>…003115</code> 的 <code>-report.html</code>)的物種辨識和本文一致 (A 無 He、B 有 He;O 777 都是最強的原子線),但有幾點不能直接採信:</p>
+<ul>
+<li><strong>自訂比值 R1 = CO 483.5 / Ar 750.4 每一幀都是 0</strong>(<code>…000236</code> 全是 null)。 CO Ångström 帶往紫端拖尾,報告找到的峰在 481.9–482.1 nm,483.5 nm 上沒有局部峰,所以讀不到「凸出量」。 另外變數 C 和 A 是同一條線。這是 PlasmaSpectrumHistory 端要修的設定或程式。
+</li>
+<li><code>…000236</code>(a 段,無 Ar):Argon 判「可能存在」(34 筆中 21 筆偵測到),但 Ar 750 只有約 29 counts(A 段約 53 000)。 Nitrogen 0/34 筆偵測到,卻也標「可能存在」。
+</li>
+<li><strong>TEOS「確認存在」只能當參考</strong>:依據的是 Si、SiO、CO、CH、H 這些線,沒有 TEOS 獨有的譜線;客戶說的是 SiH₄。
+</li>
+</ul>
+</main>
+</div>
+</body>
+</html>
