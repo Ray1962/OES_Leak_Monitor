@@ -537,8 +537,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if ((uint)slot < (uint)_replayHandledFrame.Length) _replayHandledFrame[slot] = tick.Handled;
         if (!tick.Handled) return raw;
 
-        for (int i = 0; i < tick.Frames.Count; i++)
-            FanOutSpectrum(slot, tick.Frames[i]);
+        // Resets the leak monitor on the tick that delivers the recording's first frame, then
+        // fans the frames out. Here on the acquisition thread rather than in BeginReplayOutput:
+        // a synthetic frame can still arrive between ReplayStarting and the source starting to
+        // play, and would open the step again (#139).
+        ReplayDelivery.Deliver(tick, _leakMonitorEngine, frame => FanOutSpectrum(slot, frame));
 
         // Only now that the last frames have reached the recorders is it safe to tear the
         // replay's session down — closing first left them to open a session of their own.
