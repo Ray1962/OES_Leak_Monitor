@@ -218,9 +218,12 @@ cc03 生產配方(30 slm)在 09 月量到的可偵測濃度是 54–126 ppm(`pro
 - **`DecideAfterFrames` = 10**(取樣改成每幀 1.1 s 之後約 11 s)。引擎在判定類別之前**不判定**限定了類別的比值,
   所以這個值同時就是「跳過開頭轉換段」的長度;§3.2 估的轉換段最長 8 s。
 - 所有 Alarm / TrendOnly 比值的 `ProcessClass` 設 `Recipe`。不設的比值會在每個 step 頭一幀被判定(§6 那個 0.445)。
-- §2.3 那種弱 step:若客戶確認每次 precoat 後都有,可以給 `Recipe` 類別設 `PlasmaThreshold`
-  (觸發指標 p99:弱 step 1 470–1 730、正常 step 5 000–6 700,取 3 000),它就不會被判定。先觀察。
-- 換取樣之後,觸發指標的數值不變(平均不是加總),但**上機後要用 Replay 跑一次今天的錄檔確認分類與判定不在頭幀觸發**。
+- §2.3 那種弱 step:**給 `Recipe` 類別設 `PlasmaThreshold` 3 000**(觸發指標 p99:弱 step 1 470–1 730、正常 step 5 000–6 700)。
+  它會被判成 Recipe,Ar 積分仍高於 GR 的 plasma floor,而 CN / Ar 是基準的 8–10 倍、O 777 / Ar 約 +37 σ ——
+  兩個 Alarm 比值一起越線,很可能誤報整體 Alarm(`replay-sop-20261125-zh-TW.md` §6)。
+- 上機前照 `replay-sop-20261125-zh-TW.md` 用 Replay 驗證一次(已在開發機上做過:precoat 判為 Precoat、頭幀不判定、
+  位置 1 只有 CN 單獨 Warning、平台 step Normal)。重播 11/25 這批 4 s/幀的錄檔時,`DecideAfterFrames` 要用 3、
+  觸發門檻暫時用 2 000(測試模式的合成光譜 p99 約 1 500,會先開一個 Unknown step 並鎖住)。
 
 ### 5.3 比值組(全部 `ProcessClass = Recipe`)
 
@@ -242,7 +245,7 @@ DV 測試時要看 777 nm 是長出一根峰(O)還是整片斜坡抬高(N₂),�
 
 ### 5.4 Golden Run 與門檻
 
-- **擷取位置:precoat 之後第 10 步以後**的 recipe step(平台區)。用 Baseline Builder 從錄檔選 5 個以上的平台 step 合併,
+- **擷取位置:precoat 之後第 10 步以後**的 recipe step(平台區)。用 Baseline Builder 從錄檔選 5 個以上的平台 step 合併(Baseline Builder 至少要 60 幀:每幀 1.1 s 時 5 筆就夠,今天 4 s/幀的錄檔要 12 筆以上),
   不要用 Live 15 s(按下的時間點決定落在 step 的哪一段,§3.3)。
 - §1 的兩種 step 長度:平台區 CN / Ar 差約 3 %,先共用一個 GR;客戶若說是兩個 recipe,再分兩個類別、兩個 GR。
 - 門檻先放寬,DV 測試後再收:
