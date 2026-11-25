@@ -117,8 +117,9 @@ for s in seqs:
     for kind in ("noAr", "Ar"):
         rr = [r for r in r24 if r["seq"] == s and r["kind"] == kind]
         if not rr: continue
+        cv = lambda a, b: [c for c in (ratio(r, a, b)[1] for r in rr) if c is not None]
         print(f"- 序列 {s} / {kind}: " + ", ".join(
-            f"{a}/{b} {mean([ratio(r, a, b)[1] for r in rr]) * 100:.1f} %" for a, b in RATIOS[kind][:4]))
+            f"{a}/{b} {mean(cv(a, b)) * 100:.1f} %" for a, b in RATIOS[kind][:4] if cv(a, b)))
 
 # 序列 1、2 是同一配方的兩批:同位置互比
 b1 = [r for r in r24 if r["seq"] == 1]; b2 = [r for r in r24 if r["seq"] == 2]
