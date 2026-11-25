@@ -129,6 +129,7 @@ td code{white-space:nowrap;}
 <p>資料:<code>C:\DualOES\202611\23</code>,<strong>15:45:07 以後</strong>的 8 筆全譜錄檔(1896 點 / 179.8–850.3 nm, 200 ms × 5 次硬體平均,約 1.1 s 一幀)。這一天沒有加任何漏氣,所以這份文件回答的是「該看哪幾條線、怎麼判」, <strong>不是</strong>「漏多少看得到」—— 那要等 §7 的流量資料與 §8 的 DV 加量。</p>
 <blockquote><p><strong>一句話結論</strong>:兩段製程都<strong>含大量氧</strong>(O 777 是全譜最亮的原子線), 所以不能用氧線測漏,只能看<strong>氮</strong>。兩段的 N₂ 都接近零背景,漏進空氣後最先出現的會是 N₂ 337.1 的帶頭和 CN 388。 有 Ar 的長段用 <strong>N₂ 337 / Ar 750</strong> 加 <strong>CN 388 / Ar 750</strong> 判 Alarm(兩個都要成立)。 沒有 Ar 的短段訊號只有長段的 1/7–1/17,先設成只記錄趨勢,不報警。 判定以 <strong>Golden Run 為主</strong>,滾動基準(step judging)只當作補抓段內突發漏氣。 原因是這 4 次 run 裡含氮的指標一路往下掉(NO −50 %),腔體還沒穩定,穩定後要重新抓一次 GR。</p></blockquote>
 <p>分析程式:<code>tools/analysis/20261123/ratio_stats.py</code>(本文所有表格數字都由它產生)。</p>
+<blockquote><p><strong>2026-11-25 更正:客戶的氣體清單不適用於本文的資料。</strong> 客戶提供的「製程 1:SiH₄、C₂H₂、N₂O;製程 2:C₂H₂」屬於另一台生產機台, 11/23 與 11/24 的錄檔<strong>都不是</strong>那台機台的資料。這台機台實際通入哪些氣體,<strong>目前不明</strong>。 因此 §2 的對照表與 §7 第 1–3 題的前提不成立(已改寫); 本文所有光譜觀察(有 Ar、含大量氧、N₂ 接近零背景)與比值數字都不受影響, 氣體種類只能以光譜看到的為準。</p></blockquote>
 <blockquote><p><strong>2026-11-25 更正</strong>:11/24 的錄檔顯示,含氮指標下降是<strong>製程序列的位置效應</strong>,不是腔體還沒穩定; 同一個位置跨批、跨天都能重現。另外 15:45 以前跑的是另一個含 He 的配方(配方 B), 本文 §5.1 的分類規則會把它和製程 1 分在同一類,§6.2 的臨時 GR 會讓兩種配方的前幾個 Ar step 都 Alarm。 <strong>上機前先看 <code>production-20261124-sequence-analysis-zh-TW.md</code> §5。</strong></p></blockquote>
 <hr>
 <h2 id="1-資料兩段製程交替-4-次">1. 資料:兩段製程交替 4 次</h2>
@@ -142,7 +143,8 @@ td code{white-space:nowrap;}
 <p>用 <strong><code>Ar 750 / O 777</code></strong> 第一幀就能分開兩段:長段約 1.17,短段約 0.0007,中間差了三個數量級(§5)。</p>
 <hr>
 <h2 id="2-oes-查證客戶的氣體清單與光譜">2. OES 查證:客戶的氣體清單與光譜</h2>
-<p>客戶提供的氣體是:製程 1 用 SiH₄、C₂H₂、N₂O;製程 2 只用 C₂H₂。下表逐項對照光譜(4 次 run 的平均):</p>
+<blockquote><p><strong>2026-11-25</strong>:下表對照的客戶清單是<strong>另一台機台</strong>的(見文首更正),所以「判定」欄的符合 / 不符合已無意義。 保留下表,是因為「光譜上的證據」欄就是目前對這台機台氣體的唯一資訊: <strong>有 Ar、有含氧氣體、有碳(CO、CH、CN)、有 Si 與 H、氮只有微量。</strong></p></blockquote>
+<p>當時客戶提供的氣體是:製程 1 用 SiH₄、C₂H₂、N₂O;製程 2 只用 C₂H₂。下表逐項對照光譜(4 次 run 的平均):</p>
 <div class="tablewrap"><table>
 <thead><tr><th>客戶清單</th><th>光譜上的證據</th><th>判定</th></tr></thead>
 <tbody>
@@ -161,7 +163,7 @@ td code{white-space:nowrap;}
 <li>短段也看不到 N₂ 帶頭。
 </li>
 </ul>
-<p>所以:<strong>N₂O 流量很小,或者氧化劑其實是 O₂ / CO₂</strong>。這要回問客戶(§7)。 策略先以光譜為準:<strong>兩段都是富氧電漿,氮的背景很低。</strong></p>
+<p>所以:<strong>這台機台若有 N₂O,流量也很小;氧化劑更可能是 O₂ / CO₂</strong>。這要回問客戶(§7)。 策略先以光譜為準:<strong>兩段都是富氧電漿,氮的背景很低。</strong></p>
 <hr>
 <h2 id="3-測漏原理這兩段製程能看什麼">3. 測漏原理:這兩段製程能看什麼</h2>
 <p>空氣漏進來會帶進 N₂(78 %)、O₂(21 %)、Ar(0.93 %)和水氣。對照這兩段:</p>
@@ -169,7 +171,7 @@ td code{white-space:nowrap;}
 <thead><tr><th>漏氣成分</th><th>製程 1(有 Ar)</th><th>製程 2(無 Ar)</th></tr></thead>
 <tbody>
 <tr><td>O₂</td><td>✘ 製程本身的 O 太多,漏進來的那一點看不出來</td><td>✘ 同左</td></tr>
-<tr><td>H₂O</td><td>✘ H 主要來自 SiH₄/C₂H₂,run 與 run 之間就差 7.5 %</td><td>✘ OH 309 與 CO 第三正帶重疊</td></tr>
+<tr><td>H₂O</td><td>✘ H 主要來自製程氣體(含 H 與 Si 的前驅物),run 與 run 之間就差 7.5 %</td><td>✘ OH 309 與 CO 第三正帶重疊</td></tr>
 <tr><td>Ar</td><td>✘ 製程本身就是 Ar</td><td>△ 背景約 0,但空氣裡 Ar 只有 0.93 %,訊號太小(§4.2)</td></tr>
 <tr><td><strong>N₂</strong></td><td>✔ <strong>背景低</strong>,漏進來會出現 N₂ 337/357/380 與 CN 388</td><td>✔ 同左,但絕對量小很多</td></tr>
 </tbody></table></div>
@@ -322,12 +324,13 @@ td code{white-space:nowrap;}
 <blockquote><p>批次層取樣點固定在「每類第一段完整製程的閘門開啟後 10–30 s」(<code>batch-layer.md</code>)。 這兩段的穩態從點火後約 5 s 開始,10–30 s 落在穩態內,不用改。</p></blockquote>
 <hr>
 <h2 id="7-回問客戶清單">7. 回問客戶清單</h2>
+<blockquote><p>2026-11-25 改寫:原本第 1–3 題是針對另一台機台的氣體清單(見文首更正)。</p></blockquote>
 <ol>
-<li><strong>製程 2 的氣體</strong>:光譜顯示有大量氧(O 777、O 844、CO、OH),不可能只有 C₂H₂。 實際上還通了什麼(O₂、CO₂、N₂O)?流量多少?
+<li><strong>這台機台(OES 目前裝的那一台)是哪一台?</strong> 機台名稱、chamber、配方名稱。
 </li>
-<li><strong>製程 1 的 Ar</strong>:光譜上 Ar 是最亮的線,但氣體清單沒有列 Ar。請確認 Ar 流量。
+<li><strong>兩段各自通入哪些氣體、流量多少?</strong> 光譜看得到的有:Ar(製程 1)、 含氧氣體(兩段都有大量 O)、含碳氣體(CO、CH、CN)、含 Si 與 H 的前驅物。
 </li>
-<li><strong>N₂O 的流量</strong>:兩段都幾乎看不到 N₂。N₂O 是主要氧化劑,還是只是少量添加? 有沒有其他氧化劑?
+<li><strong>氧化劑是什麼</strong>(O₂、CO₂、N₂O)?兩段都幾乎看不到 N₂,若有 N₂O,流量應該很小。
 </li>
 <li><strong>每段的總流量與腔壓</strong>(sccm、Torr)。漏進來的空氣會被製程氣體稀釋, 可偵測漏率要用總流量換算;總流量是幾百 sccm 還是幾十 slm,結論可能完全相反。
 </li>
