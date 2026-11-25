@@ -220,10 +220,11 @@ cc03 生產配方(30 slm)在 09 月量到的可偵測濃度是 54–126 ppm(`pro
 - 所有 Alarm / TrendOnly 比值的 `ProcessClass` 設 `Recipe`。不設的比值會在每個 step 頭一幀被判定(§6 那個 0.445)。
 - §2.3 那種弱 step:**給 `Recipe` 類別設 `PlasmaThreshold` 3 000**(觸發指標 p99:弱 step 1 470–1 730、正常 step 5 000–6 700)。
   它會被判成 Recipe,Ar 積分仍高於 GR 的 plasma floor,而 CN / Ar 是基準的 8–10 倍、O 777 / Ar 約 +37 σ ——
-  兩個 Alarm 比值一起越線,很可能誤報整體 Alarm(`replay-sop-20261125-zh-TW.md` §6)。
+  兩個 Alarm 比值一起越線,整體誤報 Alarm —— 已用 Replay 證實(`replay-sop-20261125-zh-TW.md` §4 D:CN / Ar 678 %,兩列 ALARM;
+  設 3000 之後 No Plasma、不判定)。
 - 上機前照 `replay-sop-20261125-zh-TW.md` 用 Replay 驗證一次(已在開發機上做過:precoat 判為 Precoat、頭幀不判定、
-  位置 1 只有 CN 單獨 Warning、平台 step Normal)。重播 11/25 這批 4 s/幀的錄檔時,`DecideAfterFrames` 要用 3、
-  觸發門檻暫時用 2 000(測試模式的合成光譜 p99 約 1 500,會先開一個 Unknown step 並鎖住)。
+  位置 1 只有 CN 單獨 Warning、平台 step Normal、弱 step 被類別門檻擋下)。重播 11/25 這批 4 s/幀的錄檔時 `DecideAfterFrames` 要用 3。
+  要用 App `7f37878` 以後的版本(#139:舊版重播時合成光譜會先鎖住一個 Unknown step,只能暫時把觸發門檻調到 2 000 繞過)。
 
 ### 5.3 比值組(全部 `ProcessClass = Recipe`)
 

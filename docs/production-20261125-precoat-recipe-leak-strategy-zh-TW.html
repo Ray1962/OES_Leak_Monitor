@@ -300,9 +300,9 @@ figcaption{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.6;}
 </li>
 <li>所有 Alarm / TrendOnly 比值的 <code>ProcessClass</code> 設 <code>Recipe</code>。不設的比值會在每個 step 頭一幀被判定(§6 那個 0.445)。
 </li>
-<li>§2.3 那種弱 step:<strong>給 <code>Recipe</code> 類別設 <code>PlasmaThreshold</code> 3 000</strong>(觸發指標 p99:弱 step 1 470–1 730、正常 step 5 000–6 700)。 它會被判成 Recipe,Ar 積分仍高於 GR 的 plasma floor,而 CN / Ar 是基準的 8–10 倍、O 777 / Ar 約 +37 σ —— 兩個 Alarm 比值一起越線,很可能誤報整體 Alarm(<code>replay-sop-20261125-zh-TW.md</code> §6)。
+<li>§2.3 那種弱 step:<strong>給 <code>Recipe</code> 類別設 <code>PlasmaThreshold</code> 3 000</strong>(觸發指標 p99:弱 step 1 470–1 730、正常 step 5 000–6 700)。 它會被判成 Recipe,Ar 積分仍高於 GR 的 plasma floor,而 CN / Ar 是基準的 8–10 倍、O 777 / Ar 約 +37 σ —— 兩個 Alarm 比值一起越線,整體誤報 Alarm —— 已用 Replay 證實(<code>replay-sop-20261125-zh-TW.md</code> §4 D:CN / Ar 678 %,兩列 ALARM; 設 3000 之後 No Plasma、不判定)。
 </li>
-<li>上機前照 <code>replay-sop-20261125-zh-TW.md</code> 用 Replay 驗證一次(已在開發機上做過:precoat 判為 Precoat、頭幀不判定、 位置 1 只有 CN 單獨 Warning、平台 step Normal)。重播 11/25 這批 4 s/幀的錄檔時,<code>DecideAfterFrames</code> 要用 3、 觸發門檻暫時用 2 000(測試模式的合成光譜 p99 約 1 500,會先開一個 Unknown step 並鎖住)。
+<li>上機前照 <code>replay-sop-20261125-zh-TW.md</code> 用 Replay 驗證一次(已在開發機上做過:precoat 判為 Precoat、頭幀不判定、 位置 1 只有 CN 單獨 Warning、平台 step Normal、弱 step 被類別門檻擋下)。重播 11/25 這批 4 s/幀的錄檔時 <code>DecideAfterFrames</code> 要用 3。 要用 App <code>7f37878</code> 以後的版本(#139:舊版重播時合成光譜會先鎖住一個 Unknown step,只能暫時把觸發門檻調到 2 000 繞過)。
 </li>
 </ul>
 <h3 id="53-比值組全部-processclass--recipe">5.3 比值組(全部 <code>ProcessClass = Recipe</code>)</h3>

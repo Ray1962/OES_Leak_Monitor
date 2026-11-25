@@ -1,8 +1,5 @@
 {
-  "_comment": "2026-11-25 Replay 驗證用的 settings.json 片段(docs/replay-sop-20261125-zh-TW.md)。只替換這些鍵,其他保留。logger 門檻 2000 與 decideAfterFrames 3 只用於重播 4 s/幀的 11/25 錄檔;上機(averageCount 5)改回 1000 與 10,見 SOP §5。",
-  "logger": {
-    "saveStartThresholdIntensity": 2000
-  },
+  "_comment": "2026-11-25 Replay 驗證用的 settings.json 片段(docs/replay-sop-20261125-zh-TW.md)。只替換這些鍵,其他保留。需要 App commit 7f37878(#140)以後的版本。decideAfterFrames 3 與 minWindowFrames 3 只用於重播 4 s/幀的 11/25 錄檔;上機(averageCount 5)改成 10 與 5,見 SOP §7。",
   "leakMonitor": {
     "requireTwoForAlarm": true,
     "wavelengthCorrections": [
@@ -245,7 +242,7 @@
         },
         {
           "name": "Recipe",
-          "plasmaThreshold": 0
+          "plasmaThreshold": 3000
         }
       ]
     },
