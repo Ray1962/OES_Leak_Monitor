@@ -41,6 +41,13 @@ public readonly struct ReplayTick
     /// the ordinary file prefix once the teardown had restored it. Acting on this flag after
     /// the fan-out keeps the whole run in one correctly-marked file.</summary>
     public bool Finished { get; init; }
+    /// <summary>True on the tick that delivered the recording's first frame — a Play from the
+    /// top, a Restart, or a Play after the end, never a resume from Pause. The host resets the
+    /// leak monitor on it, before fanning <see cref="Frames"/> out: until this tick the engine
+    /// was fed the synthetic test-mode spectrum, and whatever step, EMA or latch that left behind
+    /// belongs to a different run (#139). Reported on the tick, on the acquisition thread, rather
+    /// than when Play is pressed, because a synthetic frame can still arrive between the two.</summary>
+    public bool Started { get; init; }
 }
 
 /// <summary>Immutable snapshot of the replay for the UI, taken under the lock.</summary>
@@ -278,6 +285,7 @@ public sealed class SpectrumReplaySource
         List<SpectrumSample>? frames = null;
         SpectrumSample? display;
         bool finished = false;
+        bool started = false;
 
         lock (_gate)
         {
@@ -291,6 +299,7 @@ public sealed class SpectrumReplaySource
                 _lastWallUtc = now;
                 if (dt > 0) _virtualSec += dt * _speed;
 
+                started = _index == 0;
                 while (_index < _rec.FrameCount && _rec.ElapsedSec[_index] <= _virtualSec)
                 {
                     (frames ??= new List<SpectrumSample>()).Add(BuildFrameLocked(_index, raw));
@@ -327,6 +336,7 @@ public sealed class SpectrumReplaySource
             }
 
             if (frames is { Count: > 0 }) _lastFrame = frames[^1];
+            else started = false;
             display = _lastFrame;
         }
 
@@ -336,6 +346,7 @@ public sealed class SpectrumReplaySource
             Frames = frames ?? (IReadOnlyList<SpectrumSample>)Array.Empty<SpectrumSample>(),
             Display = display,
             Finished = finished,
+            Started = started,
         };
     }
 
@@ -372,5 +383,27 @@ public sealed class SpectrumReplaySource
         _lastFrame = null;
         _achievedSpeed = 0;
         _rateMarkVirtual = 0;
+    }
+}
+
+/// <summary>
+/// How the host hands one replay tick to its consumers. Separate from <c>MainViewModel</c> so
+/// the order that matters — reset, then fan out — is pinned by a test against a real engine
+/// (<c>ReplayStartResetTests</c>) rather than by a WPF view model nobody can construct there.
+/// </summary>
+public static class ReplayDelivery
+{
+    public static void Deliver(ReplayTick tick, LeakMonitorEngine engine, Action<SpectrumSample> fanOut)
+    {
+        // Before the first recorded frame, not after: the engine has been fed the synthetic
+        // test-mode spectrum until now, and a step it opened on those frames — classified and
+        // locked — would otherwise swallow the recording whole (#139). Latches go too: an alarm
+        // confirmed against synthetic frames is no more a fact about the chamber than one
+        // confirmed against the recording, which EndReplayOutput clears for the same reason.
+        if (tick.Started)
+            engine.ResetRuntimeState(clearAlarms: true,
+                reason: "recorded-spectrum replay started; the test-mode synthetic spectrum's " +
+                        "step, smoothing and alarms do not carry into the recording");
+        foreach (var frame in tick.Frames) fanOut(frame);
     }
 }
