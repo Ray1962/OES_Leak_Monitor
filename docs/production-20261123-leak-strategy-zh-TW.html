@@ -129,6 +129,7 @@ td code{white-space:nowrap;}
 <p>資料:<code>C:\DualOES\202611\23</code>,<strong>15:45:07 以後</strong>的 8 筆全譜錄檔(1896 點 / 179.8–850.3 nm, 200 ms × 5 次硬體平均,約 1.1 s 一幀)。這一天沒有加任何漏氣,所以這份文件回答的是「該看哪幾條線、怎麼判」, <strong>不是</strong>「漏多少看得到」—— 那要等 §7 的流量資料與 §8 的 DV 加量。</p>
 <blockquote><p><strong>一句話結論</strong>:兩段製程都<strong>含大量氧</strong>(O 777 是全譜最亮的原子線), 所以不能用氧線測漏,只能看<strong>氮</strong>。兩段的 N₂ 都接近零背景,漏進空氣後最先出現的會是 N₂ 337.1 的帶頭和 CN 388。 有 Ar 的長段用 <strong>N₂ 337 / Ar 750</strong> 加 <strong>CN 388 / Ar 750</strong> 判 Alarm(兩個都要成立)。 沒有 Ar 的短段訊號只有長段的 1/7–1/17,先設成只記錄趨勢,不報警。 判定以 <strong>Golden Run 為主</strong>,滾動基準(step judging)只當作補抓段內突發漏氣。 原因是這 4 次 run 裡含氮的指標一路往下掉(NO −50 %),腔體還沒穩定,穩定後要重新抓一次 GR。</p></blockquote>
 <p>分析程式:<code>tools/analysis/20261123/ratio_stats.py</code>(本文所有表格數字都由它產生)。</p>
+<blockquote><p><strong>2026-11-25 更正</strong>:11/24 的錄檔顯示,含氮指標下降是<strong>製程序列的位置效應</strong>,不是腔體還沒穩定; 同一個位置跨批、跨天都能重現。另外 15:45 以前跑的是另一個含 He 的配方(配方 B), 本文 §5.1 的分類規則會把它和製程 1 分在同一類,§6.2 的臨時 GR 會讓兩種配方的前幾個 Ar step 都 Alarm。 <strong>上機前先看 <code>production-20261124-sequence-analysis-zh-TW.md</code> §5。</strong></p></blockquote>
 <hr>
 <h2 id="1-資料兩段製程交替-4-次">1. 資料:兩段製程交替 4 次</h2>
 <div class="tablewrap"><table>
