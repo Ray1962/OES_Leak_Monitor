@@ -726,19 +726,30 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private const string ReplayPrefixMarker = "SIM";
 
     /// <summary>
-    /// Switch the recorders over to replay output. Both are force-closed first: the prefix is
-    /// captured when a session opens, so a run that began before the replay would otherwise
-    /// keep writing real-looking rows into a real-looking file for the whole replay.
+    /// Switch the recorders over to replay output. The prefix is captured when a session opens,
+    /// so the open sessions are force-closed — after the marker is in place, never before
+    /// (<see cref="ReplayOutputSwitch.Begin"/>, #142): a run that began before the replay would
+    /// otherwise keep writing real-looking rows into a real-looking file for the whole replay.
     /// </summary>
     private void BeginReplayOutput()
     {
-        _intensityLogger.Stop();
-        _ratioCsvLogger.Stop();
-        StopBatchRecording();
-        _replayOutputActive = true;
-        // A replay plays the past; the tool's window is the present — never applied to it.
-        _leakMonitorEngine.SetReplayActive(true);
-        ConfigureRecorderOutput();
+        // The batch in progress belongs to what ran before the replay: emit it while the
+        // prefix is still the ordinary one, so marking first does not file it as replayed.
+        _batchTracker.Flush();
+        ReplayOutputSwitch.Begin(
+            markOutput: () =>
+            {
+                _replayOutputActive = true;
+                // A replay plays the past; the tool's window is the present — never applied to it.
+                _leakMonitorEngine.SetReplayActive(true);
+                ConfigureRecorderOutput();
+            },
+            closeRecorders: () =>
+            {
+                _intensityLogger.Stop();
+                _ratioCsvLogger.Stop();
+                StopBatchRecording();
+            });
         UpdateTestModeContext();
 
         StatusMessage = $"Replay running — recorders are writing {ReplayPrefixMarker}-prefixed files.";
