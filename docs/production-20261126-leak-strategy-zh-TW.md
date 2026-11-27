@@ -157,7 +157,7 @@ python3 -I tools/analysis/20261126/make_replay_seq.py <Temp>\P_OES1_1126162108_s
 第二輪 Replay 的比值 CSV 寫成 `P_Ratio_1127111221.csv`,不是 `SIMP_Ratio_*`:
 日誌裡 `RatioCsvOpened`(11:12:21.603)比 `ReplayStarted`(.604)早 1 ms,
 應該是合成光譜的一幀在「關閉錄檔 → 換成 SIM 前綴」之間重新開了比值 CSV。
-**重播資料被寫成正式量測的檔名**,這正是 `docs/dev/replay.md` 說要避免的情況。第一輪沒有發生。要另外開 issue 追。
+**重播資料被寫成正式量測的檔名**,這正是 `docs/dev/replay.md` 說要避免的情況。第一輪沒有發生。原因是 `BeginReplayOutput` 先關錄檔、後換前綴,追蹤在 issue #142。
 
 ## 5. 上機步驟
 
