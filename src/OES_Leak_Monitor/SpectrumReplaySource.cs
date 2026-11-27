@@ -407,3 +407,26 @@ public static class ReplayDelivery
         foreach (var frame in tick.Frames) fanOut(frame);
     }
 }
+
+/// <summary>
+/// How the host switches its recorders over to replay output. Separate from
+/// <c>MainViewModel</c> for the same reason as <see cref="ReplayDelivery"/>: the order is the
+/// whole fix, and <c>ReplayOutputSwitchTests</c> pins it against a real <c>RatioCsvLogger</c>.
+/// </summary>
+public static class ReplayOutputSwitch
+{
+    /// <summary>
+    /// Mark the output first, then close the open sessions. A writer takes its prefix when a
+    /// session opens, and the acquisition thread keeps delivering test-mode frames throughout:
+    /// closed first, the next frame reopened the ratio CSV under the unmarked prefix before the
+    /// marker arrived, and the whole replay was filed as <c>P_Ratio_*</c> (#142 — the log showed
+    /// <c>RatioCsvOpened</c> one millisecond ahead of <c>ReplayStarted</c>). Marked first, a frame
+    /// landing anywhere in here either writes to the session about to be closed or opens a
+    /// marked one.
+    /// </summary>
+    public static void Begin(Action markOutput, Action closeRecorders)
+    {
+        markOutput();
+        closeRecorders();
+    }
+}
