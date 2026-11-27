@@ -63,9 +63,10 @@ Each note says what the component does, why it is built that way, and the incide
 
 ## Related skills
 
-One skill lives **in this repo** (`.claude/skills/`), because it is about this app rather than the stack:
+Two skills live **in this repo** (`.claude/skills/`), because they are about this app rather than the stack:
 
 - `run-app` — launching OES_Leak_Monitor from the WSL shell and **driving its window**: select a tab, press a button by its visible text, screenshot, read it back. `CLAUDE.md` says everything with a window on it is verified by running the app, which is only true if you can see it. Carries the facts that make it work cold — no native `dotnet` in WSL, launch the built `.exe`, the running app locks that `.exe` so a build or `dotnet test` fails with `MSB3027` until you close it, and UI Automation from Windows PowerShell 5.1 rather than coordinate clicking (the control enumeration alone answers most questions, and it survives a second monitor's negative window coordinates). The bundled `run` skill has no row for a WPF app driven from WSL.
+- `report-to-pptx` — turning a report in `docs/` into a Traditional Chinese PowerPoint deck in the house style (the 11/25 and 11/26 decks): pptxgenjs and PowerPoint on the Windows side, since WSL has neither `node` nor a renderer, a shared `deck-base.js` for theme, layouts and helpers, and a render-and-look loop over every slide.
 
 Three more are tailored to this stack — invoke them when relevant rather than reinventing:
 
