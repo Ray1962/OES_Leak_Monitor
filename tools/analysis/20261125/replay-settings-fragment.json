@@ -1,0 +1,259 @@
+{
+  "_comment": "2026-11-25 Replay 驗證用的 settings.json 片段(docs/replay-sop-20261125-zh-TW.md)。只替換這些鍵,其他保留。需要 App commit 7f37878(#140)以後的版本。decideAfterFrames 3 與 minWindowFrames 3 只用於重播 4 s/幀的 11/25 錄檔;上機(averageCount 5)改成 10 與 5,見 SOP §7。",
+  "leakMonitor": {
+    "requireTwoForAlarm": true,
+    "wavelengthCorrections": [
+      {
+        "species": "Ar",
+        "wavelengthNm": 750.4,
+        "offsetNm": 0.4
+      },
+      {
+        "species": "O",
+        "wavelengthNm": 777.2,
+        "offsetNm": 0.2
+      }
+    ],
+    "ratios": [
+      {
+        "key": "R_CN_Ar",
+        "displayName": "CN 388 / Ar 750",
+        "enabled": true,
+        "processClass": "Recipe",
+        "role": "Alarm",
+        "monitorMode": "Ratio",
+        "numerator": {
+          "label": "CN 388.3",
+          "centerNm": 388.3,
+          "halfWidthNm": 0.6,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "PeakHeight",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "denominator": {
+          "label": "Ar 750.4",
+          "centerNm": 750.4,
+          "halfWidthNm": 1.0,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "Integral",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "warnFactor": 1.2,
+        "alarmFactor": 1.3,
+        "sigmaWarn": 3,
+        "sigmaAlarm": 6,
+        "emaTauSeconds": 5,
+        "confirmSeconds": 15,
+        "minSnr": 5
+      },
+      {
+        "key": "R_O777_Ar",
+        "displayName": "O 777 / Ar 750",
+        "enabled": true,
+        "processClass": "Recipe",
+        "role": "Alarm",
+        "monitorMode": "Ratio",
+        "numerator": {
+          "label": "O 777.2",
+          "centerNm": 777.2,
+          "halfWidthNm": 0.5,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "RawMean",
+          "peakSearchHalfWidthNm": 0
+        },
+        "denominator": {
+          "label": "Ar 750.4",
+          "centerNm": 750.4,
+          "halfWidthNm": 1.0,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "Integral",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "warnFactor": 1.2,
+        "alarmFactor": 1.5,
+        "sigmaWarn": 3,
+        "sigmaAlarm": 6,
+        "emaTauSeconds": 5,
+        "confirmSeconds": 15,
+        "minSnr": 5
+      },
+      {
+        "key": "R_N2_Ar",
+        "displayName": "N2 337 / Ar 750",
+        "enabled": true,
+        "processClass": "Recipe",
+        "role": "TrendOnly",
+        "monitorMode": "Ratio",
+        "numerator": {
+          "label": "N2 336.7",
+          "centerNm": 336.7,
+          "halfWidthNm": 0.5,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "RawMean",
+          "peakSearchHalfWidthNm": 0
+        },
+        "denominator": {
+          "label": "Ar 750.4",
+          "centerNm": 750.4,
+          "halfWidthNm": 1.0,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "Integral",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "warnFactor": 1.2,
+        "alarmFactor": 1.5,
+        "sigmaWarn": 3,
+        "sigmaAlarm": 6,
+        "emaTauSeconds": 5,
+        "confirmSeconds": 15,
+        "minSnr": 5
+      },
+      {
+        "key": "R_OH_Ar",
+        "displayName": "OH 309 / Ar 750",
+        "enabled": true,
+        "processClass": "Recipe",
+        "role": "TrendOnly",
+        "monitorMode": "Ratio",
+        "numerator": {
+          "label": "OH 308.9",
+          "centerNm": 308.9,
+          "halfWidthNm": 0.5,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "PeakHeight",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "denominator": {
+          "label": "Ar 750.4",
+          "centerNm": 750.4,
+          "halfWidthNm": 1.0,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "Integral",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "warnFactor": 1.2,
+        "alarmFactor": 1.5,
+        "sigmaWarn": 3,
+        "sigmaAlarm": 6,
+        "emaTauSeconds": 5,
+        "confirmSeconds": 15,
+        "minSnr": 5
+      },
+      {
+        "key": "R_CN_Ha",
+        "displayName": "CN 388 / H 656",
+        "enabled": true,
+        "processClass": "Recipe",
+        "role": "TrendOnly",
+        "monitorMode": "Ratio",
+        "numerator": {
+          "label": "CN 388.3",
+          "centerNm": 388.3,
+          "halfWidthNm": 0.6,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "PeakHeight",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "denominator": {
+          "label": "H 656.3",
+          "centerNm": 656.3,
+          "halfWidthNm": 0.5,
+          "baselineGapNm": 1,
+          "baselineWidthNm": 1,
+          "mode": "PeakHeight",
+          "peakSearchHalfWidthNm": 1.0
+        },
+        "warnFactor": 1.2,
+        "alarmFactor": 1.5,
+        "sigmaWarn": 3,
+        "sigmaAlarm": 6,
+        "emaTauSeconds": 5,
+        "confirmSeconds": 15,
+        "minSnr": 5
+      }
+    ],
+    "processClassifier": {
+      "enabled": true,
+      "decideAfterFrames": 3,
+      "rules": [
+        {
+          "className": "Precoat",
+          "displayName": "N2 336.7 / Ar 750.8 (RawMean)",
+          "numerator": {
+            "label": "N2 336.7",
+            "centerNm": 336.7,
+            "halfWidthNm": 0.5,
+            "baselineGapNm": 1,
+            "baselineWidthNm": 1,
+            "mode": "RawMean",
+            "peakSearchHalfWidthNm": 0
+          },
+          "denominator": {
+            "label": "Ar 750.8",
+            "centerNm": 750.8,
+            "halfWidthNm": 0.5,
+            "baselineGapNm": 1,
+            "baselineWidthNm": 1,
+            "mode": "RawMean",
+            "peakSearchHalfWidthNm": 0
+          },
+          "op": "GreaterThan",
+          "threshold": 5
+        },
+        {
+          "className": "Recipe",
+          "displayName": "N2 336.7 / Ar 750.8 (RawMean)",
+          "numerator": {
+            "label": "N2 336.7",
+            "centerNm": 336.7,
+            "halfWidthNm": 0.5,
+            "baselineGapNm": 1,
+            "baselineWidthNm": 1,
+            "mode": "RawMean",
+            "peakSearchHalfWidthNm": 0
+          },
+          "denominator": {
+            "label": "Ar 750.8",
+            "centerNm": 750.8,
+            "halfWidthNm": 0.5,
+            "baselineGapNm": 1,
+            "baselineWidthNm": 1,
+            "mode": "RawMean",
+            "peakSearchHalfWidthNm": 0
+          },
+          "op": "LessThan",
+          "threshold": 0.5
+        }
+      ],
+      "fallbackClass": "",
+      "classes": [
+        {
+          "name": "Precoat",
+          "plasmaThreshold": 0
+        },
+        {
+          "name": "Recipe",
+          "plasmaThreshold": 3000
+        }
+      ]
+    },
+    "batch": {
+      "enabled": true,
+      "windowStartSeconds": 10,
+      "windowEndSeconds": 24,
+      "minWindowFrames": 3,
+      "batchGapSeconds": 240,
+      "batchStartClass": "Precoat",
+      "batchStartMinDurationSeconds": 120
+    }
+  }
+}
